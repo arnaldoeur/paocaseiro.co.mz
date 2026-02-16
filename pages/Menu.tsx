@@ -198,18 +198,28 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
                         {t.menu.subtitle}
                     </p>
 
-                    {/* Search Bar */}
-                    <div className="max-w-xl mx-auto relative">
-                        <input
-                            type="text"
-                            placeholder={language === 'pt' ? "Procurar pão, bolos..." : "Search bread, cakes..."}
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="w-full py-3 px-6 rounded-full text-[#3b2f2f] font-sans focus:outline-none focus:ring-2 focus:ring-[#d9a65a] shadow-lg bg-[#f7f1eb]"
-                        />
-                        <div className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400">
-                            <ShoppingBag className="w-5 h-5 opacity-50" />
+                    {/* Search Bar & Schedule Quick Link */}
+                    <div className="max-w-xl mx-auto space-y-4">
+                        <div className="relative">
+                            <input
+                                type="text"
+                                placeholder={language === 'pt' ? "Procurar pão, bolos..." : "Search bread, cakes..."}
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="w-full py-3 px-6 rounded-full text-[#3b2f2f] font-sans focus:outline-none focus:ring-2 focus:ring-[#d9a65a] shadow-lg bg-[#f7f1eb]"
+                            />
+                            <div className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400">
+                                <ShoppingBag className="w-5 h-5 opacity-50" />
+                            </div>
                         </div>
+
+                        <button
+                            onClick={() => setIsScheduleModalOpen(true)}
+                            className="text-[#d9a65a] text-sm font-bold flex items-center justify-center gap-2 mx-auto hover:underline bg-white/5 py-2 px-4 rounded-full border border-[#d9a65a]/20"
+                        >
+                            <Calendar size={16} />
+                            {language === 'pt' ? 'Prefere agendar para outro dia? Clique aqui' : 'Prefer to schedule for another day? Click here'}
+                        </button>
                     </div>
                 </div>
             </header>
@@ -394,6 +404,7 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
                                                                     e.stopPropagation();
                                                                     addToOrder(item);
                                                                 }}
+                                                                title={language === 'pt' ? 'Adicionar ao pedido' : 'Add to order'}
                                                                 className="bg-[#d9a65a] text-white w-8 h-8 rounded-full flex items-center justify-center hover:bg-[#3b2f2f] transition-all shadow-lg"
                                                             >
                                                                 <Plus size={18} />

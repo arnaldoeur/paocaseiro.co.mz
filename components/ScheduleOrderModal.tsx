@@ -63,17 +63,29 @@ export const ScheduleOrderModal: React.FC<ScheduleOrderModalProps> = ({ isOpen, 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
 
-        let itemsText = '';
-        if (selectedItems.length > 0) {
-            itemsText = `*Itens Selecionados:*%0A` + selectedItems.map(i => `- ${i.quantity}x ${i.item.name}`).join('%0A') + `%0A%0A`;
+        // Validation: Prevent past dates
+        const selectedDate = new Date(date + 'T00:00:00');
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        if (selectedDate < today) {
+            alert(language === 'pt' ? 'Por favor, escolha uma data futura.' : 'Please choose a future date.');
+            return;
         }
 
-        const message = `*Agendamento de Encomenda*%0A%0A` +
+        let itemsText = '';
+        if (selectedItems.length > 0) {
+            itemsText = `%0A*Itens Selecionados:*%0A` + selectedItems.map(i => `- ${i.quantity}x ${i.item.name}`).join('%0A') + `%0A`;
+        }
+
+        const formattedDate = date.split('-').reverse().join('/');
+
+        const message = `*AGENDAMENTO DE ENCOMENDA*%0A%0A` +
             `*Nome:* ${name}%0A` +
             `*Telefone:* ${phone}%0A` +
-            `*Data:* ${date}%0A` +
-            `*Hora:* ${time}%0A%0A` +
-            itemsText +
+            `*Data:* ${formattedDate}%0A` +
+            `*Hora:* ${time}h%0A` +
+            itemsText + `%0A` +
             `*Notas/Detalhes:*%0A${notes || 'Nenhum'}`;
 
         const whatsappUrl = `https://wa.me/258846930960?text=${message}`;
@@ -91,7 +103,7 @@ export const ScheduleOrderModal: React.FC<ScheduleOrderModalProps> = ({ isOpen, 
                         <h2 className="text-xl font-serif font-bold text-[#3b2f2f]">
                             {language === 'pt' ? 'Agendar' : 'Schedule'}
                         </h2>
-                        <button onClick={onClose} className="hover:bg-gray-200 p-1 rounded-full transition-colors">
+                        <button onClick={onClose} title={language === 'pt' ? 'Fechar' : 'Close'} className="hover:bg-gray-200 p-1 rounded-full transition-colors">
                             <X size={24} />
                         </button>
                     </div>
@@ -104,23 +116,23 @@ export const ScheduleOrderModal: React.FC<ScheduleOrderModalProps> = ({ isOpen, 
                     <form id="schedule-form" onSubmit={handleSubmit} className="space-y-4 flex-1">
                         <div className="space-y-2">
                             <label className="text-sm font-medium text-gray-700">{language === 'pt' ? 'Nome' : 'Name'}</label>
-                            <input required type="text" className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-[#d9a65a] outline-none bg-white"
+                            <input required type="text" title={language === 'pt' ? 'Nome' : 'Name'} placeholder={language === 'pt' ? 'Seu nome' : 'Your name'} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-[#d9a65a] outline-none bg-white"
                                 value={name} onChange={e => setName(e.target.value)} />
                         </div>
                         <div className="space-y-2">
                             <label className="text-sm font-medium text-gray-700">{language === 'pt' ? 'Telefone' : 'Phone'}</label>
-                            <input required type="tel" className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-[#d9a65a] outline-none bg-white"
+                            <input required type="tel" title={language === 'pt' ? 'Telefone' : 'Phone'} placeholder="+258..." className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-[#d9a65a] outline-none bg-white"
                                 value={phone} onChange={e => setPhone(e.target.value)} />
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
                                 <label className="text-sm font-medium text-gray-700">{language === 'pt' ? 'Data' : 'Date'}</label>
-                                <input required type="date" className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-[#d9a65a] outline-none bg-white"
+                                <input required type="date" title={language === 'pt' ? 'Data' : 'Date'} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-[#d9a65a] outline-none bg-white"
                                     value={date} onChange={e => setDate(e.target.value)} />
                             </div>
                             <div className="space-y-2">
                                 <label className="text-sm font-medium text-gray-700">{language === 'pt' ? 'Hora' : 'Time'}</label>
-                                <input required type="time" className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-[#d9a65a] outline-none bg-white"
+                                <input required type="time" title={language === 'pt' ? 'Hora' : 'Time'} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-[#d9a65a] outline-none bg-white"
                                     value={time} onChange={e => setTime(e.target.value)} />
                             </div>
                         </div>
@@ -136,14 +148,14 @@ export const ScheduleOrderModal: React.FC<ScheduleOrderModalProps> = ({ isOpen, 
                                     {selectedItems.map((selection, idx) => (
                                         <div key={idx} className="flex items-center justify-between text-sm bg-gray-50 p-2 rounded-lg">
                                             <div className="flex items-center gap-2">
-                                                <button type="button" onClick={() => updateQuantity(selection.item.name, -1)} className="p-1 hover:bg-gray-200 rounded"><Minus size={12} /></button>
+                                                <button type="button" onClick={() => updateQuantity(selection.item.name, -1)} title={language === 'pt' ? 'Diminuir' : 'Decrease'} className="p-1 hover:bg-gray-200 rounded"><Minus size={12} /></button>
                                                 <span className="font-bold w-4 text-center">{selection.quantity}</span>
-                                                <button type="button" onClick={() => updateQuantity(selection.item.name, 1)} className="p-1 hover:bg-gray-200 rounded"><Plus size={12} /></button>
+                                                <button type="button" onClick={() => updateQuantity(selection.item.name, 1)} title={language === 'pt' ? 'Aumentar' : 'Increase'} className="p-1 hover:bg-gray-200 rounded"><Plus size={12} /></button>
                                                 <span className="ml-2 truncate max-w-[120px]">{selection.item.name}</span>
                                             </div>
                                             <div className="flex items-center gap-2">
                                                 <span className="font-bold text-[#d9a65a]">{selection.item.price * selection.quantity} MT</span>
-                                                <button type="button" onClick={() => removeFromSelection(selection.item.name)} className="text-red-400 hover:text-red-600"><Trash2 size={14} /></button>
+                                                <button type="button" onClick={() => removeFromSelection(selection.item.name)} title={language === 'pt' ? 'Remover' : 'Remove'} className="text-red-400 hover:text-red-600"><Trash2 size={14} /></button>
                                             </div>
                                         </div>
                                     ))}
@@ -185,7 +197,7 @@ export const ScheduleOrderModal: React.FC<ScheduleOrderModalProps> = ({ isOpen, 
                                 onChange={e => setSearchTerm(e.target.value)}
                             />
                         </div>
-                        <button onClick={onClose} className="hover:bg-white/10 p-1 rounded-full transition-colors hidden md:block">
+                        <button onClick={onClose} title={language === 'pt' ? 'Fechar' : 'Close'} className="hover:bg-white/10 p-1 rounded-full transition-colors hidden md:block">
                             <X size={24} />
                         </button>
                     </div>
