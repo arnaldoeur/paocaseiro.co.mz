@@ -96,7 +96,7 @@ export const translations = {
                 location: 'Av. Acordo de Lusaka',
                 phoneLabel: 'Ligue para nós',
                 emailLabel: 'Email',
-                emails: ['info@paocaseiro.co.mz', 'support@paocaseiro.co.mz']
+                emails: ['info@paocaseiro.co.mz', 'suporte@paocaseiro.co.mz']
             }
         },
         footer: {
@@ -318,7 +318,7 @@ export const translations = {
                 location: 'Av. Acordo de Lusaka',
                 phoneLabel: 'Call us',
                 emailLabel: 'Email',
-                emails: ['info@paocaseiro.co.mz', 'support@paocaseiro.co.mz']
+                emails: ['info@paocaseiro.co.mz', 'suporte@paocaseiro.co.mz']
             }
         },
         footer: {
