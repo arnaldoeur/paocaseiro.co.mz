@@ -4,9 +4,9 @@
 
 **Project ID:** `odzzshgvgwiaeafyzqiv`
 
-**URL do Projeto:** https://odzzshgvgwiaeafyzqiv.supabase.co
+**URL do Projeto:** https://bqiegszufcqimlvucrpm.supabase.co
 
-**Dashboard:** https://supabase.com/dashboard/project/odzzshgvgwiaeafyzqiv
+**Dashboard:** https://supabase.com/dashboard/project/bqiegszufcqimlvucrpm
 
 **Anon Key (Pública):**
 ```

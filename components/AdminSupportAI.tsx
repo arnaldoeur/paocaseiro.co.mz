@@ -2,12 +2,12 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, MessageCircle, Sparkles, Loader, Trash2, Clock, Plus, ChevronRight, Menu, X, ChevronLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-// OpenRouter API Key provided by user
-const OPENROUTER_API_KEY = import.meta.env.VITE_OPENROUTER_API_KEY;
+// Gemini API Key provided by user
+const GEMINI_API_KEY = (import.meta as any).env.VITE_GEMINI_API_KEY;
 
 interface Message {
     id?: string;
-    role: 'user' | 'assistant' | 'system';
+    role: 'user' | 'assistant' | 'system' | 'model';
     content: string;
     created_at?: string;
 }
@@ -119,7 +119,7 @@ export const AdminSupportAI: React.FC<AdminSupportAIProps> = ({ userName, stats 
         await supabase.from('ai_chat_history').insert({
             session_id: sessionId,
             user_id: userName,
-            role: msg.role,
+            role: msg.role === 'model' ? 'assistant' : msg.role,
             content: msg.content
         });
     };
@@ -214,29 +214,30 @@ export const AdminSupportAI: React.FC<AdminSupportAIProps> = ({ userName, stats 
         `;
 
         try {
-            const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+            // Construct history for context
+            const history = messages
+                .filter(m => m.role !== 'system')
+                .slice(-10)
+                .map(m => ({
+                    role: m.role === 'assistant' ? 'model' : m.role,
+                    parts: [{ text: m.content }]
+                }));
+
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
-                    'HTTP-Referer': 'https://paocaseiro.co.mz',
-                    'X-Title': 'Pão Caseiro Admin'
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    model: "openai/gpt-4o",
-                    messages: [
-                        { role: "system", content: systemContext },
-                        ...messages.filter(m => m.role !== 'system').slice(-10), // Context window last 10
-                        userMsg
-                    ],
-                    max_tokens: 1000
+                    contents: [...history, { role: 'user', parts: [{ text: text }] }],
+                    systemInstruction: {
+                        parts: [{ text: systemContext }]
+                    }
                 })
             });
 
             const data = await response.json();
 
-            if (data.choices && data.choices.length > 0) {
-                const content = data.choices[0].message.content;
+            if (data.candidates && data.candidates.length > 0) {
+                const content = data.candidates[0].content.parts[0].text;
                 const botMsg: Message = { role: 'assistant', content: content };
                 setMessages(prev => [...prev, botMsg]);
                 if (targetSessionId) saveMessageIndex(botMsg, targetSessionId);
