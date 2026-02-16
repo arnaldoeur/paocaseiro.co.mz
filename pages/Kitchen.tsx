@@ -79,6 +79,12 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
     const [manualPrepTime, setManualPrepTime] = useState<number | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
 
+    // Password Change State
+    const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [isChangingPassword, setIsChangingPassword] = useState(false);
+
     // --- Init ---
     useEffect(() => {
         if (externalUser) {
@@ -399,6 +405,9 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
                     <button onClick={() => setIsManualModalOpen(true)} className="p-2 bg-[#d9a65a] text-[#3b2f2f] rounded font-bold hover:brightness-110 flex items-center gap-2 text-sm px-4">
                         <Plus size={16} /> <span className="hidden sm:inline">Novo Pedido</span>
                     </button>
+                    <button onClick={() => setIsPasswordModalOpen(true)} className="p-2 bg-white/10 rounded hover:bg-white/20" title="Alterar Senha">
+                        <User size={20} />
+                    </button>
                     <button onClick={fetchOrders} className={`p-2 bg-white/10 rounded hover:bg-white/20 ${refreshing ? 'animate-spin' : ''}`} title="Refresh">
                         <Loader size={20} />
                     </button>
@@ -615,6 +624,73 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
                             <div className="flex gap-3">
                                 <button onClick={() => setIsManualModalOpen(false)} className="flex-1 py-3 rounded-lg font-bold bg-gray-100 text-gray-500">Cancelar</button>
                                 <button onClick={saveManualOrder} className="flex-1 py-3 rounded-lg font-bold bg-[#3b2f2f] text-white">Criar Pedido</button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* Password Change Modal */}
+            <AnimatePresence>
+                {isPasswordModalOpen && (
+                    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+                        <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} className="bg-white p-6 rounded-2xl w-full max-w-sm text-[#3b2f2f]">
+                            <h3 className="text-xl font-bold mb-4">Alterar Senha</h3>
+                            <div className="space-y-4 mb-6">
+                                <div>
+                                    <label className="text-xs font-bold uppercase text-gray-400">Nova Senha</label>
+                                    <input
+                                        type="password"
+                                        className="w-full p-2 border rounded"
+                                        value={newPassword}
+                                        onChange={e => setNewPassword(e.target.value)}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold uppercase text-gray-400">Confirmar Senha</label>
+                                    <input
+                                        type="password"
+                                        className="w-full p-2 border rounded"
+                                        value={confirmPassword}
+                                        onChange={e => setConfirmPassword(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => { setIsPasswordModalOpen(false); setNewPassword(''); setConfirmPassword(''); }}
+                                    className="flex-1 py-3 rounded-lg font-bold bg-gray-100 text-gray-500"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    onClick={async () => {
+                                        if (!newPassword || newPassword !== confirmPassword) {
+                                            alert("As senhas não coincidem!");
+                                            return;
+                                        }
+                                        setIsChangingPassword(true);
+                                        const { supabase } = await import('../services/supabase');
+                                        const { error } = await supabase
+                                            .from('team_members')
+                                            .update({ password: newPassword })
+                                            .eq('id', user.id);
+
+                                        if (!error) {
+                                            alert("Senha alterada com sucesso!");
+                                            setIsPasswordModalOpen(false);
+                                            setNewPassword('');
+                                            setConfirmPassword('');
+                                        } else {
+                                            alert("Erro ao alterar senha.");
+                                        }
+                                        setIsChangingPassword(false);
+                                    }}
+                                    disabled={isChangingPassword}
+                                    className="flex-1 py-3 rounded-lg font-bold bg-[#3b2f2f] text-white disabled:opacity-50"
+                                >
+                                    {isChangingPassword ? 'A guardar...' : 'Confirmar'}
+                                </button>
                             </div>
                         </motion.div>
                     </div>

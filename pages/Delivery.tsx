@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Truck, Lock, Phone, ArrowRight, Loader, AlertTriangle, User, LogOut, Shield } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { sendSMS } from '../services/sms';
 
 export const Delivery: React.FC = () => {
@@ -23,6 +24,12 @@ export const Delivery: React.FC = () => {
     // UI State
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+
+    // Password Change State (IT Mode)
+    const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [isChangingPassword, setIsChangingPassword] = useState(false);
 
     // Persistence Check
     useEffect(() => {
@@ -154,12 +161,23 @@ export const Delivery: React.FC = () => {
                             <p className="text-xs text-[#d9a65a]">{user?.name || 'Utilizador'} {user?.is_it && '(IT/Admin)'}</p>
                         </div>
                     </div>
-                    <button
-                        onClick={handleLogout}
-                        className="p-2 bg-white/10 rounded-lg hover:bg-white/20 transition-colors"
-                    >
-                        <LogOut size={20} />
-                    </button>
+                    <div className="flex items-center gap-2">
+                        {user?.is_it && (
+                            <button
+                                onClick={() => setIsPasswordModalOpen(true)}
+                                className="p-2 bg-white/10 rounded-lg hover:bg-white/20 transition-colors"
+                                title="Alterar Senha"
+                            >
+                                <Lock size={20} />
+                            </button>
+                        )}
+                        <button
+                            onClick={handleLogout}
+                            className="p-2 bg-white/10 rounded-lg hover:bg-white/20 transition-colors"
+                        >
+                            <LogOut size={20} />
+                        </button>
+                    </div>
                 </nav>
 
                 <div className="p-6 max-w-lg mx-auto">
@@ -353,6 +371,72 @@ export const Delivery: React.FC = () => {
                     )}
                 </div>
             </div>
+            {/* Password Change Modal (IT/Admin) */}
+            <AnimatePresence>
+                {isPasswordModalOpen && (
+                    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+                        <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} className="bg-white p-6 rounded-2xl w-full max-w-sm text-[#3b2f2f]">
+                            <h3 className="text-xl font-bold mb-4 font-serif">Alterar Senha Administrativa</h3>
+                            <div className="space-y-4 mb-6">
+                                <div>
+                                    <label className="text-xs font-bold uppercase text-gray-400">Nova Senha</label>
+                                    <input
+                                        type="password"
+                                        className="w-full p-2 border rounded font-bold"
+                                        value={newPassword}
+                                        onChange={e => setNewPassword(e.target.value)}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold uppercase text-gray-400">Confirmar Senha</label>
+                                    <input
+                                        type="password"
+                                        className="w-full p-2 border rounded font-bold"
+                                        value={confirmPassword}
+                                        onChange={e => setConfirmPassword(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => { setIsPasswordModalOpen(false); setNewPassword(''); setConfirmPassword(''); }}
+                                    className="flex-1 py-3 rounded-lg font-bold bg-gray-100 text-gray-500"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    onClick={async () => {
+                                        if (!newPassword || newPassword !== confirmPassword) {
+                                            alert("As senhas não coincidem!");
+                                            return;
+                                        }
+                                        setIsChangingPassword(true);
+                                        const { supabase } = await import('../services/supabase');
+                                        const { error } = await supabase
+                                            .from('team_members')
+                                            .update({ password: newPassword })
+                                            .eq('id', user.id);
+
+                                        if (!error) {
+                                            alert("Senha alterada com sucesso!");
+                                            setIsPasswordModalOpen(false);
+                                            setNewPassword('');
+                                            setConfirmPassword('');
+                                        } else {
+                                            alert("Erro ao alterar senha.");
+                                        }
+                                        setIsChangingPassword(false);
+                                    }}
+                                    disabled={isChangingPassword}
+                                    className={`flex-1 py-3 rounded-lg font-bold bg-[#3b2f2f] text-white disabled:opacity-50`}
+                                >
+                                    {isChangingPassword ? 'A guardar...' : 'Confirmar'}
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
         </div>
     );
 };

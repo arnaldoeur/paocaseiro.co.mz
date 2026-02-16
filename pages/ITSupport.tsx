@@ -5,13 +5,25 @@ export const ITSupport: React.FC = () => {
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [password, setPassword] = useState('');
 
-    const handleLogin = (e: React.FormEvent) => {
+    const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
-        // Temporary hardcoded access for IT
-        if (password === 'zaiv2026') {
-            setIsAuthenticated(true);
-        } else {
-            alert('Acesso negado');
+        try {
+            const { supabase } = await import('../services/supabase');
+            const { data, error } = await supabase
+                .from('team_members')
+                .select('*')
+                .eq('username', 'admin') // Using admin account for Support panel as well
+                .eq('password', password)
+                .in('role', ['admin', 'support'])
+                .single();
+
+            if (data) {
+                setIsAuthenticated(true);
+            } else {
+                alert('Acesso negado ou credenciais inválidas.');
+            }
+        } catch (err) {
+            alert('Erro ao conectar ao sistema.');
         }
     };
 
