@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, ShoppingBag, Plus, Truck, Store, CreditCard, Info } from 'lucide-react';
+import { ChevronDown, ShoppingBag, Plus, Truck, Store, CreditCard, Info, AlertTriangle, Calendar } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { Language, translations } from '../translations';
 import { ProductModal } from '../components/ProductModal';
+import { ScheduleOrderModal } from '../components/ScheduleOrderModal';
 
 interface MenuProps {
     language: Language;
@@ -24,6 +25,7 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
     const [quantities, setQuantities] = useState<{ [key: string]: number }>({});
     const [selectedProduct, setSelectedProduct] = useState<any | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
+    const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
 
     // Custom Products State
     const [menuSections, setMenuSections] = useState(translations[language].menu.sections);
@@ -214,6 +216,59 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
 
             {/* How It Works Section */}
             <div className="max-w-7xl mx-auto px-6 mt-8 mb-12 relative z-20">
+                {/* Shop Status Banner */}
+                {(() => {
+                    const now = new Date();
+                    const currentHour = now.getHours();
+                    const currentMinute = now.getMinutes();
+                    const currentTime = currentHour * 60 + currentMinute;
+
+                    const openTime = 8 * 60; // 08:00
+                    const closeTime = 21 * 60 + 30; // 21:30
+
+                    const isOpen = currentTime >= openTime && currentTime < closeTime;
+
+                    if (!isOpen) {
+                        return (
+                            <div className="bg-red-50 border-l-4 border-red-500 p-6 mb-8 rounded-r shadow-md flex flex-col items-center text-center animate-pulse">
+                                <AlertTriangle className="w-8 h-8 text-red-500 mb-2" />
+                                <div>
+                                    <h3 className="font-bold text-red-700 text-lg mb-1">
+                                        {language === 'pt' ? 'Estamos Fechados' : 'We are Closed'}
+                                    </h3>
+                                    <p className="text-red-600/90 text-sm md:text-base">
+                                        {language === 'pt'
+                                            ? 'O nosso horário de funcionamento é das 08:00 às 21:30. Pode navegar pelo menu, mas as encomendas só serão processadas durante o horário de expediente.'
+                                            : 'Our opening hours are from 08:00 to 21:30. You can browse the menu, but orders will only be processed during business hours.'}
+                                    </p>
+                                    <button
+                                        onClick={() => setIsScheduleModalOpen(true)}
+                                        className="mt-4 px-6 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-full transition-colors flex items-center gap-2 mx-auto"
+                                    >
+                                        <Calendar size={18} />
+                                        {language === 'pt' ? 'Agendar Encomenda' : 'Schedule Order'}
+                                    </button>
+                                </div>
+                            </div>
+                        );
+                    }
+                    return (
+                        <div className="bg-green-50 border-l-4 border-green-500 p-6 mb-8 rounded-r shadow-md flex flex-col items-center text-center">
+                            <Store className="w-8 h-8 text-green-600 mb-2" />
+                            <div>
+                                <h3 className="font-bold text-green-700 text-xl mb-2">
+                                    {language === 'pt' ? 'Estamos Abertos!' : 'We are Open!'}
+                                </h3>
+                                <p className="text-green-600/90 text-base md:text-lg max-w-2xl">
+                                    {language === 'pt'
+                                        ? 'Faça a sua encomenda agora e desfrute das nossas delícias.'
+                                        : 'Place your order now and enjoy our delights.'}
+                                </p>
+                            </div>
+                        </div>
+                    );
+                })()}
+
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     {/* Delivery */}
                     <div className="bg-white/80 backdrop-blur-sm p-6 rounded-2xl shadow-lg border border-[#d9a65a]/20 hover:transform hover:-translate-y-1 transition-all duration-300">
@@ -370,6 +425,13 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
                     />
                 )}
             </AnimatePresence>
-        </div >
+
+            <ScheduleOrderModal
+                isOpen={isScheduleModalOpen}
+                onClose={() => setIsScheduleModalOpen(false)}
+                language={language}
+                menuSections={menuSections}
+            />
+        </div>
     );
 };

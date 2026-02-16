@@ -168,6 +168,26 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
 
     const handleNextStep = () => {
         if (step === 'cart') {
+            // Check Shop Hours
+            const now = new Date();
+            const currentHour = now.getHours();
+            const currentMinute = now.getMinutes();
+            const currentTime = currentHour * 60 + currentMinute;
+
+            const openTime = 8 * 60; // 08:00
+            const closeTime = 21 * 60 + 30; // 21:30
+
+            const isOpen = currentTime >= openTime && currentTime < closeTime;
+
+            if (!isOpen) {
+                setError(
+                    language === 'pt'
+                        ? 'Desculpe, estamos fechados. Encomendas apenas entre 08:00 e 21:30.'
+                        : 'Sorry, we are closed. Orders only between 08:00 and 21:30.'
+                );
+                return;
+            }
+
             // Check moved to 'details' step to know the order type? 
             // Or assume delivery is default or check later?
             // Actually, type is set in 'details' step. 
@@ -177,7 +197,6 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
             // BUT, if the user starts with an empty cart or very low value, maybe warn them?
             // Default type is 'delivery'.
             // Let's allow proceeding to details, but validate BEFORE payment or when selecting type?
-
             // Current flow: Cart -> Details (User picks Type) -> Payment.
             // So validation must happen when leaving 'details' step if type is 'delivery'.
 
@@ -425,6 +444,12 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                 return (
                     <>
                         <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                            {error && step === 'cart' && (
+                                <div className="bg-red-50 border border-red-200 p-4 rounded-xl flex items-center gap-3 animate-shake sticky top-0 z-10 shadow-sm">
+                                    <AlertTriangle className="w-6 h-6 text-red-500 shrink-0" />
+                                    <p className="text-red-700 font-bold text-sm">{error}</p>
+                                </div>
+                            )}
                             {cart.length === 0 ? (
                                 <div className="text-center opacity-50 flex flex-col items-center justify-center h-full">
                                     <ShoppingCart className="w-16 h-16 mb-4 opacity-20" />

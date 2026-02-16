@@ -19,25 +19,25 @@ const SERVICES = [
         icon: Wheat,
         title: 'Padaria',
         desc: 'Pães rústicos e doces de fornada diária.',
-        image: '/images/services/padaria.png'
+        image: '/images/fotos%20servicos%20pao%20caseiro/padaria_paocaseiro.png'
     },
     {
         icon: Croissant,
         title: 'Pastelaria',
         desc: 'Pastéis e salgados frescos.',
-        image: '/images/services/pastelaria.png'
+        image: '/images/fotos%20servicos%20pao%20caseiro/pastelaria.png'
     },
     {
         icon: Cake,
         title: 'Confeitaria',
         desc: 'Bolos e sobremesas personalizadas.',
-        image: '/images/services/confeitaria.png'
+        image: '/images/fotos%20servicos%20pao%20caseiro/confeitaria.png'
     },
     {
         icon: Coffee,
         title: 'Café',
         desc: 'Bebidas preparadas com carinho.',
-        image: 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?q=80&w=800&auto=format&fit=crop'
+        image: '/images/fotos%20servicos%20pao%20caseiro/cafe.png'
     }
 ];
 

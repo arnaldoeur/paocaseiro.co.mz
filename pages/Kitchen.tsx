@@ -74,7 +74,8 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
     // Manual Order Modal
     const [isManualModalOpen, setIsManualModalOpen] = useState(false);
     const [manualCustomer, setManualCustomer] = useState('Cliente Balcão');
-    const [manualItems, setManualItems] = useState([{ name: '', quantity: 1 }]);
+    const [manualPhone, setManualPhone] = useState('');
+    const [manualItems, setManualItems] = useState([{ name: '', quantity: 1, price: 0 }]);
     const [manualPrepTime, setManualPrepTime] = useState<number | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
 
@@ -253,41 +254,52 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
         setLoading(true);
 
         try {
-            const { supabase } = await import('../services/supabase');
+            const { saveOrderToSupabase } = await import('../services/supabase');
 
             let status = 'pending';
-            let estimated_ready_at = null;
+            // let estimated_ready_at = null; // Removed as saveOrderToSupabase doesn't support passing this directly yet, or we need to add it to payload
 
             if (manualPrepTime) {
                 status = 'processing';
-                const now = new Date();
-                now.setMinutes(now.getMinutes() + manualPrepTime);
-                estimated_ready_at = now.toISOString();
+                // const now = new Date();
+                // now.setMinutes(now.getMinutes() + manualPrepTime);
+                // estimated_ready_at = now.toISOString();
             }
 
-            const newOrder = {
+            // Calculate Total
+            const total = manualItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+
+            const timestamp = Date.now();
+            const orderPayload = {
+                short_id: `KDS-${timestamp.toString().slice(-4)}`,
+                payment_ref: `MANUAL-${timestamp}`,
                 customer_name: manualCustomer,
-                items: JSON.stringify(manualItems),
+                customer_phone: manualPhone || '999999999', // Default for walk-ins
+                customer_address: 'Balcão',
+                delivery_type: 'pickup',
+                total_amount: total,
+                amount_paid: 0, // Assume pending payment or handle later
+                balance: total,
                 status: status,
-                total: 0,
-                estimated_ready_at: estimated_ready_at,
-                created_at: new Date().toISOString()
+                notes: manualPrepTime ? `Tempo de preparo: ${manualPrepTime} min` : 'Pedido Manual KDS'
             };
 
-            const { error } = await supabase.from('orders').insert([newOrder]);
-            if (error) {
-                console.error("Supabase Error:", error);
-                throw error;
+            const result = await saveOrderToSupabase(orderPayload, manualItems);
+
+            if (!result.success) {
+                throw result.error;
             }
 
             fetchOrders();
             // Reset form
             setManualCustomer('Cliente Balcão');
-            setManualItems([{ name: '', quantity: 1 }]);
+            setManualPhone('');
+            setManualItems([{ name: '', quantity: 1, price: 0 }]);
             setManualPrepTime(null);
 
-        } catch (e) {
-            alert("Erro ao criar pedido.");
+        } catch (e: any) {
+            console.error("Error creating order:", e);
+            alert(e.message || "Erro ao criar pedido. Verifique os dados.");
         } finally {
             setLoading(false);
         }
@@ -297,6 +309,14 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
         const newItems = [...manualItems];
         // @ts-ignore
         newItems[idx][field] = val;
+
+        if (field === 'name') {
+            const product = products.find(p => p.name === val);
+            if (product) {
+                newItems[idx].price = product.price;
+            }
+        }
+
         setManualItems(newItems);
     };
 
@@ -566,6 +586,10 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
                                     <input type="text" className="w-full p-2 border rounded font-bold" value={manualCustomer} onChange={e => setManualCustomer(e.target.value)} />
                                 </div>
                                 <div>
+                                    <label className="text-xs font-bold uppercase text-gray-400">Telefone (Opcional)</label>
+                                    <input type="tel" className="w-full p-2 border rounded" placeholder="Ex: 84..." value={manualPhone} onChange={e => setManualPhone(e.target.value)} />
+                                </div>
+                                <div>
                                     <label className="text-xs font-bold uppercase text-gray-400 mb-2 block">Itens</label>
                                     {manualItems.map((item, idx) => (
                                         <div key={idx} className="flex gap-2 mb-2">
@@ -585,7 +609,7 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
                                             <input type="number" className="w-16 p-2 border rounded" value={item.quantity} onChange={e => updateManualItem(idx, 'quantity', parseInt(e.target.value))} />
                                         </div>
                                     ))}
-                                    <button onClick={() => setManualItems([...manualItems, { name: '', quantity: 1 }])} className="text-xs text-[#d9a65a] font-bold">+ Adicionar Item</button>
+                                    <button onClick={() => setManualItems([...manualItems, { name: '', quantity: 1, price: 0 }])} className="text-xs text-[#d9a65a] font-bold">+ Adicionar Item</button>
                                 </div>
                             </div>
                             <div className="flex gap-3">

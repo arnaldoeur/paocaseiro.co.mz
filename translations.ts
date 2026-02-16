@@ -15,7 +15,7 @@ export const translations = {
         hero: {
             title: 'Pão Caseiro',
             subtitle: 'O sabor que aquece o coração.',
-            description: 'Sinta o cheiro do pão acabado de sair do forno — feito com tempo, carinho e ingredientes simples que lembram casa.',
+            description: 'Mais do que pão, entregamos carinho em forma de sabor. Produzido diariamente com ingredientes seleccionados, o nosso pão traz o conforto e a tradição que a sua família merece. Experimente o verdadeiro gosto de casa.',
             order: 'Fazer Encomenda',
             gallery: 'Ver Galeria',
             call: 'Ligue já: +258 846 930 960'
@@ -57,7 +57,7 @@ export const translations = {
             ]
         },
         gallery: {
-            title: 'Nossas Delícias Artesanais',
+            title: 'Nossas Delícias',
             subtitle: 'Uma seleção dos nossos melhores produtos, feitos com carinho.',
             zoom: 'Ampliar',
             captions: [
@@ -91,7 +91,7 @@ export const translations = {
             },
             visit: {
                 title: 'Visite-nos',
-                desc: 'Passe, sinta o aroma e fique à vontade. Estamos à espera — venha buscar pão quente ou tomar um café.',
+                desc: 'Criámos um espaço acolhedor e familiar, pensado ao pormenor para que se sinta em casa enquanto saboreia as nossas delícias.',
                 locationLabel: 'Lichinga',
                 location: 'Av. Acordo de Lusaka',
                 phoneLabel: 'Ligue para nós',
@@ -134,7 +134,7 @@ export const translations = {
             add_to_cart: 'Adicionar',
             checkout_btn: 'Finalizar Compra',
             title: 'Nosso Menu',
-            subtitle: 'Explore a nossa seleção de produtos frescos e artesanais.',
+            subtitle: 'Explore a nossa seleção de produtos frescos, feitos com dedicação diária.',
             order: 'Encomendar Agora',
             alert: 'Seu carrinho está vazio! Por favor, adicione itens antes de encomendar.',
             sections: [

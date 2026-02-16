@@ -4,7 +4,7 @@ Este guia explica como colocar o seu site online na Hostinger.
 
 ## 1. Localização dos Arquivos
 Já foi gerada a versão final ("Build") do seu site. Os arquivos estão na pasta:
-`c:\Users\arnal\Desktop\WEBSITE\paocasieiro2026\paocasiero2026new\dist`
+`c:\Users\Arnaldo Eurico\Desktop\Zyph Dev\paocaseiro.co.mz\paocaseiro.co.mz\dist`
 
 Esta pasta contém tudo o que é necessário:
 - `index.html` (o site principal)
