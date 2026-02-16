@@ -14,6 +14,7 @@ import { ITSupport } from './pages/ITSupport';
 import { Delivery } from './pages/Delivery';
 import { Kitchen } from './pages/Kitchen';
 import { OrderReceipt } from './pages/OrderReceipt';
+import { Seeder } from './Seeder';
 
 const App: React.FC = () => {
   const [language, setLanguage] = useState<Language>('pt');
@@ -32,6 +33,7 @@ const App: React.FC = () => {
             <Route path="/it" element={<ITSupport />} />
             <Route path="/delivery" element={<Delivery />} />
             <Route path="/kitchen" element={<Kitchen />} />
+            <Route path="/seed" element={<Seeder />} />
 
             {/* Main Website Pages */}
             <Route path="/*" element={
