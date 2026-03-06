@@ -3,6 +3,7 @@ import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import { Download, Share2, Printer, CheckCircle, MapPin, Phone, User, Store } from 'lucide-react';
 import { CartItem } from '../context/CartContext';
+import { formatProductName } from '../services/stringUtils';
 
 interface ReceiptProps {
     orderId: string;
@@ -59,7 +60,7 @@ export const Receipt: React.FC<ReceiptProps> = ({
         container.style.top = '0';
         container.style.left = '0';
         container.style.zIndex = '-9999';
-        container.style.width = '500px';
+        container.style.width = '480px';
         container.style.visibility = 'visible'; // Important for rendering
         container.appendChild(clone);
         document.body.appendChild(container);
@@ -69,18 +70,20 @@ export const Receipt: React.FC<ReceiptProps> = ({
             // We wait a tick to ensure DOM update
             await new Promise(resolve => setTimeout(resolve, 0));
 
+            // Determine natural scrolling height
             const height = clone.scrollHeight + 40; // Add padding buffer
-            clone.style.height = `${height}px`;
-            container.style.height = `${height}px`;
+
+            // Do not restrict the container height absolutely so it can grow
+            clone.style.height = 'max-content';
+            container.style.height = 'max-content';
 
             const canvas = await html2canvas(clone, {
                 scale: 2,
                 useCORS: true,
                 logging: false,
-                width: 500,
-                height: height, // Explicit capture height
-                windowWidth: 500,
-                windowHeight: height, // Explicit window height
+                width: 480, // Explicitly fix the capture width
+                windowWidth: 480,
+                // Do not specify fixed document height flags, let it read from DOM dynamically
                 backgroundColor: '#fffbf5',
                 scrollY: 0,
                 x: 0,
@@ -250,7 +253,7 @@ export const Receipt: React.FC<ReceiptProps> = ({
                         <tbody className="text-[#3b2f2f]">
                             {cart.map((item, idx) => (
                                 <tr key={idx} className="border-b border-gray-100">
-                                    <td className="py-3">{item.name}</td>
+                                    <td className="py-3">{formatProductName(item.name)}</td>
                                     <td className="py-3 text-center">{item.quantity}</td>
                                     <td className="py-3 text-right font-bold">{item.price * item.quantity} MT</td>
                                 </tr>
@@ -290,7 +293,7 @@ export const Receipt: React.FC<ReceiptProps> = ({
                         <p className="font-serif italic text-[#d9a65a] text-sm py-2">"O sabor que aquece o coração"</p>
                         <p className="font-bold text-gray-500">Pão Caseiro</p>
                         <p>Lichinga, Av. Acordo de Lusaka</p>
-                        <p>+258 84 693 0960</p>
+                        <p>+258 87 9146 662</p>
                     </div>
                 </div>
 

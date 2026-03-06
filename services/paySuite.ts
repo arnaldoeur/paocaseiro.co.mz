@@ -2,8 +2,11 @@
 export interface PaymentRequest {
     amount: number;
     msisdn: string; // Phone number (e.g. 25884...)
-    method: 'mpesa' | 'emola' | 'mkesh';
+    method?: 'mpesa' | 'emola' | 'mkesh'; // Optional
     reference: string;
+    customerName?: string;
+    customerEmail?: string;
+    customerPhone?: string;
 }
 
 export interface PaymentResponse {
@@ -23,21 +26,32 @@ const API_KEY = '1298|OxFmkooNPDC14WPRIjomqAyJ0np4wp22Fm12j1pt76fd238e';
 
 export const initiatePayment = async (data: PaymentRequest): Promise<PaymentResponse> => {
 
-    // Ensure phone number starts with 258
-    let formattedPhone = data.msisdn.replace(/\s/g, '');
+    // Ensure phone number starts with 258 and contains only digits
+    let formattedPhone = data.msisdn.replace(/\D/g, '');
     if (!formattedPhone.startsWith('258')) {
         formattedPhone = `258${formattedPhone}`;
     }
 
-    // Construct payload for hosted checkout
-    const payload = {
+    const payload: any = {
         amount: String(data.amount.toFixed(2)),
         reference: data.reference,
         description: `Pagamento ${data.reference}`,
         mobile: formattedPhone,
-        channel: data.method,
-        return_url: typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'
+        msisdn: formattedPhone,
+        phone: formattedPhone,
+        customer_msisdn: formattedPhone,
+        customer_phone: formattedPhone,
+        first_name: data.customerName?.split(' ')[0] || 'Cliente',
+        last_name: data.customerName?.split(' ').slice(1).join(' ') || 'Pão Caseiro',
+        email: data.customerEmail || 'geral@paocaseiro.co.mz',
+        return_url: typeof window !== 'undefined' ? window.location.origin : 'https://paocaseiro.co.mz',
+        cancel_url: typeof window !== 'undefined' ? window.location.origin : 'https://paocaseiro.co.mz'
     };
+
+    if (data.method) {
+        payload.channel = data.method;
+        payload.payment_method = data.method;
+    }
 
     try {
         const response = await fetch(API_URL, {

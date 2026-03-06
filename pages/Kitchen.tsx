@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ChefHat, Clock, CheckCircle, AlertCircle, Loader, LogOut, User, Bell, Plus, Search } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { formatProductName } from '../services/stringUtils';
 
 // Types (Mirrors Admin/Supabase structure)
 interface Order {
@@ -77,6 +78,7 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
     const [manualPhone, setManualPhone] = useState('');
     const [manualItems, setManualItems] = useState([{ name: '', quantity: 1, price: 0 }]);
     const [manualPrepTime, setManualPrepTime] = useState<number | null>(null);
+    const [manualOrderType, setManualOrderType] = useState<'local' | 'delivery' | 'pickup'>('local'); // New state
     const [searchTerm, setSearchTerm] = useState('');
 
     // Password Change State
@@ -153,14 +155,19 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
             const { supabase } = await import('../services/supabase');
             const { data, error } = await supabase
                 .from('orders')
-                .select('*')
-                .in('status', ['pending', 'processing', 'ready'])
+                .select('*, items:order_items(*)')
+                .in('status', ['kitchen', 'pending', 'processing', 'ready'])
                 .order('created_at', { ascending: true });
 
+            if (error) { console.error('fetchOrders error:', error); }
             if (data) {
-                const mapped = data.map(o => ({
+                const mapped = data.map((o: any) => ({
                     ...o,
-                    items: typeof o.items === 'string' ? JSON.parse(o.items) : o.items
+                    items: (o.items || []).map((i: any) => ({
+                        name: i.product_name,
+                        quantity: i.quantity,
+                        notes: i.notes
+                    }))
                 }));
                 setOrders(mapped);
             }
@@ -197,11 +204,60 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
     // Poll for new orders every 10 seconds
     useEffect(() => {
         if (!isAuthenticated) return;
+
+        // Real-time Listeners
+        let ordersChannel: any;
+        let productsChannel: any;
+        let settingsChannel: any;
+
+        (async () => {
+            const { supabase } = await import('../services/supabase');
+
+            // Listen for any order changes
+            ordersChannel = supabase
+                .channel('kitchen-orders')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
+                    console.log('Orders changed, reloading...');
+                    fetchOrders();
+                })
+                .subscribe();
+
+            // Listen for product changes (for manual orders)
+            productsChannel = supabase
+                .channel('kitchen-products')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => {
+                    console.log('Products changed, reloading...');
+                    fetchProducts();
+                })
+                .subscribe();
+
+            // Listen for kitchen status changes
+            settingsChannel = supabase
+                .channel('kitchen-settings')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'settings', filter: 'key=eq.kitchen_status' }, () => {
+                    console.log('Kitchen status changed, reloading...');
+                    fetchStatus();
+                })
+                .subscribe();
+        })();
+
+        // Fallback polling (less frequent now)
         const interval = setInterval(() => {
             fetchOrders();
             fetchStatus();
-        }, 10000);
-        return () => clearInterval(interval);
+            fetchProducts();
+        }, 30000);
+
+        return () => {
+            clearInterval(interval);
+            const cleanup = async () => {
+                const { supabase } = await import('../services/supabase');
+                if (ordersChannel) supabase.removeChannel(ordersChannel);
+                if (productsChannel) supabase.removeChannel(productsChannel);
+                if (settingsChannel) supabase.removeChannel(settingsChannel);
+            };
+            cleanup();
+        };
     }, [isAuthenticated]);
 
     // --- Actions ---
@@ -280,9 +336,9 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
                 short_id: `KDS-${timestamp.toString().slice(-4)}`,
                 payment_ref: `MANUAL-${timestamp}`,
                 customer_name: manualCustomer,
-                customer_phone: manualPhone || '999999999', // Default for walk-ins
-                customer_address: 'Balcão',
-                delivery_type: 'pickup',
+                customer_phone: manualPhone || (manualOrderType === 'local' ? 'BALCAO' : '999999999'),
+                customer_address: manualOrderType === 'local' ? 'Consumo Local' : (manualOrderType === 'pickup' ? 'Para Levar' : 'Entrega'),
+                delivery_type: manualOrderType,
                 total_amount: total,
                 amount_paid: 0, // Assume pending payment or handle later
                 balance: total,
@@ -329,7 +385,7 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
     const filteredProducts = products.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
 
     // Groups
-    const pendingOrders = orders.filter(o => o.status === 'pending');
+    const pendingOrders = orders.filter(o => o.status === 'pending' || o.status === 'kitchen');
     const processingOrders = orders.filter(o => o.status === 'processing');
     const readyOrders = orders.filter(o => o.status === 'ready');
 
@@ -446,7 +502,7 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
                                 <div className="space-y-1 mb-4">
                                     {order.items.map((item, idx) => (
                                         <div key={idx} className="flex justify-between text-sm border-b border-dashed border-gray-200 pb-1 last:border-0">
-                                            <span className="font-bold">{item.quantity}x {item.name}</span>
+                                            <span className="font-bold">{item.quantity}x {formatProductName(item.name)}</span>
                                         </div>
                                     ))}
                                 </div>
@@ -488,7 +544,7 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
                                 <div className="space-y-1 mb-4 text-sm opacity-90">
                                     {order.items.map((item, idx) => (
                                         <div key={idx} className="flex justify-between">
-                                            <span>{item.quantity}x {item.name}</span>
+                                            <span>{item.quantity}x {formatProductName(item.name)}</span>
                                         </div>
                                     ))}
                                 </div>
@@ -521,7 +577,7 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
                                     <span className="text-xs text-gray-400">{order.customer_name}</span>
                                 </div>
                                 <p className="text-xs text-gray-400 mb-2 truncate">
-                                    {order.items.map(i => `${i.quantity} ${i.name}`).join(', ')}
+                                    {order.items.map(i => `${i.quantity} ${formatProductName(i.name)}`).join(', ')}
                                 </p>
                                 <button
                                     onClick={() => handleArchive(order.id)}
@@ -587,6 +643,25 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
                                     ))}
                                 </div>
                                 <p className="text-[10px] text-gray-400 mt-1">Se selecionado, vai direto para "Em Preparação"</p>
+                            </div>
+
+                            <div className="mb-4">
+                                <label className="text-xs font-bold uppercase text-gray-400 mb-2 block">Tipo de Atendimento</label>
+                                <div className="flex gap-2">
+                                    {[
+                                        { id: 'local', label: 'Local' },
+                                        { id: 'pickup', label: 'Takeaway' },
+                                        { id: 'delivery', label: 'Entrega' }
+                                    ].map(type => (
+                                        <button
+                                            key={type.id}
+                                            onClick={() => setManualOrderType(type.id as any)}
+                                            className={`flex-1 py-2 text-xs font-bold border rounded transition-all ${manualOrderType === type.id ? 'bg-[#3b2f2f] text-white border-[#3b2f2f]' : 'text-gray-500 border-gray-300 hover:border-gray-400'}`}
+                                        >
+                                            {type.label}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
 
                             <div className="space-y-4 mb-6">

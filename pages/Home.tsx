@@ -7,6 +7,8 @@ import {
 import { translations, Language } from '../translations';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { createClient } from '@supabase/supabase-js';
+import { sendEmail } from '../services/email';
+import { sendSMS } from '../services/sms';
 
 const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY);
 
@@ -52,7 +54,7 @@ const CLASSICS = [
         title: 'Pão Caseiro',
         desc: 'Aquele pão especial que é encomendado geralmente.',
         price: '',
-        image: '/images/products/pao-portugues-fresh.png'
+        image: '/images/products/pao-caseiro-marcos.png'
     },
     {
         title: 'Croissants',
@@ -95,9 +97,26 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
         );
     }
 
-    const [isVideoPlaying, setIsVideoPlaying] = useState(false);
-    const [isHeroMuted, setIsHeroMuted] = useState(true);
+    const [isPlayingWithSound, setIsPlayingWithSound] = useState(false);
+    const videoRef = React.useRef<HTMLVideoElement>(null);
     const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+
+    const handlePlayWithSound = () => {
+        setIsPlayingWithSound(true);
+        if (videoRef.current) {
+            videoRef.current.muted = false;
+            videoRef.current.currentTime = 0;
+            videoRef.current.play();
+        }
+    };
+
+    const handleCloseVideo = () => {
+        setIsPlayingWithSound(false);
+        if (videoRef.current) {
+            videoRef.current.muted = true;
+            videoRef.current.play();
+        }
+    };
     const location = useLocation();
     const navigate = useNavigate();
 
@@ -123,25 +142,26 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                     status: 'unread'
                 }]);
 
-            // 2. Send Email via FormSubmit (Frontend Email Service)
-            const emailResponse = await fetch("https://formsubmit.co/ajax/info@paocaseiro.co.mz", {
-                method: "POST",
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                },
-                body: JSON.stringify({
-                    name: formData.name,
-                    email: formData.email, // FormSubmit replies to this
-                    phone: formData.phone,
-                    message: formData.message,
-                    _cc: "gestor@paocaseiro.org",
-                    _subject: `Nova Mensagem do Site: ${formData.name}`,
-                    _template: "table"
-                })
-            });
+            // 2. Send Notifications to Admin
+            const adminEmail = 'geral@paocaseiro.co.mz';
+            const emailHtml = `
+                <h2>Nova Mensagem de Contacto (Geral)</h2>
+                <p><strong>Nome:</strong> ${formData.name}</p>
+                <p><strong>Email:</strong> ${formData.email}</p>
+                <p><strong>Telefone:</strong> ${formData.phone}</p>
+                <br/>
+                <p><strong>Mensagem:</strong></p>
+                <p style="background:#f4f4f4; padding:15px; border-radius:8px;">${formData.message}</p>
+            `;
 
-            if (!emailResponse.ok) console.warn("Email dispatch failed, but DB saved.");
+            await sendEmail([adminEmail], `Nova Mensagem de Contacto: ${formData.name}`, emailHtml)
+                .catch(e => console.error("Contact Email failed:", e));
+
+            const adminPhone = '258879146662';
+            const smsMessage = `PAO CASEIRO CONTACTO: Recebeu mensagem de ${formData.name} (${formData.phone}). Verifique o painel ou email.`;
+
+            await sendSMS(adminPhone, smsMessage)
+                .catch(e => console.error("Contact SMS failed:", e));
 
             setSubmitStatus('success');
             setFormData({ name: '', phone: '', email: '', message: '' });
@@ -249,7 +269,7 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                             onClick={() => navigate('/menu')}
                             className="bg-[#d9a65a] text-[#3b2f2f] px-8 py-4 rounded-full font-bold uppercase tracking-widest hover:bg-[#f7f1eb] transition-all flex items-center gap-2 w-full md:w-auto justify-center shadow-lg"
                         >
-                            Ver Menu
+                            {language === 'pt' ? 'Ver Menu' : 'View Menu'}
                         </button>
                         <button
                             onClick={() => scrollToSection('gallery')}
@@ -260,8 +280,10 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                     </div>
 
                     <a
-                        href="tel:+258846930960"
-                        className="mt-8 text-sm md:text-base font-bold bg-[#3b2f2f]/60 backdrop-blur-sm inline-block px-6 py-2 rounded-full hover:bg-[#d9a65a] hover:text-[#3b2f2f] transition-colors"
+                        href="https://wa.me/258846930960?text=Olá%20Pão%20Caseiro!%20Gostaria%20de%20fazer%20uma%20encomenda."
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-8 text-sm md:text-base font-bold bg-[#3b2f2f]/60 backdrop-blur-sm inline-block px-6 py-2 rounded-full hover:bg-[#d9a65a] hover:text-[#3b2f2f] transition-colors mb-2"
                     >
                         {t.hero.call}
                     </a>
@@ -269,58 +291,52 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
             </section >
 
             {/* --- VIDEO SECTION --- */}
-            < section className="relative min-h-[80vh] bg-[#3b2f2f] flex items-center justify-center overflow-hidden" >
-                {/* Placeholder Video Container */}
-                < div className="absolute inset-0 opacity-60" >
-                    {/* Background Thumbnail */}
-                    < img
-                        src="/images/video-placeholder.jpg"
-                        className="w-full h-full object-cover"
-                        alt="Background Video Thumbnail"
-                    />
+            < section className="relative min-h-screen bg-[#3b2f2f] flex items-center justify-center overflow-hidden" >
+                {/* Video Container */}
+                < div className={`absolute inset-0 transition-opacity duration-500 ${isPlayingWithSound ? 'opacity-100 z-20 bg-black' : 'opacity-60'}`} >
+                    <video
+                        ref={videoRef}
+                        src="/videos/anicor-final.mp4"
+                        autoPlay
+                        loop
+                        muted
+                        playsInline
+                        className={`w-full h-full transition-all duration-500 ${isPlayingWithSound ? 'object-contain' : 'object-cover pointer-events-none'}`}
+                        controls={isPlayingWithSound}
+                    >
+                        Seu navegador não suporta a reprodução de vídeo.
+                    </video>
                 </div >
 
-                <div className="relative z-10 container mx-auto px-6 text-center text-[#f7f1eb]">
-                    <h2 className="font-serif text-4xl md:text-6xl mb-6">{t.video.title}</h2>
-                    <p className="text-lg md:text-xl font-light mb-12 max-w-2xl mx-auto text-[#f7f1eb]/80">
-                        {t.video.subtitle}
-                    </p>
+                {!isPlayingWithSound && (
+                    <div className="relative z-10 container mx-auto px-6 text-center text-[#f7f1eb] animate-in fade-in duration-500">
+                        <h2 className="font-serif text-4xl md:text-6xl mb-6">{t.video.title}</h2>
+                        <p className="text-lg md:text-xl font-light mb-12 max-w-2xl mx-auto text-[#f7f1eb]/80">
+                            {t.video.subtitle}
+                        </p>
 
-                    <motion.button
-                        whileHover={{ scale: 1.1 }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={() => setIsVideoPlaying(true)}
-                        className="w-24 h-24 bg-[#f7f1eb] rounded-full flex items-center justify-center text-[#3b2f2f] shadow-[0_0_30px_rgba(217,166,90,0.5)] mx-auto group hover:bg-[#d9a65a] transition-colors"
+                        <motion.button
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={handlePlayWithSound}
+                            className="w-24 h-24 bg-[#f7f1eb] rounded-full flex items-center justify-center text-[#3b2f2f] shadow-[0_0_30px_rgba(217,166,90,0.5)] mx-auto group hover:bg-[#d9a65a] transition-colors relative z-10 pointer-events-auto"
+                        >
+                            <Play className="w-10 h-10 ml-1 fill-current" />
+                        </motion.button>
+                        <p className="mt-4 uppercase tracking-widest text-xs font-bold relative z-10">{t.video.play}</p>
+                    </div>
+                )}
+
+                {isPlayingWithSound && (
+                    <button
+                        onClick={handleCloseVideo}
+                        title={language === 'pt' ? 'Mudo / Fundo' : 'Mute / Background'}
+                        className="absolute top-24 md:top-8 right-6 md:right-8 text-white hover:text-[#d9a65a] transition-colors z-[30] bg-black/50 p-2 rounded-full backdrop-blur-md animate-in fade-in zoom-in duration-300"
+                        aria-label="Voltar para plano de fundo"
                     >
-                        <Play className="w-10 h-10 ml-1 fill-current" />
-                    </motion.button>
-                    <p className="mt-4 uppercase tracking-widest text-xs font-bold">{t.video.play}</p>
-                </div>
-
-                {/* Video Modal */}
-                {
-                    isVideoPlaying && (
-                        <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm">
-                            <button
-                                onClick={() => setIsVideoPlaying(false)}
-                                className="absolute top-8 right-8 text-white hover:text-[#d9a65a] transition-colors z-[110]"
-                            >
-                                <X className="w-10 h-10" />
-                            </button>
-                            <div className="w-full max-w-5xl aspect-video bg-black rounded-lg overflow-hidden border border-[#d9a65a]/30 shadow-[0_0_50px_rgba(217,166,90,0.2)]">
-                                <video
-                                    src="https://backup.aegraphics.in/wp-content/uploads/2025/12/ANICOR-FINAL.mp4"
-                                    controls
-                                    autoPlay
-                                    playsInline
-                                    className="w-full h-full object-contain"
-                                >
-                                    Seu navegador não suporta a reprodução de vídeo.
-                                </video>
-                            </div>
-                        </div>
-                    )
-                }
+                        <X className="w-8 h-8" />
+                    </button>
+                )}
             </section >
 
             {/* --- ABOUT SECTION --- */}
@@ -362,17 +378,21 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
 
                             <ul className="space-y-6">
                                 {t.about.points.map((item, i) => (
-                                    <motion.li
+                                    <li
                                         key={i}
-                                        initial={{ opacity: 0, x: 20 }}
-                                        whileInView={{ opacity: 1, x: 0 }}
-                                        viewport={{ once: true }}
-                                        transition={{ delay: i * 0.2 }}
                                         className="flex items-start justify-center lg:justify-start gap-4 text-[#3b2f2f] font-medium"
                                     >
-                                        <span className="w-2 h-2 rounded-full bg-[#d9a65a] mt-2 shrink-0" />
-                                        {item}
-                                    </motion.li>
+                                        <motion.div
+                                            initial={{ opacity: 0, x: 20 }}
+                                            whileInView={{ opacity: 1, x: 0 }}
+                                            viewport={{ once: true }}
+                                            transition={{ delay: i * 0.2 }}
+                                            className="flex items-center gap-4"
+                                        >
+                                            <span className="w-2 h-2 rounded-full bg-[#d9a65a] shrink-0" />
+                                            {item}
+                                        </motion.div>
+                                    </li>
                                 ))}
                             </ul>
                         </div>
@@ -431,7 +451,7 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                             onClick={() => navigate('/menu')}
                             className="px-8 py-3 bg-[#3b2f2f] text-[#f7f1eb] rounded-full font-bold uppercase tracking-widest hover:bg-[#d9a65a] hover:text-[#3b2f2f] transition-all"
                         >
-                            Ver Menu Completo
+                            {language === 'pt' ? 'Ver Menu Completo' : 'View Full Menu'}
                         </button>
                     </div>
 
@@ -506,7 +526,7 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                             onClick={() => navigate('/gallery')}
                             className="px-8 py-3 border-2 border-[#3b2f2f] text-[#3b2f2f] rounded-full font-bold uppercase tracking-widest hover:bg-[#3b2f2f] hover:text-[#f7f1eb] transition-all"
                         >
-                            Ver Galeria Completa
+                            {language === 'pt' ? 'Ver Galeria Completa' : 'View Full Gallery'}
                         </button>
                     </div>
                 </div>
@@ -545,30 +565,35 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                                         value={formData.phone}
                                         onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                                         className="w-full bg-[#4b3a2f] border border-[#f7f1eb]/10 rounded-xl p-4 text-[#f7f1eb] focus:outline-none focus:border-[#d9a65a] transition-colors text-center lg:text-left"
-                                        placeholder="846 930 960"
+                                        placeholder="+258 8x xxx xxxx"
+                                        title={t.contact.form.phonePlaceholder || "+258 8x xxx xxxx"}
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-bold uppercase tracking-widest mb-2 text-[#d9a65a] text-center lg:text-left">{t.contact.form.email}</label>
+                                    <label htmlFor="contact-email" className="block text-sm font-bold uppercase tracking-widest mb-2 text-[#d9a65a] text-center lg:text-left">{t.contact.form.email}</label>
                                     <input
                                         type="email"
+                                        id="contact-email"
                                         required
                                         value={formData.email}
                                         onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                                         className="w-full bg-[#4b3a2f] border border-[#f7f1eb]/10 rounded-xl p-4 text-[#f7f1eb] focus:outline-none focus:border-[#d9a65a] transition-colors text-center lg:text-left"
                                         placeholder="email@exemplo.com"
+                                        title={t.contact.form.emailPlaceholder || "email@exemplo.com"}
                                     />
                                 </div>
                             </div>
                             <div>
-                                <label className="block text-sm font-bold uppercase tracking-widest mb-2 text-[#d9a65a] text-center lg:text-left">{t.contact.form.message}</label>
+                                <label htmlFor="contact-message" className="block text-sm font-bold uppercase tracking-widest mb-2 text-[#d9a65a] text-center lg:text-left">{t.contact.form.message}</label>
                                 <textarea
+                                    id="contact-message"
                                     rows={4}
                                     required
                                     value={formData.message}
                                     onChange={(e) => setFormData({ ...formData, message: e.target.value })}
                                     className="w-full bg-[#4b3a2f] border border-[#f7f1eb]/10 rounded-xl p-4 text-[#f7f1eb] focus:outline-none focus:border-[#d9a65a] transition-colors text-center lg:text-left"
                                     placeholder={t.contact.form.messagePlaceholder}
+                                    title={t.contact.form.messagePlaceholder}
                                 />
                             </div>
 
@@ -588,6 +613,7 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                                 type="submit"
                                 disabled={isSubmitting}
                                 className="bg-[#d9a65a] text-[#3b2f2f] px-10 py-4 rounded-xl font-bold uppercase tracking-widest hover:bg-[#f7f1eb] transition-all w-full md:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
+                                title={t.contact.form.send}
                             >
                                 {isSubmitting ? '...' : t.contact.form.send}
                             </button>
@@ -618,7 +644,7 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                                     </div>
                                     <div>
                                         <h4 className="font-bold text-lg">{t.contact.visit.phoneLabel}</h4>
-                                        <p className="text-[#4b3a2f]">846 930 960</p>
+                                        <p className="text-[#4b3a2f]">+258 87 9146 662</p>
                                     </div>
                                 </div>
                                 <div className="flex items-start gap-4">
@@ -645,7 +671,7 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                                 src="https://www.google.com/maps?q=Padaria+P%C3%A3o+Caseiro,+Av.+Acordo+de+Lusaka,+Lichinga,+Niassa,+Mozambique&t=&z=15&ie=UTF8&iwloc=&output=embed"
                                 width="100%"
                                 height="100%"
-                                style={{ border: 0 }}
+                                className="border-0"
                                 allowFullScreen
                                 loading="lazy"
                                 referrerPolicy="no-referrer-when-downgrade"
@@ -671,6 +697,7 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                             <button
                                 className="absolute top-6 right-6 text-white/80 hover:text-[#d9a65a] transition-colors z-[102] bg-white/10 p-2 rounded-full backdrop-blur-md"
                                 onClick={() => setSelectedIndex(null)}
+                                title={language === 'pt' ? 'Fechar' : 'Close'}
                             >
                                 <X className="w-8 h-8" />
                             </button>
@@ -679,6 +706,7 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                             <button
                                 className="absolute left-4 md:left-8 top-1/2 -translate-y-1/2 text-white/80 hover:text-[#d9a65a] hover:bg-white/10 p-2 rounded-full transition-all z-[102]"
                                 onClick={handlePrev}
+                                title={language === 'pt' ? 'Anterior' : 'Previous'}
                             >
                                 <ChevronLeft className="w-10 h-10" />
                             </button>
@@ -686,6 +714,7 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                             <button
                                 className="absolute right-4 md:right-8 top-1/2 -translate-y-1/2 text-white/80 hover:text-[#d9a65a] hover:bg-white/10 p-2 rounded-full transition-all z-[102]"
                                 onClick={handleNext}
+                                title={language === 'pt' ? 'Próximo' : 'Next'}
                             >
                                 <ChevronRight className="w-10 h-10" />
                             </button>

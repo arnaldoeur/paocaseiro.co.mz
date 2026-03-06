@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { useCart } from '../context/CartContext';
-import { ShoppingCart, ShoppingBag, X, Trash2, MessageCircle, MapPin, Phone, User, CreditCard, Banknote, CheckCircle, ArrowLeft, Loader, Store, ArrowRight, AlertTriangle, Clock, Info } from 'lucide-react';
+import { ShoppingCart, ShoppingBag, X, Trash2, MessageCircle, MapPin, Phone, User, CreditCard, Banknote, CheckCircle, ArrowLeft, Loader, Store, ArrowRight, AlertTriangle, Clock, Info, Mail, Calendar, FileText, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { initiatePayment, verifyPayment } from '../services/paySuite';
 import { LocationPicker } from './LocationPicker';
 import { Receipt } from './Receipt';
 import { AddressAutocomplete } from './AddressAutocomplete'; // Import the new component
 import { translations, Language } from '../translations';
-import { notifyTeam, notifyCustomer } from '../services/sms';
+import { notifyTeam, notifyCustomer, sendSMS } from '../services/sms';
 import { saveOrderToSupabase } from '../services/supabase';
+import { formatProductName } from '../services/stringUtils';
+
 
 type CheckoutStep = 'cart' | 'details' | 'payment' | 'processing' | 'receipt';
 type OrderType = 'delivery' | 'pickup' | 'dine_in';
@@ -37,6 +39,10 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
     const [details, setDetails] = useState({
         name: '',
         phone: '',
+        email: '',
+        whatsapp: '',
+        dateOfBirth: '',
+        nuit: '',
         address: '',
         notes: '', // New Field
         tableZone: 'Sala Interior', // New Field for Dine-in
@@ -64,12 +70,34 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
     // Load saved details on mount
     useEffect(() => {
         const saved = localStorage.getItem('checkout_details');
+        const userData = localStorage.getItem('pc_user_data');
+
+        let initialDetails = { ...details };
+
         if (saved) {
             try {
                 const parsed = JSON.parse(saved);
-                setDetails(prev => ({ ...prev, ...parsed }));
+                initialDetails = { ...initialDetails, ...parsed };
             } catch (e) { console.error("Error loading saved details", e); }
         }
+
+        if (userData) {
+            try {
+                const user = JSON.parse(userData);
+                initialDetails = {
+                    ...initialDetails,
+                    name: user.name || initialDetails.name,
+                    phone: user.contact_no || initialDetails.phone,
+                    email: user.email || initialDetails.email,
+                    whatsapp: user.whatsapp || initialDetails.whatsapp,
+                    address: user.address || initialDetails.address,
+                    nuit: user.nuit || initialDetails.nuit,
+                    dateOfBirth: user.date_of_birth || initialDetails.dateOfBirth
+                };
+            } catch (e) { console.error("Error loading user data", e); }
+        }
+
+        setDetails(initialDetails);
     }, []);
 
     // Save details on change
@@ -78,6 +106,10 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
             localStorage.setItem('checkout_details', JSON.stringify({
                 name: details.name,
                 phone: details.phone,
+                email: details.email,
+                whatsapp: details.whatsapp,
+                dateOfBirth: details.dateOfBirth,
+                nuit: details.nuit,
                 address: details.address,
                 notes: details.notes,
                 type: details.type
@@ -160,11 +192,12 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
     }, [details.phone]);
 
     // Financials
-    const finalTotal = total + (deliveryFee > 0 ? deliveryFee : 0);
+    const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
+    const packagingFee = details.type === 'delivery' && totalItems > 0 ? Math.ceil(totalItems / 3) * 20 : 0;
+
+    const finalTotal = total + (deliveryFee > 0 ? deliveryFee : 0) + packagingFee;
     const amountToPay = payDeposit ? finalTotal / 2 : finalTotal;
     const remainingBalance = finalTotal - amountToPay;
-
-    const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
 
     const handleNextStep = () => {
         if (step === 'cart') {
@@ -174,16 +207,16 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
             const currentMinute = now.getMinutes();
             const currentTime = currentHour * 60 + currentMinute;
 
-            const openTime = 8 * 60; // 08:00
-            const closeTime = 21 * 60 + 30; // 21:30
+            const openTime = 6 * 60; // 06:00
+            const closeTime = 22 * 60; // 22:00
 
-            const isOpen = currentTime >= openTime && currentTime < closeTime;
+            const isOpen = (currentTime >= openTime && currentTime < closeTime) || localStorage.getItem('pc_bypass_hours') === 'true' || true; // [BYPASS] Force open for testing
 
             if (!isOpen) {
                 setError(
                     language === 'pt'
-                        ? 'Desculpe, estamos fechados. Encomendas apenas entre 08:00 e 21:30.'
-                        : 'Sorry, we are closed. Orders only between 08:00 and 21:30.'
+                        ? 'Desculpe, estamos fechados. Encomendas apenas entre 06:00 e 22:00.'
+                        : 'Sorry, we are closed. Orders only between 06:00 and 22:00.'
                 );
                 return;
             }
@@ -270,47 +303,25 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                 return;
             } else {
                 // Delivery/Pickup: Require 30% Deposit
-                // We must initiate an electronic payment for the deposit amount.
                 const depositAmount = finalTotal * 0.30;
-
-                // We default to M-Pesa if they selected Cash but need to pay online.
-                // Or we can assume they want to use the 'paymentPhone' they entered?
-                // The UI for "Numerário" should ask for the Deposit Phone Number.
-                // We will treat this as a "Deposit Payment".
-
                 const depositRef = `${refId}-DEP`;
 
                 setStep('processing');
                 setError('');
 
-                // Use default 'mpesa' for deposit if not set (or could prompt user, but simpler to default)
-                // Actually, if 'cash' is selected, 'paymentMethod' is 'cash'. 
-                // We need to send 'mpesa' (or 'emola'?) to initiatePayment.
-                // Let's assume M-Pesa for simplicity or try to detect from prefix.
-                let depositMethod: 'mpesa' | 'emola' | 'mkesh' = 'mpesa';
-                const prefix = details.phone?.replace(/\D/g, '').substring(0, 2); // Use contact phone or payment phone?
-                // For deposit, we should use the Payment Phone input we show in the Cash section.
-                // But in the UI currently, we might not show Payment Phone if Cash is selected.
-                // We WILL update the UI to show it.
-
-                if (paymentPhone) {
-                    const p = paymentPhone.replace(/\D/g, '').substring(0, 2);
-                    if (PREFIXES.emola.includes(p)) depositMethod = 'emola';
-                    if (PREFIXES.mkesh.includes(p)) depositMethod = 'mkesh';
-                }
-
                 try {
                     const result = await initiatePayment({
                         amount: depositAmount,
                         msisdn: paymentPhone || details.phone, // fallback to contact phone
-                        method: depositMethod,
-                        reference: depositRef
+                        reference: depositRef,
+                        method: paymentMethod !== 'cash' ? paymentMethod : undefined,
+                        customerName: details.name,
+                        customerEmail: details.email
                     });
 
                     if (result.success && result.checkout_url) {
                         window.location.href = result.checkout_url;
                         setCurrentTxId(result.transaction_id);
-                        // Note: Poll check matches logic steps
                     } else {
                         setStep('payment');
                         setError(result.message || 'Falha ao iniciar pagamento do sinal.');
@@ -326,20 +337,27 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
         setStep('processing');
         setError('');
 
-        const result = await initiatePayment({
-            amount: amountToPay,
-            msisdn: paymentMethod === 'cash' ? details.phone : paymentPhone,
-            method: paymentMethod as any,
-            reference: refId // Use consistent Ref
-        });
+        try {
+            const result = await initiatePayment({
+                amount: amountToPay,
+                msisdn: paymentMethod === 'cash' ? details.phone : paymentPhone,
+                reference: refId, // Use consistent Ref
+                method: paymentMethod !== 'cash' ? paymentMethod : undefined,
+                customerName: details.name,
+                customerEmail: details.email
+            });
 
-        if (result.success && result.checkout_url) {
-            // Redirect to PaySuite instead of Iframe to avoid CSRF/Cookie issues
-            window.location.href = result.checkout_url;
-            setCurrentTxId(result.transaction_id);
-        } else {
+            if (result.success && result.checkout_url) {
+                // Redirect to PaySuite instead of Iframe to avoid CSRF/Cookie issues
+                window.location.href = result.checkout_url;
+                setCurrentTxId(result.transaction_id);
+            } else {
+                setStep('payment');
+                setError(result.message || 'Falha no pagamento. Tente novamente.');
+            }
+        } catch (e) {
             setStep('payment');
-            setError(result.message || 'Falha no pagamento. Tente novamente.');
+            setError('Erro de conexão com o sistema de pagamento.');
         }
     };
 
@@ -388,10 +406,12 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
             date: new Date().toLocaleString(),
             amountPaid: amountToPay,
             balance: remainingBalance,
-            items: cart, // Save items for Admin
-            customer: details, // Save customer details
+            items: [...cart], // Save items snapshot for Receipt and Admin
+            customer: { ...details }, // Save customer details snapshot
             status: 'pending', // Initial status
-            total: finalTotal
+            total: finalTotal,
+            subtotal: total,
+            deliveryFee: deliveryFee > 0 ? deliveryFee : 0
         };
 
 
@@ -413,6 +433,10 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
             transaction_id: currentTxId,
             customer_phone: details.phone,
             customer_name: details.name,
+            customer_email: details.email,
+            customer_whatsapp: details.whatsapp,
+            customer_nuit: details.nuit,
+            customer_dob: details.dateOfBirth,
             delivery_type: details.type,
             delivery_address: details.address,
             delivery_coordinates: deliveryLocation ? `(${deliveryLocation.lat},${deliveryLocation.lng})` : null,
@@ -420,6 +444,8 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
             table_people: details.tablePeople,
             notes: details.notes,
             total_amount: finalTotal,
+            delivery_fee: deliveryFee > 0 ? deliveryFee : 0,
+            packaging_fee: packagingFee,
             amount_paid: amountToPay,
             balance: remainingBalance,
             status: 'pending'
@@ -433,7 +459,22 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
 
         saveOrderToSupabase(supabaseOrder, supabaseItems)
             .then(res => {
-                if (!res.success) console.error("Database save failed", res.error);
+                if (!res.success) {
+                    console.error("Database save failed", res.error);
+                } else {
+                    const invoiceLink = `${window.location.origin}/order-receipt/${orderId}`;
+                    let msg = '';
+
+                    if (remainingBalance > 0) {
+                        msg = `A sua Fatura PaoCaseiro gerada c/sucesso! Fatura online em: ${invoiceLink}. Aguarda pagamento do valor restante.`;
+                    } else {
+                        msg = `A sua encomenda #${orderId} foi paga c/sucesso! Consulte o Recibo da Encomenda no seu E-mail ou em: ${invoiceLink}.`;
+                    }
+
+                    // Enforce 160 char limit
+                    msg = msg.substring(0, 160);
+                    sendSMS(details.phone, msg).catch(err => console.error("Invoice SMS failed", err));
+                }
             })
             .catch(err => console.error("Database save exception", err));
     };
@@ -461,14 +502,14 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                                         {/* Image Thumbnail */}
                                         <div className="w-16 h-16 bg-gray-100 rounded-lg shrink-0 overflow-hidden">
                                             {item.image ? (
-                                                <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                                                <img src={item.image} alt={formatProductName(item.name)} className="w-full h-full object-cover" />
                                             ) : (
                                                 <div className="w-full h-full flex items-center justify-center text-xs text-gray-400 font-bold">IMG</div>
                                             )}
                                         </div>
 
                                         <div className="flex-1 min-w-0">
-                                            <h3 className="font-bold text-[#3b2f2f] truncate">{(language === 'en' && item.name_en) ? item.name_en : item.name}</h3>
+                                            <h3 className="font-bold text-[#3b2f2f] truncate">{(language === 'en' && item.name_en) ? formatProductName(item.name_en) : formatProductName(item.name)}</h3>
                                             <p className="text-[#d9a65a] text-sm font-bold">{item.price} MT</p>
                                         </div>
 
@@ -571,31 +612,71 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                                     <Phone className="absolute left-3 top-3 text-[#d9a65a] w-5 h-5" />
                                     <input
                                         type="tel"
+                                        id="cart-phone"
+                                        title="Seu Telemóvel"
                                         value={details.phone}
                                         onChange={(e) => setDetails({ ...details, phone: e.target.value })}
                                         className="w-full pl-10 p-3 rounded-lg border border-[#d9a65a]/30 focus:border-[#d9a65a] outline-none bg-white"
-                                        placeholder="84/85..."
+                                        placeholder="+258 8x xxx xxxx"
                                     />
                                 </div>
                             </div>
+
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="space-y-2">
+                                    <label htmlFor="cart-email" className="text-sm font-bold text-[#3b2f2f]/80">Email</label>
+                                    <div className="relative">
+                                        <Mail className="absolute left-3 top-3 text-[#d9a65a] w-5 h-5" />
+                                        <input
+                                            type="email"
+                                            id="cart-email"
+                                            title="Seu Email"
+                                            value={details.email}
+                                            onChange={(e) => setDetails({ ...details, email: e.target.value })}
+                                            className="w-full pl-10 p-3 rounded-lg border border-[#d9a65a]/30 focus:border-[#d9a65a] outline-none bg-white"
+                                            placeholder="Seu email"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <label htmlFor="cart-whatsapp" className="text-sm font-bold text-[#3b2f2f]/80">WhatsApp</label>
+                                    <div className="relative">
+                                        <MessageCircle className="absolute left-3 top-3 text-[#d9a65a] w-5 h-5" />
+                                        <input
+                                            type="tel"
+                                            id="cart-whatsapp"
+                                            title="Seu WhatsApp"
+                                            value={details.whatsapp}
+                                            onChange={(e) => setDetails({ ...details, whatsapp: e.target.value })}
+                                            className="w-full pl-10 p-3 rounded-lg border border-[#d9a65a]/30 focus:border-[#d9a65a] outline-none bg-white"
+                                            placeholder="+258 8x xxx xxxx"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* NUIT and DOB removed from checkout as they are collected during registration */}
 
                             <div className="space-y-2">
                                 <label className="text-sm font-bold text-[#3b2f2f]/80">{t.checkout.orderType}</label>
                                 <div className="grid grid-cols-3 gap-2">
                                     <button
                                         onClick={() => setDetails({ ...details, type: 'delivery' })}
+                                        title={t.checkout.delivery}
                                         className={`flex flex-col items-center gap-1 p-3 rounded-lg text-xs font-bold transition-all border ${details.type === 'delivery' ? 'bg-[#d9a65a] text-[#3b2f2f] border-[#d9a65a]' : 'bg-white border-gray-200'}`}
                                     >
                                         <MapPin className="w-5 h-5" /> {t.checkout.delivery}
                                     </button>
                                     <button
                                         onClick={() => setDetails({ ...details, type: 'pickup' })}
+                                        title={t.checkout.pickup}
                                         className={`flex flex-col items-center gap-1 p-3 rounded-lg text-xs font-bold transition-all border ${details.type === 'pickup' ? 'bg-[#d9a65a] text-[#3b2f2f] border-[#d9a65a]' : 'bg-white border-gray-200'}`}
                                     >
                                         <ShoppingBag className="w-5 h-5" /> {t.checkout.pickup}
                                     </button>
                                     <button
                                         onClick={() => setDetails({ ...details, type: 'dine_in' })}
+                                        title={t.checkout.dine_in}
                                         className={`flex flex-col items-center gap-1 p-3 rounded-lg text-xs font-bold transition-all border ${details.type === 'dine_in' ? 'bg-[#d9a65a] text-[#3b2f2f] border-[#d9a65a]' : 'bg-white border-gray-200'}`}
                                     >
                                         <Store className="w-5 h-5" /> {t.checkout.dine_in}
@@ -618,13 +699,11 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                             {details.type === 'delivery' && (
                                 <div className="space-y-4 animate-fade-in">
                                     <div className="space-y-2">
-                                        <label className="text-sm font-bold text-[#3b2f2f]/80">{t.checkout.address}</label>
-                                        {/* Using Autocomplete */}
+                                        <label htmlFor="address-autocomplete" className="text-sm font-bold text-[#3b2f2f]/80">{t.checkout.address}</label>
                                         <AddressAutocomplete
                                             value={details.address}
                                             onChange={(val) => setDetails({ ...details, address: val })}
                                             onSelect={(result) => {
-                                                // When result selected, set address and override map position
                                                 setDetails({ ...details, address: result.label });
                                                 setOverridePosition({ lat: result.y, lng: result.x });
                                             }}
@@ -641,7 +720,7 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                                     />
 
                                     {distance > 0 && (
-                                        <div className="text-xs text-gray-500 text-center">
+                                        <div className="text-xs text-gray-500 text-center" title="Distância estimada">
                                             Distância da Padaria: <span className="font-bold">{distance.toFixed(2)} km</span>
                                         </div>
                                     )}
@@ -652,8 +731,10 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                             {details.type === 'dine_in' && (
                                 <div className="grid grid-cols-2 gap-3 animate-fade-in">
                                     <div className="space-y-2">
-                                        <label className="text-sm font-bold text-[#3b2f2f]/80">Zona</label>
+                                        <label htmlFor="cart-table-zone" className="text-sm font-bold text-[#3b2f2f]/80">Zona</label>
                                         <select
+                                            id="cart-table-zone"
+                                            title="Zona da Mesa"
                                             value={details.tableZone}
                                             onChange={(e) => setDetails({ ...details, tableZone: e.target.value })}
                                             className="w-full p-3 rounded-lg border border-[#d9a65a]/30 focus:border-[#d9a65a] outline-none bg-white font-serif"
@@ -668,6 +749,7 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                                         <div className="flex items-center gap-2 bg-white border border-[#d9a65a]/30 rounded-lg p-1">
                                             <button
                                                 onClick={() => setDetails(prev => ({ ...prev, tablePeople: Math.max(1, prev.tablePeople - 1) }))}
+                                                title="Diminuir Pessoas"
                                                 className="w-10 h-10 flex items-center justify-center font-bold text-[#d9a65a] hover:bg-[#d9a65a]/10 rounded"
                                             >
                                                 -
@@ -675,6 +757,7 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                                             <span className="flex-1 text-center font-bold text-[#3b2f2f]">{details.tablePeople}</span>
                                             <button
                                                 onClick={() => setDetails(prev => ({ ...prev, tablePeople: prev.tablePeople + 1 }))}
+                                                title="Aumentar Pessoas"
                                                 className="w-10 h-10 flex items-center justify-center font-bold text-[#d9a65a] hover:bg-[#d9a65a]/10 rounded"
                                             >
                                                 +
@@ -684,41 +767,42 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                                 </div>
                             )}
 
-                            <div className="space-y-2">
-                                <label className="text-sm font-bold text-[#3b2f2f]/80">
-                                    {details.type === 'dine_in' ? 'Pedido Especial (Opcional)' : 'Notas de Entrega/Preparo'}
-                                </label>
-                                <div className="relative">
-                                    <MessageCircle className="absolute left-3 top-3 text-[#d9a65a] w-5 h-5" />
-                                    <textarea
-                                        value={details.notes}
-                                        onChange={(e) => setDetails({ ...details, notes: e.target.value })}
-                                        className="w-full pl-10 p-3 rounded-lg border border-[#d9a65a]/30 focus:border-[#d9a65a] outline-none bg-white h-20 resize-none"
-                                        placeholder={
-                                            details.type === 'dine_in'
-                                                ? "Ex: Mesa no canto, precisamos de cadeirinha de bebé... Faremos o possível para a melhor experiência!"
-                                                : details.type === 'pickup'
-                                                    ? "Ex: Passo às 17h para levantar. Gosto bem tostado! (Deixaremos pronto com carinho)"
-                                                    : "Ex: Perto da Escola X, portão azul. Por favor, liguem quando estiverem a chegar para receber quentinho!"
-                                        }
-                                    />
-                                </div>
-
-                                {error && (
-                                    <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm font-bold border border-red-200 animate-shake">
-                                        {error}
-                                    </div>
-                                )}
-
-                                <button
-                                    onClick={handleNextStep}
-                                    className="w-full bg-[#3b2f2f] text-[#d9a65a] py-4 rounded-xl font-bold uppercase tracking-widest hover:bg-[#d9a65a] hover:text-[#3b2f2f] transition-all shadow-lg mt-4"
-                                >
-                                    {t.checkout.continue}
-                                </button>
+                            <label htmlFor="cart-notes" className="text-sm font-bold text-[#3b2f2f]/80">
+                                {details.type === 'dine_in' ? 'Pedido Especial (Opcional)' : 'Notas de Entrega/Preparo'}
+                            </label>
+                            <div className="relative">
+                                <MessageCircle className="absolute left-3 top-3 text-[#d9a65a] w-5 h-5" />
+                                <textarea
+                                    id="cart-notes"
+                                    title="Notas Adicionais"
+                                    value={details.notes}
+                                    onChange={(e) => setDetails({ ...details, notes: e.target.value })}
+                                    className="w-full pl-10 p-3 rounded-lg border border-[#d9a65a]/30 focus:border-[#d9a65a] outline-none bg-white h-20 resize-none"
+                                    placeholder={
+                                        details.type === 'dine_in'
+                                            ? "Ex: Mesa no canto, precisamos de cadeirinha de bebé..."
+                                            : details.type === 'pickup'
+                                                ? "Ex: Passo às 17h para levantar..."
+                                                : "Ex: Perto da Escola X, portão azul..."
+                                    }
+                                />
                             </div>
+
+                            {error && (
+                                <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm font-bold border border-red-200 animate-shake">
+                                    {error}
+                                </div>
+                            )}
+
+                            <button
+                                onClick={handleNextStep}
+                                title={t.checkout.continue}
+                                className="w-full bg-[#3b2f2f] text-[#d9a65a] py-4 rounded-xl font-bold uppercase tracking-widest hover:bg-[#d9a65a] hover:text-[#3b2f2f] transition-all shadow-lg mt-4"
+                            >
+                                {t.checkout.continue}
+                            </button>
                         </div>
-                    </div >
+                    </div>
                 );
 
             case 'summary_confirmation':
@@ -727,7 +811,7 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                         <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-scale-in">
                             <div className="p-4 bg-[#f7f1eb] border-b border-[#d9a65a]/20 flex justify-between items-center">
                                 <h3 className="font-serif text-xl font-bold text-[#3b2f2f]">{t.checkout.title}</h3>
-                                <button onClick={() => setStep('payment')} className="text-gray-500 hover:text-red-500">
+                                <button onClick={() => setStep('payment')} title="Voltar ao Pagamento" className="text-gray-500 hover:text-red-500">
                                     <X className="w-6 h-6" />
                                 </button>
                             </div>
@@ -744,6 +828,12 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                                             <div className="flex justify-between text-blue-600">
                                                 <span>Taxa de Entrega:</span>
                                                 <span>+{deliveryFee} MT</span>
+                                            </div>
+                                        )}
+                                        {packagingFee > 0 && (
+                                            <div className="flex justify-between text-orange-600">
+                                                <span>Taxa de Embalagem:</span>
+                                                <span>+{packagingFee} MT</span>
                                             </div>
                                         )}
                                         <div className="flex justify-between text-lg font-bold text-[#3b2f2f] pt-2 border-t">
@@ -805,10 +895,10 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
 
                                     <div className="bg-[#fffbf5] border border-[#d9a65a]/30 p-3 rounded-lg text-sm flex items-center gap-3">
                                         <div className="w-10 h-10 bg-white rounded-lg border p-1 flex items-center justify-center">
-                                            {paymentMethod === 'mpesa' && <img src="/images/payments/mpesa.png" className="w-full h-full object-contain" />}
-                                            {paymentMethod === 'emola' && <img src="/images/payments/emola.png" className="w-full h-full object-contain" />}
-                                            {paymentMethod === 'mkesh' && <img src="/images/payments/mkesh.png" className="w-full h-full object-contain" />}
-                                            {paymentMethod === 'cash' && <Banknote className="w-6 h-6 text-green-600" />}
+                                            {paymentMethod === 'mpesa' && <img src="/images/payments/mpesa.png" alt="M-Pesa" title="M-Pesa" className="w-full h-full object-contain" />}
+                                            {paymentMethod === 'emola' && <img src="/images/payments/emola.png" alt="E-Mola" title="E-Mola" className="w-full h-full object-contain" />}
+                                            {paymentMethod === 'mkesh' && <img src="/images/payments/mkesh.png" alt="mKesh" title="mKesh" className="w-full h-full object-contain" />}
+                                            {paymentMethod === 'cash' && <Banknote className="w-6 h-6 text-green-600" title="Numerário" />}
                                         </div>
                                         <div>
                                             <p className="font-bold text-[#3b2f2f]">
@@ -823,13 +913,29 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                             <div className="p-4 bg-white border-t space-y-3">
                                 <button
                                     onClick={handlePayment}
+                                    title={t.checkout.pay_now}
                                     className="w-full bg-[#3b2f2f] text-[#d9a65a] py-3 rounded-xl font-bold uppercase tracking-widest hover:bg-[#d9a65a] hover:text-[#3b2f2f] transition-all shadow-lg flex items-center justify-center gap-2"
                                 >
                                     <span>{t.checkout.pay_now}</span>
                                     <ArrowRight className="w-5 h-5" />
                                 </button>
+
+                                {/* Botão de Simulação para Testes */}
+                                <button
+                                    onClick={() => {
+                                        const timestamp = Date.now();
+                                        const shortId = `TEST-${timestamp.toString().slice(-4)}`;
+                                        const refId = `TEST-REF-${timestamp}`;
+                                        finishOrder(shortId, refId);
+                                    }}
+                                    className="w-full border-2 border-dashed border-[#d9a65a] text-[#d9a65a] py-3 rounded-xl font-bold uppercase tracking-widest hover:bg-[#d9a65a]/10 transition-all flex items-center justify-center gap-2"
+                                >
+                                    <span>Simular Pagamento Sucesso (Teste)</span>
+                                    <Sparkles className="w-5 h-5" />
+                                </button>
                                 <button
                                     onClick={() => setStep('payment')}
+                                    title={t.checkout.back}
                                     className="w-full text-gray-500 font-bold hover:text-[#3b2f2f] py-2"
                                 >
                                     {t.checkout.back}
@@ -857,6 +963,12 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                                         <span className="font-bold">+{deliveryFee} MT</span>
                                     </div>
                                 )}
+                                {packagingFee > 0 && (
+                                    <div className="flex justify-between text-sm text-orange-600">
+                                        <span>Taxa de Embalagem:</span>
+                                        <span className="font-bold">+{packagingFee} MT</span>
+                                    </div>
+                                )}
                                 <div className="flex justify-between text-xl font-bold text-[#3b2f2f] pt-2 border-t">
                                     <span>{t.cart.total}:</span>
                                     <span>{finalTotal} MT</span>
@@ -866,11 +978,12 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                                     <div className="flex items-center gap-3 pt-2 border-t border-dashed border-[#d9a65a]">
                                         <input
                                             type="checkbox"
+                                            id="special-order-deposit"
                                             checked={payDeposit}
                                             onChange={(e) => setPayDeposit(e.target.checked)}
                                             className="w-5 h-5 accent-[#d9a65a]"
                                         />
-                                        <label className="text-sm font-bold leading-tight">
+                                        <label htmlFor="special-order-deposit" className="text-sm font-bold leading-tight">
                                             Encomenda Especial? <br />
                                             <span className="text-xs font-normal text-gray-600">Pagar apenas 50% de sinal agora.</span>
                                         </label>
@@ -895,6 +1008,7 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                                 <div className="grid grid-cols-1 gap-3">
                                     <button
                                         onClick={() => setPaymentMethod('mpesa')}
+                                        title="Pagar com M-Pesa"
                                         className={`group relative p-4 rounded-xl border-2 transition-all flex items-center gap-4 overflow-hidden ${paymentMethod === 'mpesa' ? 'border-[#d9a65a] bg-[#fffbf5] shadow-md' : 'border-gray-100 bg-white hover:border-[#d9a65a]/50'}`}
                                     >
                                         <div className="w-14 h-14 shrink-0 rounded-lg overflow-hidden border border-gray-100 flex items-center justify-center bg-white p-1">
@@ -909,6 +1023,7 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
 
                                     <button
                                         onClick={() => setPaymentMethod('emola')}
+                                        title="Pagar com E-Mola"
                                         className={`group relative p-4 rounded-xl border-2 transition-all flex items-center gap-4 overflow-hidden ${paymentMethod === 'emola' ? 'border-[#d9a65a] bg-[#fffbf5] shadow-md' : 'border-gray-100 bg-white hover:border-[#d9a65a]/50'}`}
                                     >
                                         <div className="w-14 h-14 shrink-0 rounded-lg overflow-hidden border border-gray-100 flex items-center justify-center bg-white p-1">
@@ -923,6 +1038,7 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
 
                                     <button
                                         onClick={() => setPaymentMethod('mkesh')}
+                                        title="Pagar com mKesh"
                                         className={`group relative p-4 rounded-xl border-2 transition-all flex items-center gap-4 overflow-hidden ${paymentMethod === 'mkesh' ? 'border-[#d9a65a] bg-[#fffbf5] shadow-md' : 'border-gray-100 bg-white hover:border-[#d9a65a]/50'}`}
                                     >
                                         <div className="w-14 h-14 shrink-0 rounded-lg overflow-hidden border border-gray-100 flex items-center justify-center bg-white p-1">
@@ -937,9 +1053,10 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
 
                                     <button
                                         onClick={() => setPaymentMethod('cash')}
+                                        title="Pagar em Numerário (com sinal)"
                                         className={`group relative p-4 rounded-xl border-2 transition-all flex items-center gap-4 overflow-hidden ${paymentMethod === 'cash' ? 'border-[#d9a65a] bg-[#fffbf5] shadow-md' : 'border-gray-100 bg-white hover:border-[#d9a65a]/50'}`}
                                     >
-                                        <div className="w-14 h-14 shrink-0 rounded-lg overflow-hidden border border-gray-100 flex items-center justify-center bg-green-50 text-green-600">
+                                        <div className="w-14 h-14 shrink-0 rounded-lg overflow-hidden border border-gray-100 flex items-center justify-center bg-green-50 text-green-600" title="Numerário">
                                             <Banknote className="w-8 h-8" />
                                         </div>
                                         <div className="text-left">
@@ -968,7 +1085,7 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                         )}
 
                         <div className="space-y-2 animate-fade-in">
-                            <label className="text-sm font-bold text-[#3b2f2f]/80">
+                            <label htmlFor="payment-phone" className="text-sm font-bold text-[#3b2f2f]/80">
                                 {paymentMethod === 'cash'
                                     ? 'Número para Pagar o Sinal (M-Pesa/E-Mola)'
                                     : `Número para Pagamento (${paymentMethod === 'mpesa' ? 'M-Pesa' : paymentMethod === 'emola' ? 'E-Mola' : 'mKesh'})`
@@ -978,6 +1095,8 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                                 <Phone className="absolute left-3 top-3 text-[#d9a65a] w-5 h-5" />
                                 <input
                                     type="tel"
+                                    id="payment-phone"
+                                    title="Número para Pagamento"
                                     value={paymentPhone}
                                     onChange={(e) => {
                                         let val = e.target.value.replace(/\D/g, ''); // Digits only
@@ -1019,6 +1138,7 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
 
                         <button
                             onClick={() => setStep('summary_confirmation')}
+                            title="Confirmar Pedido"
                             className="w-full bg-[#3b2f2f] text-[#d9a65a] py-4 rounded-xl font-bold uppercase tracking-widest hover:bg-[#d9a65a] hover:text-[#3b2f2f] transition-all shadow-lg mt-4 flex items-center justify-center gap-2"
                         >
                             Confirmar Pedido
@@ -1061,6 +1181,7 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                         <p className="text-[#3b2f2f]/80">Sua encomenda foi confirmada e já vamos começar a preparar tudo.</p>
                         <button
                             onClick={() => setIsOpen(false)} // Or clearCart logic handled in Receipt close
+                            title="Fechar Carrinho"
                             className="text-[#d9a65a] underline"
                         >
                             Fechar Carrinho
@@ -1075,6 +1196,7 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
             {/* Floating Button */}
             <button
                 onClick={() => setIsOpen(true)}
+                title="Ver Carrinho"
                 className="fixed bottom-6 right-6 z-50 bg-[#d9a65a] text-[#3b2f2f] p-4 rounded-full shadow-2xl hover:scale-110 transition-transform flex items-center justify-center border-4 border-[#fff]"
             >
                 <ShoppingCart className="w-6 h-6" />
@@ -1105,7 +1227,12 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                             <div className="p-6 bg-[#3b2f2f] text-[#f7f1eb] flex justify-between items-center shadow-md shrink-0">
                                 <div className="flex items-center gap-3">
                                     {(step === 'details' || step === 'payment') && (
-                                        <button onClick={() => setStep(step === 'payment' ? 'details' : 'cart')} className="mr-2 hover:text-[#d9a65a]">
+                                        <button
+                                            onClick={() => setStep(step === 'payment' ? 'details' : 'cart')}
+                                            title="Voltar"
+                                            aria-label="Voltar"
+                                            className="mr-2 hover:text-[#d9a65a]"
+                                        >
                                             <ArrowLeft className="w-5 h-5" />
                                         </button>
                                     )}
@@ -1114,7 +1241,7 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                                         {step === 'cart' ? 'Carrinho' : step === 'details' ? 'Dados' : step === 'payment' ? 'Pagamento' : 'Status'}
                                     </h2>
                                 </div>
-                                <button onClick={() => setIsOpen(false)} className="hover:text-[#d9a65a] transition-colors">
+                                <button onClick={() => setIsOpen(false)} title="Fechar Carrinho" className="hover:text-[#d9a65a] transition-colors">
                                     <X className="w-6 h-6" />
                                 </button>
                             </div>
@@ -1139,6 +1266,8 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                                 <h3 className="font-bold">Finalizar Pagamento</h3>
                                 <button
                                     onClick={() => setPaymentUrl(null)}
+                                    title="Fechar Pagamento"
+                                    aria-label="Fechar Pagamento"
                                     className="p-1 hover:bg-white/10 rounded-full transition-colors"
                                 >
                                     <X className="w-6 h-6" />
@@ -1185,17 +1314,16 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                         paymentRef={completedOrder.paymentRef}
                         transactionId={completedOrder.transactionId}
                         date={completedOrder.date}
-                        details={details}
-                        cart={cart}
-                        subtotal={cart.reduce((sum, item) => sum + item.price * item.quantity, 0)}
-                        deliveryFee={deliveryFee > 0 ? deliveryFee : 0}
-                        total={total + (deliveryFee > 0 ? deliveryFee : 0)}
+                        details={completedOrder.customer}
+                        cart={completedOrder.items}
+                        subtotal={completedOrder.subtotal}
+                        deliveryFee={completedOrder.deliveryFee}
+                        total={completedOrder.total}
                         amountPaid={completedOrder.amountPaid}
                         balance={completedOrder.balance}
                         onClose={() => {
                             setIsOpen(false);
                             setStep('cart');
-                            clearCart();
                             setCompletedOrder(null);
                         }}
                     />

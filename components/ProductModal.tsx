@@ -2,8 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Minus, Plus, ShoppingBag, ChevronRight } from 'lucide-react';
 import { Language } from '../translations';
+import { formatProductName } from '../services/stringUtils';
 
 interface Variation {
+    name: string;
+    price: number;
+}
+
+interface Complement {
     name: string;
     price: number;
 }
@@ -15,6 +21,7 @@ interface Product {
     price: number;
     image?: string;
     variations?: Variation[];
+    complements?: Complement[];
     isSpecial?: boolean;
 }
 
@@ -35,11 +42,15 @@ export const ProductModal: React.FC<ProductModalProps> = ({
 }) => {
     const [quantity, setQuantity] = useState(1);
     const [selectedVariation, setSelectedVariation] = useState<Variation | null>(null);
+    const [selectedComplements, setSelectedComplements] = useState<Complement[]>([]);
+    const [customMessage, setCustomMessage] = useState<string>('');
 
     // Reset state when product changes
     useEffect(() => {
         if (isOpen && product) {
             setQuantity(1);
+            setSelectedComplements([]);
+            setCustomMessage('');
             if (product.variations && product.variations.length > 0) {
                 // Determine default selection if needed, or leave null to force choice
                 // Auto-select first variation to improve UX (button enabled by default)
@@ -52,17 +63,41 @@ export const ProductModal: React.FC<ProductModalProps> = ({
 
     if (!product) return null;
 
-    const currentPrice = selectedVariation ? selectedVariation.price : product.price;
+    const basePrice = selectedVariation ? selectedVariation.price : product.price;
+    const complementsTotal = selectedComplements.reduce((sum, complement) => sum + complement.price, 0);
+    const currentPrice = basePrice + complementsTotal;
     const canAdd = (!product.variations || product.variations.length === 0) || selectedVariation;
+
+    const handleComplementToggle = (complement: Complement) => {
+        setSelectedComplements(prev => {
+            const isSelected = prev.some(c => c.name === complement.name);
+            if (isSelected) {
+                return prev.filter(c => c.name !== complement.name);
+            } else {
+                return [...prev, complement];
+            }
+        });
+    };
 
     const handleAdd = () => {
         if (!canAdd) return;
 
+        let finalName = selectedVariation
+            ? `${product.name} (${selectedVariation.name})`
+            : product.name;
+
+        if (selectedComplements.length > 0) {
+            const complementNames = selectedComplements.map(c => c.name).join(', ');
+            finalName += ` (+ ${complementNames})`;
+        }
+
+        if (customMessage.trim()) {
+            finalName += ` [Nota: ${customMessage.trim()}]`;
+        }
+
         const finalItem = {
             ...product, // Keep original props
-            name: selectedVariation
-                ? `${product.name} (${selectedVariation.name})`
-                : product.name,
+            name: finalName,
             price: currentPrice,
             quantity: quantity,
             // Ensure we don't pass the raw variations array to cart if not needed, 
@@ -101,7 +136,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                                         animate={{ scale: 1, opacity: 1 }}
                                         transition={{ duration: 0.4 }}
                                         src={`${product.image}?v=3`}
-                                        alt={product.name}
+                                        alt={formatProductName(product.name)}
                                         className="w-full h-full object-contain max-h-[300px] md:max-h-[400px] drop-shadow-xl"
                                         onError={(e) => {
                                             e.currentTarget.onerror = null;
@@ -124,10 +159,10 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                             {/* Details Section (Right/Bottom) */}
                             <div className="md:w-1/2 flex flex-col bg-white h-full max-h-[60vh] md:max-h-full">
                                 {/* Scrollable Content */}
-                                <div className="flex-1 overflow-y-auto p-6 md:p-10">
+                                <div className="flex-1 overflow-y-auto p-6 md:p-10 pb-32">
                                     <div className="flex justify-between items-start mb-4">
                                         <h2 className="text-3xl md:text-4xl font-serif font-bold text-[#3b2f2f] leading-tight pr-8">
-                                            {product.name}
+                                            {formatProductName(product.name)}
                                         </h2>
                                         <button
                                             onClick={onClose}
@@ -204,10 +239,75 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                                             </div>
                                         </div>
                                     )}
+
+                                    {/* Complements Selector */}
+                                    {product.complements && product.complements.length > 0 && (
+                                        <div className="mb-8">
+                                            <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide mb-3">
+                                                {language === 'pt' ? 'Complementos (Opcional)' : 'Extras (Optional)'}
+                                            </h3>
+                                            <div className="space-y-3">
+                                                {product.complements.map((complement) => {
+                                                    const isSelected = selectedComplements.some(c => c.name === complement.name);
+                                                    return (
+                                                        <motion.button
+                                                            whileHover={{ scale: 1.02, x: 4 }}
+                                                            whileTap={{ scale: 0.98 }}
+                                                            key={complement.name}
+                                                            onClick={() => handleComplementToggle(complement)}
+                                                            className={`
+                                                                w-full text-left px-5 py-3 rounded-xl border-2 transition-all flex items-center justify-between group relative overflow-hidden
+                                                                ${isSelected
+                                                                    ? 'border-[#3b2f2f] bg-gray-50'
+                                                                    : 'border-gray-100 hover:border-gray-300'
+                                                                }
+                                                            `}
+                                                        >
+                                                            <span className={`font-medium ${isSelected ? 'text-[#3b2f2f]' : 'text-gray-600'}`}>
+                                                                + {complement.name}
+                                                            </span>
+                                                            <div className="flex items-center gap-3">
+                                                                <span className="font-semibold text-gray-700">
+                                                                    {complement.price > 0 ? `+${complement.price} MT` : 'Grátis'}
+                                                                </span>
+                                                                <div className={`
+                                                                    w-5 h-5 rounded border-2 flex items-center justify-center transition-colors
+                                                                    ${isSelected ? 'border-[#3b2f2f] bg-[#3b2f2f]' : 'border-gray-300'}
+                                                                `}>
+                                                                    {isSelected && (
+                                                                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" />
+                                                                        </svg>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        </motion.button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Personalization / Custom Message */}
+                                    <div className="mb-4">
+                                        <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide mb-3 flex items-center gap-2">
+                                            {language === 'pt' ? 'Mensagem Personalizada / Observações' : 'Custom Message / Instructions'}
+                                        </h3>
+                                        <textarea
+                                            value={customMessage}
+                                            onChange={(e) => setCustomMessage(e.target.value)}
+                                            placeholder={language === 'pt' ? 'Ex: Tirar cebola, adicionar piripiri...' : 'E.g.: No onions, add spicy sauce...'}
+                                            className="w-full h-24 p-4 rounded-xl border border-gray-200 focus:border-[#d9a65a] focus:ring-1 focus:ring-[#d9a65a] transition-all resize-none shadow-sm text-sm"
+                                            maxLength={150}
+                                        />
+                                        <div className="text-right mt-1">
+                                            <span className="text-xs text-gray-400">{customMessage.length}/150</span>
+                                        </div>
+                                    </div>
                                 </div>
 
                                 {/* Footer Actions - Fixed at Bottom */}
-                                <div className="p-6 border-t border-gray-100 bg-white">
+                                <div className="absolute xl:relative xl:bottom-0 bottom-0 left-0 w-full p-6 border-t border-gray-100 bg-white">
                                     <div className="flex items-stretch gap-4 h-16">
                                         {/* Quantity */}
                                         <div className="flex items-center bg-[#f7f1eb] rounded-xl px-1 shadow-sm border border-[#e5dcd3]">
@@ -265,3 +365,4 @@ export const ProductModal: React.FC<ProductModalProps> = ({
         </AnimatePresence>
     );
 };
+

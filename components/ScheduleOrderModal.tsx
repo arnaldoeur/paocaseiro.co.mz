@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Language, translations } from '../translations';
 import { X, Calendar, Clock, MessageSquare, User, Phone, Search, Plus, Minus, Trash2, ShoppingBag } from 'lucide-react';
+import { formatProductName } from '../services/stringUtils';
 
 interface ScheduleOrderModalProps {
     isOpen: boolean;
@@ -19,8 +20,6 @@ export const ScheduleOrderModal: React.FC<ScheduleOrderModalProps> = ({ isOpen, 
     // Product Selection
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedItems, setSelectedItems] = useState<{ item: any; quantity: number }[]>([]);
-
-    if (!isOpen) return null;
 
     // Safety check for menuSections
     const safeSections = Array.isArray(menuSections) ? menuSections : [];
@@ -93,6 +92,8 @@ export const ScheduleOrderModal: React.FC<ScheduleOrderModalProps> = ({ isOpen, 
         onClose();
     };
 
+    if (!isOpen) return null;
+
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm overflow-y-auto">
             <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl my-8 overflow-hidden animate-in fade-in zoom-in duration-200 flex flex-col md:flex-row max-h-[90vh]">
@@ -121,7 +122,7 @@ export const ScheduleOrderModal: React.FC<ScheduleOrderModalProps> = ({ isOpen, 
                         </div>
                         <div className="space-y-2">
                             <label className="text-sm font-medium text-gray-700">{language === 'pt' ? 'Telefone' : 'Phone'}</label>
-                            <input required type="tel" title={language === 'pt' ? 'Telefone' : 'Phone'} placeholder="+258..." className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-[#d9a65a] outline-none bg-white"
+                            <input required type="tel" title={language === 'pt' ? 'Telefone' : 'Phone'} placeholder="+258 8x xxx xxxx" className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-[#d9a65a] outline-none bg-white"
                                 value={phone} onChange={e => setPhone(e.target.value)} />
                         </div>
                         <div className="grid grid-cols-2 gap-4">
@@ -151,7 +152,7 @@ export const ScheduleOrderModal: React.FC<ScheduleOrderModalProps> = ({ isOpen, 
                                                 <button type="button" onClick={() => updateQuantity(selection.item.name, -1)} title={language === 'pt' ? 'Diminuir' : 'Decrease'} className="p-1 hover:bg-gray-200 rounded"><Minus size={12} /></button>
                                                 <span className="font-bold w-4 text-center">{selection.quantity}</span>
                                                 <button type="button" onClick={() => updateQuantity(selection.item.name, 1)} title={language === 'pt' ? 'Aumentar' : 'Increase'} className="p-1 hover:bg-gray-200 rounded"><Plus size={12} /></button>
-                                                <span className="ml-2 truncate max-w-[120px]">{selection.item.name}</span>
+                                                <span className="ml-2 truncate max-w-[120px]">{formatProductName(selection.item.name)}</span>
                                             </div>
                                             <div className="flex items-center gap-2">
                                                 <span className="font-bold text-[#d9a65a]">{selection.item.price * selection.quantity} MT</span>
@@ -218,14 +219,15 @@ export const ScheduleOrderModal: React.FC<ScheduleOrderModalProps> = ({ isOpen, 
                                                         <img src={item.image} alt={item.name} className="w-12 h-12 rounded-lg object-cover bg-gray-100" />
                                                     )}
                                                     <div>
-                                                        <p className="font-bold text-[#3b2f2f] text-sm">{item.name || 'Sem nome'}</p>
+                                                        <p className="font-bold text-[#3b2f2f] text-sm">{formatProductName(item.name) || 'Sem nome'}</p>
                                                         <p className="text-[#d9a65a] font-bold text-sm">{item.price} MT</p>
                                                     </div>
                                                 </div>
                                                 <button
                                                     type="button"
+                                                    title={language === 'pt' ? 'Adicionar' : 'Add'}
                                                     onClick={() => addToSelection(item)}
-                                                    className={`p-2 rounded-full transition-colors ${isSelected ? 'bg-[#d9a65a] text-white' : 'bg-gray-100 text-gray-600 hover:bg-[#d9a65a] hover:text-white'}`}
+                                                    className={`p-2 rounded-full transition-colors ${isSelected ? 'bg-[#d9a65a] text-white' : 'bg-gray-100 text-gray-600 hover:bg-[#d9a65a] hover:text-white'} shadow-sm active:scale-95`}
                                                 >
                                                     <Plus size={18} />
                                                 </button>

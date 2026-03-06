@@ -33,11 +33,67 @@ Esta pasta contém tudo o que é necessário:
 4.  No lado esquerdo (Seu PC), navegue até `c:\Users\arnal\Desktop\WEBSITE\paocasieiro2026\paocasiero2026new\dist`.
 5.  Selecione tudo no lado esquerdo e arraste para o lado direito.
 
-## 3. Configurações Importantes já Feitas
-- **Roteamento (.htaccess)**: O arquivo `.htaccess` já foi criado e incluído. Ele garante que se alguém acessar `paocaseiro.co.mz/gallery` diretamente, a página abrirá corretamente sem erro 404.
-- **Variáveis de Ambiente**: As chaves do Supabase (Banco de Dados) e APIs já foram "embutidas" no código durante o build. Não precisa configurar `.env` no servidor.
+## 3. Opção C: Deploy via Git (Automático) - RECOMENDADO ⭐
 
-## 4. Teste Final
+Esta é a forma mais moderna e rápida. Ao fazer `git push`, o seu site será compilado e enviado automaticamente para a Hostinger.
+
+### Passo 1: Configurar Secrets no GitHub
+No seu repositório do GitHub, vá em **Settings** -> **Secrets and variables** -> **Actions** e adicione os seguintes **New repository secret**:
+
+| Nome do Secret | Valor para Copiar e Colar |
+|----------------|-----------------------|
+| `FTP_SERVER` | `82.25.87.163` |
+| `FTP_USERNAME` | `u178468876.paocaseiro.co.mz` |
+| `FTP_PASSWORD` | `@Paocaseiro25` |
+| `VITE_SUPABASE_URL` | *(Podes ver no teu ficheiro .env)* |
+| `VITE_SUPABASE_ANON_KEY` | *(Podes ver no teu ficheiro .env)* |
+| `VITE_GEMINI_API_KEY` | *(Podes ver no teu ficheiro .env)* |
+
+### Passo 2: Como Funciona
+1. Sempre que fizeres `git push`, o GitHub inicia o build sozinho.
+2. Ele gera a pasta `dist` e envia para a Hostinger. É o "mãos-livres" total.
+
+---
+
+## 4. Opção D: Menu Git da Hostinger (Via Token/Webhook)
+
+Este é o método que mencionaste, onde ligas o GitHub diretamente à Hostinger. 
+
+> [!WARNING]
+> **Atenção:** Este método apenas "puxa" os ficheiros. Como o teu site precisa de ser "compilado" (`npm run build`), este método só funciona se tu subires a pasta `dist` para o GitHub (o que não é recomendado) ou se usares a **Opção C (GitHub Actions)** que eu configurei, que já faz o build sozinho.
+
+### Como configurar (Se quiseres usar o painel Hostinger):
+
+#### Passo 1: Criar o Token no GitHub
+Para repositórios privados, a Hostinger precisa de um "Personal Access Token" (PAT):
+1.  No GitHub, clica na tua foto (canto superior direito) -> **Settings**.
+2.  No fundo da barra lateral esquerda, clica em **Developer settings**.
+3.  Clica em **Personal access tokens** -> **Tokens (classic)**.
+4.  Clica em **Generate new token** -> **Generate new token (classic)**.
+5.  **Note**: Dá um nome (ex: "Deploy Hostinger").
+6.  **Expiration**: Escolhe "No expiration" ou um prazo longo.
+7.  **Select scopes**: Marca a caixa **`repo`** (isto permite à Hostinger ler os teus repositórios privados).
+8.  Clica em **Generate token** no fundo da página.
+9.  **IMPORTANTE**: Copia o token agora! Não o verás novamente.
+
+#### Passo 2: Vincular na Hostinger
+1.  Na Hostinger: Vai a **Avançado** ou **Website** -> **Git**.
+2.  No campo **Repository URL**, usa este formato:
+    `https://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@github.com/arnaldoeur/paocaseiro.co.mz.git`
+3.  Coloca a Branch (ex: `main`) e clica em **Create**.
+3.  **No GitHub:**
+    *   Vai a **Settings** -> **Webhooks** -> **Add Webhook**.
+    *   Cola o URL da Hostinger no campo **Payload URL**.
+    *   Escolha `application/json`.
+    *   Pronto! Cada push agora "avisa" a Hostinger para atualizar os ficheiros.
+
+---
+
+## 5. Configurações Importantes já Feitas
+- **Roteamento (.htaccess)**: O arquivo `.htaccess` já foi criado e incluído na pasta `public` para que o build final já o contenha.
+- **Variáveis de Ambiente**: Se usares a **Opção C (GitHub Actions)**, as chaves do Supabase são inseridas durante o build automático usando os "Secrets" do GitHub.
+
+## 6. Teste Final
 Após o upload:
 1.  Acesse `https://paocaseiro.co.mz`.
 2.  Navegue entre as páginas (Menu, Galeria, etc.).

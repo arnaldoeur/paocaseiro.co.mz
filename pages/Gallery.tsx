@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ShoppingBag, Search, Plus, Loader, X, ZoomIn } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
+import { Language } from '../translations';
+import { formatProductName } from '../services/stringUtils';
 
 // --- Static Data from Home ---
 const CLASSICS = [
@@ -49,7 +51,7 @@ interface GalleryItem {
     type: 'product' | 'static';
 }
 
-export const Gallery: React.FC = () => {
+export const Gallery: React.FC<{ language: Language }> = ({ language }) => {
     const navigate = useNavigate();
     const { addToCart } = useCart();
     const [items, setItems] = useState<GalleryItem[]>([]);
@@ -178,7 +180,7 @@ export const Gallery: React.FC = () => {
                                 >
                                     <img
                                         src={item.image}
-                                        alt={item.name}
+                                        alt={formatProductName(item.name)}
                                         className="w-full h-auto object-cover group-hover:scale-105 transition-transform duration-700"
                                         loading="lazy"
                                     />
@@ -196,7 +198,7 @@ export const Gallery: React.FC = () => {
 
                                 <div className="p-5">
                                     <h3 className="font-serif text-lg font-bold text-[#3b2f2f] leading-tight mb-2">
-                                        {item.name}
+                                        {formatProductName(item.name)}
                                     </h3>
 
                                     {/* Visual Only - No Price/Cart per user request */}
@@ -229,7 +231,7 @@ export const Gallery: React.FC = () => {
                             <h3 className="font-serif text-xl font-bold text-[#3b2f2f] mb-3">Quer algo especial?</h3>
                             <p className="text-sm text-[#4b3a2f] mb-6">Não encontrou na lista? Fale connosco.</p>
                             <a
-                                href="tel:+258846930960"
+                                href="tel:+258879146662"
                                 className="inline-block border-2 border-[#3b2f2f] text-[#3b2f2f] px-6 py-2 rounded-full font-bold uppercase text-sm tracking-widest hover:bg-[#3b2f2f] hover:text-[#f7f1eb] transition-all"
                             >
                                 Ligar Agora
@@ -240,7 +242,7 @@ export const Gallery: React.FC = () => {
                             <h3 className="font-serif text-xl font-bold text-[#3b2f2f] mb-3">Grandes Encomendas?</h3>
                             <p className="text-sm text-[#4b3a2f] mb-6">Eventos ou empresas? Envie-nos um email.</p>
                             <a
-                                href="mailto:info@paocaseiro.co.mz"
+                                href="mailto:geral@paocaseiro.co.mz"
                                 className="inline-block border-2 border-[#3b2f2f] text-[#3b2f2f] px-6 py-2 rounded-full font-bold uppercase text-sm tracking-widest hover:bg-[#3b2f2f] hover:text-[#f7f1eb] transition-all"
                             >
                                 Enviar Email
@@ -260,7 +262,10 @@ export const Gallery: React.FC = () => {
                         className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center p-4 backdrop-blur-md"
                         onClick={() => setSelectedImage(null)}
                     >
-                        <button className="absolute top-6 right-6 text-white hover:text-[#d9a65a] transition-colors p-2 bg-white/10 rounded-full">
+                        <button
+                            className="absolute top-6 right-6 text-white hover:text-[#d9a65a] transition-colors p-2 bg-white/10 rounded-full"
+                            title={language === 'pt' ? 'Fechar' : 'Close'}
+                        >
                             <X size={32} />
                         </button>
                         <img

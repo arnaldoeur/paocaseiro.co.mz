@@ -9,12 +9,15 @@ import { Admin } from './pages/Admin';
 import { Cart } from './components/Cart';
 import { CartProvider } from './context/CartContext';
 import { Language } from './translations';
+import { ClientDashboard } from './pages/ClientDashboard';
 
 import { ITSupport } from './pages/ITSupport';
 import { Delivery } from './pages/Delivery';
 import { Kitchen } from './pages/Kitchen';
 import { OrderReceipt } from './pages/OrderReceipt';
 import { Seeder } from './Seeder';
+import { Privacy } from './pages/Privacy';
+import { Terms } from './pages/Terms';
 
 const App: React.FC = () => {
   const [language, setLanguage] = useState<Language>('pt');
@@ -42,8 +45,11 @@ const App: React.FC = () => {
                 <Routes>
                   <Route path="/" element={<Home language={language} />} />
                   <Route path="/menu" element={<Menu language={language} />} />
-                  <Route path="/gallery" element={<Gallery />} />
+                  <Route path="/gallery" element={<Gallery language={language} />} />
                   <Route path="/order-receipt/:orderId" element={<OrderReceipt />} />
+                  <Route path="/dashboard" element={<ClientDashboard language={language} />} />
+                  <Route path="/privacidade" element={<Privacy />} />
+                  <Route path="/termos" element={<Terms />} />
                   {/* Add other main routes here */}
                 </Routes>
                 <Footer language={language} />

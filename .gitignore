@@ -8,7 +8,7 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
-# dist
+dist
 dist-ssr
 *.local
 
@@ -21,7 +21,11 @@ dist-ssr
 *.ntvs*
 *.njsproj
 *.sln
-*.sw?
+# Videos
+*.mp4
+*.mov
+*.avi
+
 .env*
 .env.local
 .env.development.local

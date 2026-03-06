@@ -1,5 +1,5 @@
 import React from 'react';
-import { MapPin, Phone, Instagram, Facebook, Mail } from 'lucide-react';
+import { MapPin, Phone, MessageCircle, Instagram, Facebook, Mail } from 'lucide-react';
 import { translations, Language } from '../translations';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -72,6 +72,24 @@ export const Footer: React.FC<FooterProps> = ({ language }) => {
                                     Menu
                                 </button>
                             </li>
+                            <li>
+                                <button
+                                    onClick={() => navigate('/privacidade')}
+                                    className="hover:text-[#d9a65a] hover:translate-x-2 transition-all duration-300 flex items-center gap-2 text-xs"
+                                >
+                                    <span className="w-1 h-1 rounded-full bg-[#d9a65a]/50" />
+                                    Política de Privacidade
+                                </button>
+                            </li>
+                            <li>
+                                <button
+                                    onClick={() => navigate('/termos')}
+                                    className="hover:text-[#d9a65a] hover:translate-x-2 transition-all duration-300 flex items-center gap-2 text-xs"
+                                >
+                                    <span className="w-1 h-1 rounded-full bg-[#d9a65a]/50" />
+                                    Termos de Serviço
+                                </button>
+                            </li>
                         </ul>
                     </div>
 
@@ -94,13 +112,23 @@ export const Footer: React.FC<FooterProps> = ({ language }) => {
                                 </div>
                             </a>
 
-                            <a href="tel:846930960" className="flex items-start gap-3 group hover:opacity-80 transition-opacity">
+                            <a href="tel:+258879146662" className="flex items-start gap-3 group hover:opacity-80 transition-opacity">
                                 <div className="bg-[#d9a65a]/10 p-2 rounded-full text-[#d9a65a] group-hover:bg-[#d9a65a] group-hover:text-[#2a2121] transition-colors mt-0.5">
                                     <Phone className="w-4 h-4" />
                                 </div>
                                 <div>
-                                    <span className="block text-[#f7f1eb] font-bold">{t.contact.visit.phoneLabel}</span>
-                                    <span>846 930 960</span>
+                                    <span className="block text-[#f7f1eb] font-bold">Telefone</span>
+                                    <span>+258 87 9146 662</span>
+                                </div>
+                            </a>
+
+                            <a href="https://wa.me/258846930960" target="_blank" rel="noopener noreferrer" className="flex items-start gap-3 group hover:opacity-80 transition-opacity">
+                                <div className="bg-[#d9a65a]/10 p-2 rounded-full text-[#d9a65a] group-hover:bg-[#d9a65a] group-hover:text-[#2a2121] transition-colors mt-0.5">
+                                    <MessageCircle className="w-4 h-4" />
+                                </div>
+                                <div>
+                                    <span className="block text-[#f7f1eb] font-bold">WhatsApp</span>
+                                    <span>+258 84 6930 960</span>
                                 </div>
                             </a>
 
@@ -126,7 +154,7 @@ export const Footer: React.FC<FooterProps> = ({ language }) => {
                                     { Icon: Facebook, href: '#' },
                                     { Icon: Mail, href: 'mailto:info@paocaseiro.co.mz' }
                                 ].map(({ Icon, href }, i) => (
-                                    <a key={i} href={href} target="_blank" rel="noopener noreferrer" className="bg-[#f7f1eb]/5 hover:bg-[#d9a65a] hover:text-[#2a2121] p-3 rounded-full transition-all duration-300">
+                                    <a key={i} href={href} target="_blank" rel="noopener noreferrer" title={Icon === Instagram ? 'Instagram' : Icon === Facebook ? 'Facebook' : 'E-mail'} className="bg-[#f7f1eb]/5 hover:bg-[#d9a65a] hover:text-[#2a2121] p-3 rounded-full transition-all duration-300">
                                         <Icon className="w-5 h-5" />
                                     </a>
                                 ))}

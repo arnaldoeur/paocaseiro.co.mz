@@ -214,40 +214,50 @@ export const AdminSupportAI: React.FC<AdminSupportAIProps> = ({ userName, stats 
         `;
 
         try {
-            // Construct history for context
+            // Construct history for OpenRouter (OpenAI format)
             const history = messages
                 .filter(m => m.role !== 'system')
                 .slice(-10)
                 .map(m => ({
-                    role: m.role === 'assistant' ? 'model' : m.role,
-                    parts: [{ text: m.content }]
+                    role: m.role === 'assistant' ? 'assistant' : m.role,
+                    content: m.content
                 }));
 
-            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`, {
+            const response = await fetch(`https://openrouter.ai/api/v1/chat/completions`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer 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`
+                },
                 body: JSON.stringify({
-                    contents: [...history, { role: 'user', parts: [{ text: text }] }],
-                    systemInstruction: {
-                        parts: [{ text: systemContext }]
-                    }
+                    model: 'liquid/lfm-2.5-1.2b-thinking:free',
+                    messages: [
+                        { role: 'system', content: systemContext },
+                        ...history,
+                        { role: 'user', content: text }
+                    ]
                 })
             });
 
+            if (!response.ok) {
+                let errorText = await response.text().catch(() => response.statusText);
+                throw new Error(`OpenRouter Error: ${response.status} ${errorText}`);
+            }
+
             const data = await response.json();
 
-            if (data.candidates && data.candidates.length > 0) {
-                const content = data.candidates[0].content.parts[0].text;
+            if (data.choices && data.choices.length > 0) {
+                const content = data.choices[0].message.content;
                 const botMsg: Message = { role: 'assistant', content: content };
                 setMessages(prev => [...prev, botMsg]);
                 if (targetSessionId) saveMessageIndex(botMsg, targetSessionId);
             } else {
-                throw new Error(data.error?.message || 'No response from AI');
+                throw new Error('No response from AI');
             }
 
         } catch (error: any) {
             console.error('AI Error:', error);
-            const errorMsg: Message = { role: 'assistant', content: "Desculpe, falha na conexão com Zyph AI. Tente novamente." };
+            const errorMsg: Message = { role: 'assistant', content: `Desculpe, falha na conexão com Zyph AI. Detalhes: ${error.message}` };
             setMessages(prev => [...prev, errorMsg]);
         } finally {
             setIsLoading(false);
@@ -268,7 +278,7 @@ export const AdminSupportAI: React.FC<AdminSupportAIProps> = ({ userName, stats 
                     >
                         <div className="p-4 border-b border-gray-200 flex justify-between items-center bg-[#3b2f2f] text-white">
                             <h3 className="font-serif font-bold flex items-center gap-2"><Clock size={16} /> Histórico</h3>
-                            <button onClick={() => setShowSidebar(false)} className="hover:text-[#d9a65a] transition-colors"><ChevronLeft size={20} /></button>
+                            <button title="Fechar Histórico" onClick={() => setShowSidebar(false)} className="hover:text-[#d9a65a] transition-colors"><ChevronLeft size={20} /></button>
                         </div>
 
                         <div className="p-4">
@@ -288,6 +298,7 @@ export const AdminSupportAI: React.FC<AdminSupportAIProps> = ({ userName, stats 
                                     <p className="text-[10px] text-gray-400 mt-1">{new Date(session.created_at).toLocaleDateString('pt-PT')}</p>
 
                                     <button
+                                        title="Apagar Conversa"
                                         onClick={(e) => handleDeleteSession(e, session.id)}
                                         className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-opacity p-1"
                                     >
@@ -309,7 +320,7 @@ export const AdminSupportAI: React.FC<AdminSupportAIProps> = ({ userName, stats 
                 <div className="p-4 bg-white border-b border-gray-100 flex items-center justify-between shadow-sm z-10">
                     <div className="flex items-center gap-3">
                         {!showSidebar && (
-                            <button onClick={() => setShowSidebar(true)} className="p-2 hover:bg-gray-100 rounded-lg text-gray-600">
+                            <button title="Abrir Histórico" onClick={() => setShowSidebar(true)} className="p-2 hover:bg-gray-100 rounded-lg text-gray-600">
                                 <ChevronRight size={20} />
                             </button>
                         )}
@@ -388,6 +399,7 @@ export const AdminSupportAI: React.FC<AdminSupportAIProps> = ({ userName, stats 
                                 disabled={isLoading}
                             />
                             <button
+                                title="Enviar"
                                 onClick={() => handleSend()}
                                 disabled={isLoading || !input.trim()}
                                 className="bg-[#3b2f2f] text-[#d9a65a] w-10 h-10 rounded-xl flex items-center justify-center hover:shadow-lg hover:scale-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
