@@ -2950,11 +2950,11 @@ export const Admin: React.FC = () => {
                                             <p className="text-lg font-bold group-hover:text-[#d9a65a] transition-colors">+91 87258 61829</p>
                                         </div>
                                     </a>
-                                    <a href="mailto:supporte@zyph.co.mz" className="bg-white/10 hover:bg-white/20 p-4 rounded-xl flex items-center gap-4 transition-all group cursor-pointer border border-transparent hover:border-[#d9a65a]/50">
+                                    <a href="mailto:support@zyph.co.in" className="bg-white/10 hover:bg-white/20 p-4 rounded-xl flex items-center gap-4 transition-all group cursor-pointer border border-transparent hover:border-[#d9a65a]/50">
                                         <div className="bg-blue-500 p-2 rounded-full text-white"><Mail size={24} /></div>
                                         <div>
                                             <p className="font-bold text-sm text-gray-300 uppercase">Email Suporte</p>
-                                            <p className="text-lg font-bold group-hover:text-[#d9a65a] transition-colors">supporte@zyph.co.mz</p>
+                                            <p className="text-lg font-bold group-hover:text-[#d9a65a] transition-colors">support@zyph.co.in</p>
                                         </div>
                                     </a>
                                 </div>

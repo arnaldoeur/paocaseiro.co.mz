@@ -227,10 +227,10 @@ export const AdminSupportAI: React.FC<AdminSupportAIProps> = ({ userName, stats 
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer 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`
+                    'Authorization': `Bearer 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`
                 },
                 body: JSON.stringify({
-                    model: 'liquid/lfm-2.5-1.2b-thinking:free',
+                    model: 'nvidia/nemotron-3-super-120b-a12b:free',
                     messages: [
                         { role: 'system', content: systemContext },
                         ...history,
