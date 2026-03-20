@@ -729,7 +729,7 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
 
                                 <div className="space-y-2">
                                     <div className="flex justify-between items-center text-gray-600">
-                                        <span>Subtotal</span>
+                                        <span>{language === 'en' ? 'Subtotal' : 'Subtotal'}</span>
                                         <span>{total} MT</span>
                                     </div>
                                     <div className="flex justify-between items-center text-2xl font-bold text-[#3b2f2f] pt-2 border-t">
@@ -1125,7 +1125,7 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                                     <div>
                                         <p className="font-bold text-[#3b2f2f] text-sm">Pagamento Seguro (Cartões e Mobile)</p>
                                         <p className="text-sm text-gray-600 mt-1 leading-relaxed">
-                                            Ao clicar em <b>Pagar Agora</b>, abrirá de forma segura o portal oficial da PaySuite onde poderá escolher como prefere pagar (Cartão Visa/Mastercard, M-Pesa, E-Mola ou mKesh).
+                                            Ao clicar em <b>{language === 'en' ? 'Pay Now' : 'Pagar Agora'}</b>, abrirá de forma segura o portal oficial da PaySuite onde poderá escolher como prefere pagar (Cartão Visa/Mastercard, M-Pesa, E-Mola ou mKesh).
                                         </p>
                                         <p className="mt-2 text-xs font-bold text-red-500 opacity-90 flex items-center gap-1">
                                             <Clock className="w-3 h-3" />
@@ -1144,7 +1144,7 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                                 title="Pagar Agora"
                                 className="w-full bg-[#3b2f2f] text-[#d9a65a] py-4 rounded-xl font-bold uppercase tracking-widest hover:bg-[#d9a65a] hover:text-[#3b2f2f] transition-all shadow-lg flex items-center justify-center gap-2"
                             >
-                                <span>Pagar Agora</span>
+                                <span>{language === 'en' ? 'Pay Now' : 'Pagar Agora'}</span>
                                 <Lock className="w-5 h-5" />
                             </button>
                             
@@ -1170,13 +1170,13 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                             <Loader className="w-16 h-16 text-[#d9a65a]" />
                         </motion.div>
                         <div>
-                            <h3 className="text-xl font-bold text-[#3b2f2f] mb-2">A processar pagamento seguro...</h3>
-                            <p className="text-[#3b2f2f]/80">Você será redirecionado para o ambiente seguro de pagamento.</p>
+                            <h3 className="text-xl font-bold text-[#3b2f2f] mb-2">{language === 'en' ? 'Processing secure payment...' : 'A processar pagamento seguro...'}</h3>
+                            <p className="text-[#3b2f2f]/80">{language === 'en' ? 'You will be redirected to the secure payment environment.' : 'Você será redirecionado para o ambiente seguro de pagamento.'}</p>
                             <div className="mt-4 bg-white p-4 rounded-lg border border-gray-200 text-left text-sm space-y-2">
-                                <p className="font-bold flex items-center gap-2"><Lock className="w-4 h-4 text-green-600" /> Passo a Passo:</p>
+                                <p className="font-bold flex items-center gap-2"><Lock className="w-4 h-4 text-green-600" /> {language === 'en' ? 'Step-by-step:' : 'Passo a Passo:'}</p>
                                 <ol className="list-decimal pl-5 space-y-1 text-gray-600">
-                                    <li>Complete o pagamento na janela segura aberta (M-Pesa, E-Mola ou Cartões).</li>
-                                    <li>Aguarde a confirmação automática aqui no site.</li>
+                                    <li>{language === 'en' ? 'Complete payment in the secure window (M-Pesa, E-Mola, or Cards).' : 'Complete o pagamento na janela segura aberta (M-Pesa, E-Mola ou Cartões).'}</li>
+                                    <li>{language === 'en' ? 'Wait for automatic confirmation here.' : 'Aguarde a confirmação automática aqui no site.'}</li>
                                 </ol>
                             </div>
                         </div>
