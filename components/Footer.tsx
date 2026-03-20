@@ -78,7 +78,7 @@ export const Footer: React.FC<FooterProps> = ({ language }) => {
                                     className="hover:text-[#d9a65a] hover:translate-x-2 transition-all duration-300 flex items-center justify-center md:justify-start gap-2 font-bold text-[#d9a65a]"
                                 >
                                     <span className="w-1.5 h-1.5 rounded-full bg-[#d9a65a] shrink-0" />
-                                    Menu
+                                    {language === 'en' ? 'Menu' : 'Menu'}
                                 </button>
                             </li>
 

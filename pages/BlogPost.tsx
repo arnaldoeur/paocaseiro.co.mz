@@ -230,7 +230,7 @@ export const BlogPost: React.FC<{ language: Language }> = ({ language }) => {
                     )}
 
                     <h1 className="text-4xl md:text-5xl lg:text-6xl font-black text-[#3b2f2f] mb-8 font-serif leading-tight">
-                        {post.title}
+                        {language === 'en' && post.title_en ? post.title_en : post.title}
                     </h1>
 
                     <div className="flex flex-wrap items-center gap-6 text-xs md:text-sm font-bold text-gray-400 uppercase tracking-widest mb-12 py-6 border-y border-gray-100">
@@ -276,22 +276,22 @@ export const BlogPost: React.FC<{ language: Language }> = ({ language }) => {
                         {post.image_url ? (
                             <img
                                 src={post.image_url}
-                                alt={post.title}
+                                alt={language === 'en' && post.title_en ? post.title_en : post.title}
                                 className="w-full h-full object-cover hover:scale-105 transition-transform duration-700 ease-out"
                             />
                         ) : (
                             <img
                                 src="/images/about-bread.jpeg"
-                                alt={post.title}
+                                alt={language === 'en' && post.title_en ? post.title_en : post.title}
                                 className="w-full h-full object-cover hover:scale-105 transition-transform duration-700 ease-out"
                             />
                         )}
                     </div>
 
-                    {post.content ? (
+                    {(language === 'en' && post.content_en ? post.content_en : post.content) ? (
                         <div
                             className="prose prose-lg md:prose-xl prose-headings:font-serif prose-headings:text-[#3b2f2f] prose-a:text-[#d9a65a] prose-p:text-gray-600 prose-img:rounded-3xl max-w-none mb-16 leading-relaxed"
-                            dangerouslySetInnerHTML={{ __html: post.content }}
+                            dangerouslySetInnerHTML={{ __html: language === 'en' && post.content_en ? post.content_en : post.content }}
                         />
                     ) : post.excerpt ? (
                         <div

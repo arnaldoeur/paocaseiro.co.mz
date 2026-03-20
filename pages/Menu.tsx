@@ -242,7 +242,7 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
     };
 
     const handleAddToCartFromModal = (item: any, quantity: number, variation?: any) => {
-        const finalItemName = variation ? `${item.name} (${variation.name})` : item.name;
+        const finalItemName = variation ? `${language === 'en' && item.name_en ? item.name_en : item.name} (${variation.name})` : item.name;
         const finalPrice = variation ? variation.price : item.price;
 
         addToCart({

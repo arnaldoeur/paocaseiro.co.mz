@@ -137,13 +137,13 @@ export const Blog: React.FC<{ language: Language }> = ({ language }) => {
                                         {post.image_url ? (
                                             <img
                                                 src={post.image_url}
-                                                alt={post.title}
+                                                alt={language === 'en' && post.title_en ? post.title_en : post.title}
                                                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
                                             />
                                         ) : (
                                             <img
                                                 src="/images/about-bread.jpeg"
-                                                alt={post.title}
+                                                alt={language === 'en' && post.title_en ? post.title_en : post.title}
                                                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
                                             />
                                         )}
@@ -162,7 +162,7 @@ export const Blog: React.FC<{ language: Language }> = ({ language }) => {
                                             </span>
                                         )}
                                         <h2 className="text-2xl sm:text-3xl font-black text-[#3b2f2f] mb-4 line-clamp-2 group-hover:text-[#d9a65a] transition-colors leading-tight font-serif">
-                                            {post.title}
+                                            {language === 'en' && post.title_en ? post.title_en : post.title}
                                         </h2>
                                         <p className="text-gray-500 line-clamp-3 mb-6 text-sm leading-relaxed">
                                             {post.excerpt}

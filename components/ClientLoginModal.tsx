@@ -287,7 +287,7 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
 
                         <div className="p-8 overflow-y-auto">
                             <div className="text-center mb-8">
-                                <h2 className="font-serif text-3xl text-[#3b2f2f] mb-2">Minha Conta</h2>
+                                <h2 className="font-serif text-3xl text-[#3b2f2f] mb-2">{language === 'en' ? 'My Account' : 'Minha Conta'}</h2>
                                 <p className="text-gray-500">
                                     {step === 'choice' && 'Como deseja aceder à sua conta?'}
                                     {step === 'input' && (
@@ -326,8 +326,8 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                                                 <KeyRound className="w-6 h-6 text-[#d9a65a]" />
                                             </div>
                                             <div>
-                                                <p className="font-bold text-[#3b2f2f] text-sm md:text-base">Palavra-passe</p>
-                                                <p className="text-[10px] md:text-xs text-gray-500">Telemóvel ou Email</p>
+                                                <p className="font-bold text-[#3b2f2f] text-sm md:text-base">{language === 'en' ? 'Password' : 'Palavra-passe'}</p>
+                                                <p className="text-[10px] md:text-xs text-gray-500">{language === 'en' ? 'Phone or Email' : language === 'en' ? 'Phone or Email' : 'Telemóvel ou Email'}</p>
                                             </div>
                                         </button>
 
@@ -339,7 +339,7 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                                                 <UserPlus className="w-6 h-6 text-[#d9a65a]" />
                                             </div>
                                             <div>
-                                                <p className="font-bold text-[#3b2f2f] text-sm md:text-base">Criar Conta</p>
+                                                <p className="font-bold text-[#3b2f2f] text-sm md:text-base">{language === 'en' ? 'Create Account' : 'Criar Conta'}</p>
                                                 <p className="text-[10px] md:text-xs text-gray-500">M-Pesa/E-Mola</p>
                                             </div>
                                         </button>
@@ -352,8 +352,8 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                                                 <ShieldAlert className="w-6 h-6 text-[#d9a65a]" />
                                             </div>
                                             <div>
-                                                <p className="font-bold text-[#3b2f2f] text-sm md:text-base">Acesso OTP</p>
-                                                <p className="text-[10px] md:text-xs text-gray-500">Apenas Email</p>
+                                                <p className="font-bold text-[#3b2f2f] text-sm md:text-base">{language === 'en' ? 'OTP Access' : 'Acesso OTP'}</p>
+                                                <p className="text-[10px] md:text-xs text-gray-500">{language === 'en' ? 'Email Only' : 'Apenas Email'}</p>
                                             </div>
                                         </button>
                                     </div>
@@ -393,7 +393,7 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                                                     <path fill="#EA4335" d="M -14.754 43.989 C -12.984 43.989 -11.404 44.599 -10.154 45.789 L -6.734 42.369 C -8.804 40.429 -11.514 39.239 -14.754 39.239 C -19.444 39.239 -23.494 41.939 -25.464 45.859 L -21.484 48.949 C -20.534 46.099 -17.884 43.989 -14.754 43.989 Z" />
                                                 </g>
                                             </svg>
-                                            <span className="font-bold text-gray-700 text-sm md:text-base">Continuar com o Google</span>
+                                            <span className="font-bold text-gray-700 text-sm md:text-base">{language === 'en' ? 'Continue with Google' : 'Continuar com o Google'}</span>
                                         </button>
                                     </div>
 
@@ -411,7 +411,7 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                                                 </div>
                                             </div>
                                             <span className="text-xs text-gray-500">
-                                                Aceito os <button type="button" onClick={() => setActiveLegalView('terms')} className="text-[#d9a65a] hover:underline font-bold">Termos</button> e a <button type="button" onClick={() => setActiveLegalView('privacy')} className="text-[#d9a65a] hover:underline font-bold">Privacidade</button>
+                                                Aceito os <button type="button" onClick={() => setActiveLegalView('terms')} className="text-[#d9a65a] hover:underline font-bold">{language === 'en' ? 'Terms' : 'Termos'}</button> e a <button type="button" onClick={() => setActiveLegalView('privacy')} className="text-[#d9a65a] hover:underline font-bold">{language === 'en' ? 'Privacy' : 'Privacidade'}</button>
                                             </span>
                                         </label>
                                     </div>
@@ -422,7 +422,7 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                                 <form onSubmit={handleCheckUser} className="space-y-4">
                                     <div className="relative">
                                         <label htmlFor="identifier-input" className="text-sm font-bold text-[#3b2f2f]/80">
-                                            {mode === 'password' ? 'Telemóvel ou Email' : mode === 'register' ? 'Número de Telemóvel' : 'Endereço de Email'}
+                                            {mode === 'password' ? language === 'en' ? 'Phone or Email' : 'Telemóvel ou Email' : mode === 'register' ? language === 'en' ? 'Phone Number' : 'Número de Telemóvel' : language === 'en' ? 'Email Address' : 'Endereço de Email'}
                                         </label>
                                         <div className="relative mt-1">
                                             {mode === 'otp' ? <ShieldAlert className="absolute left-3 top-3 text-[#d9a65a] w-5 h-5" /> : <Phone className="absolute left-3 top-3 text-[#d9a65a] w-5 h-5" />}
@@ -444,12 +444,12 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                                     >
                                         {loading ? <Loader className="w-6 h-6 animate-spin" /> : (mode === 'password' ? 'Continuar' : 'Receber Código')}
                                     </button>
-                                    <button type="button" onClick={() => setStep('choice')} className="w-full text-sm text-gray-500 hover:text-[#3b2f2f] underline mt-2">Voltar</button>
+                                    <button type="button" onClick={() => setStep('choice')} className="w-full text-sm text-gray-500 hover:text-[#3b2f2f] underline mt-2">{language === 'en' ? 'Back' : 'Voltar'}</button>
                                 </form>
                             ) : step === 'password' ? (
                                 <form onSubmit={handlePasswordLogin} className="space-y-4">
                                     <div className="relative">
-                                        <label htmlFor="password-input" className="text-sm font-bold text-[#3b2f2f]/80">Palavra-passe</label>
+                                        <label htmlFor="password-input" className="text-sm font-bold text-[#3b2f2f]/80">{language === 'en' ? 'Password' : 'Palavra-passe'}</label>
                                         <div className="relative mt-1">
                                             <KeyRound className="absolute left-3 top-3 text-[#d9a65a] w-5 h-5" />
                                             <input
@@ -470,7 +470,7 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                                     >
                                         {loading ? <Loader className="w-6 h-6 animate-spin" /> : 'Entrar'}
                                     </button>
-                                    <button type="button" onClick={() => setStep('input')} className="w-full text-sm text-gray-500 hover:text-[#3b2f2f] underline mt-2">Voltar</button>
+                                    <button type="button" onClick={() => setStep('input')} className="w-full text-sm text-gray-500 hover:text-[#3b2f2f] underline mt-2">{language === 'en' ? 'Back' : 'Voltar'}</button>
                                 </form>
                             ) : step === 'otp' ? (
                                 <form onSubmit={handleVerifyOtp} className="space-y-4">
@@ -484,7 +484,7 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                                             value={otp}
                                             onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
                                             maxLength={6}
-                                            placeholder="Código de 6 dígitos"
+                                            placeholder={language === 'en' ? '6-digit code' : 'Código de 6 dígitos'}
                                             className="w-full pl-10 p-3 rounded-xl border border-gray-200 focus:border-[#d9a65a] focus:ring-2 focus:ring-[#d9a65a]/20 outline-none transition-all text-center tracking-[0.5em] text-lg font-bold"
                                         />
                                     </div>
@@ -495,20 +495,20 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                                     >
                                         {loading ? <Loader className="w-6 h-6 animate-spin" /> : 'Verificar'}
                                     </button>
-                                    <button type="button" onClick={() => setStep('choice')} className="w-full text-sm text-gray-500 hover:text-[#3b2f2f] underline mt-2">Voltar</button>
+                                    <button type="button" onClick={() => setStep('choice')} className="w-full text-sm text-gray-500 hover:text-[#3b2f2f] underline mt-2">{language === 'en' ? 'Back' : 'Voltar'}</button>
                                 </form>
                             ) : (
                                 <form onSubmit={handleRegister} className="space-y-4 max-h-[60vh] overflow-y-auto px-1 pb-4 scrollbar-thin scrollbar-thumb-gray-200">
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <div>
-                                            <label htmlFor="reg-name" className="text-xs font-bold text-gray-500 uppercase mb-1 block">Nome Completo *</label>
+                                            <label htmlFor="reg-name" className="text-xs font-bold text-gray-500 uppercase mb-1 block">{language === 'en' ? 'Full Name *' : 'Nome Completo *'}</label>
                                             <input type="text" id="reg-name" required value={name} onChange={e => setName(e.target.value)}
                                                 className="w-full p-3 rounded-xl border border-gray-100 focus:border-[#d9a65a] outline-none text-sm"
                                                 placeholder="Nome e Apelido"
                                             />
                                         </div>
                                         <div>
-                                            <label htmlFor="reg-email" className="text-xs font-bold text-gray-500 uppercase mb-1 block">Email *</label>
+                                            <label htmlFor="reg-email" className="text-xs font-bold text-gray-500 uppercase mb-1 block">{language === 'en' ? 'Email *' : 'Email *'}</label>
                                             <input type="email" id="reg-email" required value={email} onChange={e => setEmail(e.target.value)}
                                                 className="w-full p-3 rounded-xl border border-gray-100 focus:border-[#d9a65a] outline-none text-sm"
                                                 placeholder="seu@email.com"
@@ -551,7 +551,7 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                                     </div>
 
                                     <div>
-                                        <label htmlFor="reg-password" className="text-xs font-bold text-gray-500 uppercase mb-1 block">Criar Palavra-passe *</label>
+                                        <label htmlFor="reg-password" className="text-xs font-bold text-gray-500 uppercase mb-1 block">{language === 'en' ? 'Create Password *' : 'Criar Palavra-passe *'}</label>
                                         <input type="password" id="reg-password" required value={password} onChange={e => setPassword(e.target.value)}
                                             className="w-full p-3 rounded-xl border border-gray-100 focus:border-[#d9a65a] outline-none text-sm"
                                             placeholder="Mínimo 4 caracteres"
@@ -573,7 +573,7 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                                                 </div>
                                             </div>
                                             <span className="text-xs text-gray-500 leading-tight">
-                                                Ao criar conta, eu aceito os <button type="button" onClick={() => setActiveLegalView('terms')} className="text-[#d9a65a] hover:underline">Termos de Serviço</button> e a <button type="button" onClick={() => setActiveLegalView('privacy')} className="text-[#d9a65a] hover:underline">Política de Privacidade</button> da Pão Caseiro.
+                                                Ao criar conta, eu aceito os <button type="button" onClick={() => setActiveLegalView('terms')} className="text-[#d9a65a] hover:underline">{language === 'en' ? 'Terms of Service' : 'Termos de Serviço'}</button> e a <button type="button" onClick={() => setActiveLegalView('privacy')} className="text-[#d9a65a] hover:underline">{language === 'en' ? 'Privacy Policy' : 'Política de Privacidade'}</button> da Pão Caseiro.
                                             </span>
                                         </label>
                                     </div>
@@ -585,7 +585,7 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                                     >
                                         {loading ? <Loader className="w-6 h-6 animate-spin" /> : (existingCustomer ? 'Concluir Acesso' : 'Concluir Registo')}
                                     </button>
-                                    <button type="button" onClick={() => setStep('choice')} className="w-full text-sm text-gray-500 hover:text-[#3b2f2f] underline mt-2">Voltar</button>
+                                    <button type="button" onClick={() => setStep('choice')} className="w-full text-sm text-gray-500 hover:text-[#3b2f2f] underline mt-2">{language === 'en' ? 'Back' : 'Voltar'}</button>
                                 </form>
                             )}
                         </div>
