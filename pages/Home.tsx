@@ -45,26 +45,38 @@ const SERVICES = [
 
 const CLASSICS = [
     {
-        title: 'Pão',
-        desc: 'O nosso pão tradicional, fresco a toda a hora.',
+        title: 'Pastéis de Nata',
+        desc: 'A clássica doçura portuguesa, estaladiços por fora e cremosos por dentro.',
+        price: '',
+        image: '/images/pastel_nata.png'
+    },
+    {
+        title: 'Pão de Cereais',
+        desc: 'Uma opção saudável, rica em fibra e com um sabor inconfundível.',
+        price: '',
+        image: '/images/products/pao-cereais.png'
+    },
+    {
+        title: 'Pão Tradicional',
+        desc: 'O nosso pão de lenha clássico, fresco a toda a hora.',
         price: '',
         image: '/images/products/pao-caseiro-fresh.png'
     },
     {
         title: 'Pão Caseiro',
-        desc: 'Aquele pão especial que é encomendado geralmente.',
+        desc: 'Aquele pão rústico especial que toda a família adora.',
         price: '',
         image: '/images/products/pao-caseiro-marcos.png'
     },
     {
         title: 'Croissants',
-        desc: 'Folhados, recheados ou simples, sempre frescos.',
+        desc: 'Folhados, recheados ou simples, sempre com a máxima qualidade.',
         price: '',
         image: '/images/products/croissants-recheados.png'
     },
     {
         title: 'Broa de Milho',
-        desc: 'Broa densa e saborosa, feita com farinha de milho.',
+        desc: 'Broa densa e saborosa, feita com a melhor farinha de milho.',
         price: '',
         image: '/images/products/broa-milho.png'
     }

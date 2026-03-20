@@ -211,6 +211,7 @@ export const AdminSupportAI: React.FC<AdminSupportAIProps> = ({ userName, stats 
             - Short and concise answers.
             - DO NOT USE MARKDOWN FOR BOLD (**text**), use plain text or extremely sparing use of bold if absolutely necessary.
             - Implicit "Powered by Zyph Tech" branding.
+            - CRITICAL RULE: You must ALWAYS introduce yourself and identify solely as "Zyph AI". Never use any other name. Do not say you are Nemotron or Gemini. You are Zyph AI.
         `;
 
         try {
@@ -223,11 +224,17 @@ export const AdminSupportAI: React.FC<AdminSupportAIProps> = ({ userName, stats 
                     content: m.content
                 }));
 
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout
+
             const response = await fetch(`https://openrouter.ai/api/v1/chat/completions`, {
                 method: 'POST',
+                signal: controller.signal,
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer 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`
+                    'Authorization': `Bearer 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`,
+                    'HTTP-Referer': window.location.origin || 'https://paocaseiro.co.mz',
+                    'X-Title': 'Pão Caseiro Admin'
                 },
                 body: JSON.stringify({
                     model: 'nvidia/nemotron-3-super-120b-a12b:free',
@@ -238,6 +245,8 @@ export const AdminSupportAI: React.FC<AdminSupportAIProps> = ({ userName, stats 
                     ]
                 })
             });
+
+            clearTimeout(timeoutId);
 
             if (!response.ok) {
                 let errorText = await response.text().catch(() => response.statusText);

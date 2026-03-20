@@ -56,10 +56,12 @@ export const translations = {
             subtitle: '“Feito como se fosse para a família.”',
             cta: 'Encomendar Agora',
             items: [
-                { title: 'Pão', desc: 'O nosso pão tradicional, fresco a toda a hora.' },
-                { title: 'Pão Caseiro', desc: 'Aquele pão especial que é encomendado geralmente.' },
-                { title: 'Croissants', desc: 'Folhados, recheados ou simples, sempre frescos.' },
-                { title: 'Broa de Milho', desc: 'Broa densa e saborosa, feita com farinha de milho.' }
+                { title: 'Pastéis de Nata', desc: 'A clássica doçura portuguesa, estaladiços por fora e cremosos por dentro.' },
+                { title: 'Pão de Cereais', desc: 'Uma opção saudável, rica em fibra e com um sabor inconfundível.' },
+                { title: 'Pão Tradicional', desc: 'O nosso pão de lenha clássico, fresco a toda a hora.' },
+                { title: 'Pão Caseiro', desc: 'Aquele pão rústico especial que toda a família adora.' },
+                { title: 'Croissants', desc: 'Folhados, recheados ou simples, sempre com a máxima qualidade.' },
+                { title: 'Broa de Milho', desc: 'Broa densa e saborosa, feita com a melhor farinha de milho.' }
             ]
         },
         gallery: {
@@ -374,10 +376,12 @@ export const translations = {
             subtitle: '“Made as if for family.”',
             cta: 'Order Now',
             items: [
-                { title: 'Coco Braid', desc: 'Artisanal caramelized puff pastry, finished with fresh grated coconut.' },
-                { title: 'Cream Puffs & Eclairs', desc: 'Classics of our confectionery — fluffy dough with cream and eclairs covered in chocolate.' },
-                { title: 'Custard Tarts', desc: 'Traditional recipe with thin puff pastry and perfectly golden cream.' },
-                { title: 'Mixed Puffs', desc: 'Selection of crispy puff pastries: hearts, triangles, and stars with jam.' }
+                { title: 'Custard Tarts', desc: 'The classic Portuguese sweetness, crispy on the outside and creamy on the inside.' },
+                { title: 'Cereal Bread', desc: 'A healthy option, rich in fiber and with an unmistakable flavor.' },
+                { title: 'Traditional Bread', desc: 'Our classic wood-fired bread, fresh at all times.' },
+                { title: 'Homemade Bread', desc: 'That special rustic bread that the whole family loves.' },
+                { title: 'Croissants', desc: 'Puff pastry, filled or plain, always with the highest quality.' },
+                { title: 'Corn Bread', desc: 'Dense and tasty bread, made with the best corn flour.' }
             ]
         },
         gallery: {

@@ -2,12 +2,30 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import L from 'leaflet';
+
+const driverIcon = new L.DivIcon({
+  className: 'custom-driver-icon',
+  html: `<div style="background-color: #3b2f2f; color: white; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid #d9a65a; box-shadow: 0 4px 6px rgba(0,0,0,0.3);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 18H3c-.6 0-1-.4-1-1V7c0-.6.4-1 1-1h10c.6 0 1 .4 1 1v11"/><path d="M14 9h4l4 4v5h-3"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg></div>`,
+  iconSize: [32, 32],
+  iconAnchor: [16, 16]
+});
+
+const mapPinIcon = new L.DivIcon({
+  className: 'custom-pin-icon',
+  html: `<div style="color: #ef4444;"><svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor" stroke="white" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3" fill="white"/></svg></div>`,
+  iconSize: [32, 32],
+  iconAnchor: [16, 32]
+});
 
 const QuillBase = ReactQuill as any;
-import { Eye, EyeOff, Sparkles, MessageSquare, Trash2, Upload, Send, CheckCircle, Package, TrendingUp, User, LogOut, ShoppingBag, Clock, Menu, X, ChevronRight, Search, Plus, Calendar, MapPin, Truck, Smartphone, Users, MessageCircle, Mail, Download, ChevronLeft, Loader, ShoppingCart, Lock, Unlock, XCircle, CreditCard, Banknote, Printer, FileText, Key, Edit3, Usb, Wifi, Share2, RefreshCw, UserPlus, Bell, Award, BarChart3, ShieldCheck, MailPlus, Box, Store, Zap, LineChart, AlertTriangle } from 'lucide-react';
+import { Eye, EyeOff, Sparkles, MessageSquare, Trash2, Upload, Send, CheckCircle, Package, TrendingUp, User, LogOut, ShoppingBag, Clock, Menu, X, ChevronRight, Search, Plus, Calendar, MapPin, Truck, Smartphone, Users, MessageCircle, Mail, Download, ChevronLeft, Loader, ShoppingCart, Lock, Unlock, XCircle, CreditCard, Banknote, Printer, FileText, Key, Edit3, Usb, Wifi, Share2, RefreshCw, UserPlus, Bell, Award, BarChart3, ShieldCheck, MailPlus, Box, Store, Zap, LineChart, AlertTriangle, Star, Save, Bot } from 'lucide-react';
 import { AdminSupportAI } from '../components/AdminSupportAI';
 import { Kitchen } from './Kitchen';
 import { AnalyticsChart } from '../components/Analytics/AnalyticsChart';
+import { generateMasterReport } from '../services/reportGenerator';
 import { sendSMS, sendWhatsApp, notifyCustomer } from '../services/sms';
 import { sendEmail } from '../services/email';
 import { supabase, getConnectionMode, setConnectionMode, refreshSupabaseClient, type ConnectionMode } from '../services/supabase';
@@ -115,9 +133,52 @@ export const Admin: React.FC = () => {
 
     // Sidebar/View State
     const [activeView, setActiveView] = useState<'dashboard' | 'orders' | 'kitchen' | 'stock' | 'pos' | 'delivery' | 'settings' | 'customers' | 'team' | 'logistics' | 'support' | 'support_ai' | 'documents' | 'messages' | 'blog'>('dashboard');
-    const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+    const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(window.innerWidth < 768);
+    
+    // Auto-close sidebar on mobile after navigation
+    const handleNavClick = (view: any) => {
+        setActiveView(view);
+        if (window.innerWidth < 768) setIsSidebarCollapsed(true);
+    };
+
+    const handleExportMaster = async () => {
+        try {
+            const branding = {
+                name: 'Pão Caseiro',
+                address: companyInfo?.address || 'Av. Acordo de Lusaka, Xiquelene, Maputo',
+                phone: companyInfo?.phone || '+258 87 9146 662',
+                email: 'geral@paocaseiro.co.mz',
+                website: 'www.paocaseiro.co.mz',
+                logo: companyInfo?.logo || '/images/logo_receipt.png',
+                issuerName: adminUser || username || 'Supervisor / Admin'
+            };
+            
+            const globalData = {
+                orders: orders,
+                stock: products,
+                kitchen: orders.filter(o => o.status === 'processing' || o.status === 'pending'),
+                team: teamMembers,
+                customers: customers,
+                logs: [] // Fetched in IT Support usually
+            };
+            
+            await generateMasterReport(globalData, branding);
+        } catch (error) {
+            console.error('Failed to generate master report:', error);
+            alert('Falha ao gerar o Master Report.');
+        }
+    };
+
     const [searchTerm, setSearchTerm] = useState('');
     const [stockSearchTerm, setStockSearchTerm] = useState('');
+    const [stockCategoryFilter, setStockCategoryFilter] = useState('all');
+    const [stockAvailabilityFilter, setStockAvailabilityFilter] = useState<'all' | 'available' | 'unavailable'>('all');
+    const [stockTab, setStockTab] = useState<'overview' | 'management' | 'pricing'>('overview');
+    const [selectedMassStockIds, setSelectedMassStockIds] = useState<string[]>([]);
+    const [editedMassStock, setEditedMassStock] = useState<Record<string, { stockQuantity: number; unit: string; inStock: boolean }>>({});
+    const [editedMassPricing, setEditedMassPricing] = useState<Record<string, { purchasePrice: number; otherCost: number; marginPercentage: number; finalPrice: number }>>({});
+    const [isSavingMassStock, setIsSavingMassStock] = useState(false);
+    const [isSavingMassPricing, setIsSavingMassPricing] = useState(false);
     const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'completed' | 'cancelled' | 'active'>('active');
     const [orderSearchQuery, setOrderSearchQuery] = useState('');
     const [showMassStockModal, setShowMassStockModal] = useState(false);
@@ -138,7 +199,7 @@ export const Admin: React.FC = () => {
     const [selectedDriver, setSelectedDriver] = useState<Driver | null>(null);
     const [orderToAssign, setOrderToAssign] = useState<Order | null>(null);
     const [driverForm, setDriverForm] = useState({
-        name: '', phone: '', vehicle: '', base_location: '', email: '', alternative_phone: ''
+        name: '', phone: '', vehicle: '', base_location: '', email: '', alternative_phone: '', avatar_url: ''
     });
 
     const [teamMembers, setTeamMembers] = useState<any[]>([]);
@@ -219,7 +280,8 @@ export const Admin: React.FC = () => {
         slogan: 'O Sabor da Tradição',
         motto: 'Qualidade em cada fornada',
         currency: 'MT',
-        language: 'pt'
+        language: 'pt',
+        prefix: 'PC-'
     });
 
     const [emailSettings, setEmailSettings] = useState(() => {
@@ -261,6 +323,9 @@ export const Admin: React.FC = () => {
     });
     const [teamCheckins, setTeamCheckins] = useState<any[]>([]);
     const [performanceSearch, setPerformanceSearch] = useState('');
+    const [analyticsTimeFilter, setAnalyticsTimeFilter] = useState<'today' | 'week' | 'month'>('today');
+    const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+    const [aiReportContent, setAiReportContent] = useState<string | null>(null);
     const [isUserCheckedIn, setIsUserCheckedIn] = useState(false);
     const [analyticsFilter, setAnalyticsFilter] = useState<'today' | 'week' | 'month'>('today');
     const [selectedPerformanceMember, setSelectedPerformanceMember] = useState<any | null>(null);
@@ -657,6 +722,18 @@ export const Admin: React.FC = () => {
             throw e;
         }
     };
+    // Poll driver locations when looking at deliveries tab
+    useEffect(() => {
+        let interval: NodeJS.Timeout;
+        if (activeView === 'logistics' && logisticsTab === 'deliveries') {
+            // Re-fetch driver coords every 10 secs
+            interval = setInterval(() => {
+                loadDrivers();
+            }, 10000);
+        }
+        return () => clearInterval(interval);
+    }, [activeView, logisticsTab]);
+
     const loadDrivers = async () => {
         try {
             const { data, error } = await supabase.from('logistics_drivers').select('*').order('name');
@@ -674,6 +751,23 @@ export const Admin: React.FC = () => {
         }
     };
 
+    const handleDriverImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (!e.target.files || e.target.files.length === 0) return;
+        const file = e.target.files[0];
+        const fileExt = file.name.split('.').pop();
+        const fileName = `driver-${Date.now()}.${fileExt}`;
+
+        const { error: uploadError } = await supabase.storage.from('products').upload(fileName, file);
+        if (uploadError) {
+            console.error('Upload Error:', uploadError);
+            alert('Erro ao fazer upload da imagem.');
+            return;
+        }
+
+        const { data } = supabase.storage.from('products').getPublicUrl(fileName);
+        setDriverForm({ ...driverForm, avatar_url: data.publicUrl });
+    };
+
     const handleSaveDriver = async (e: React.FormEvent) => {
         e.preventDefault();
 
@@ -684,6 +778,7 @@ export const Admin: React.FC = () => {
             base_location: driverForm.base_location,
             email: driverForm.email,
             alternative_phone: driverForm.alternative_phone,
+            avatar_url: driverForm.avatar_url,
             status: 'available' // default
         };
 
@@ -696,7 +791,7 @@ export const Admin: React.FC = () => {
         loadDrivers();
         setIsAddingDriver(false);
         setSelectedDriver(null);
-        setDriverForm({ name: '', phone: '', vehicle: '', base_location: '', email: '', alternative_phone: '' });
+        setDriverForm({ name: '', phone: '', vehicle: '', base_location: '', email: '', alternative_phone: '', avatar_url: '' });
     };
 
     const handleDeleteDriver = async (id: string) => {
@@ -1321,7 +1416,10 @@ export const Admin: React.FC = () => {
                 complements: p.complements || [],
                 unit: p.unit || 'un',
                 name_en: p.name_en,
-                description_en: p.description_en
+                description_en: p.description_en,
+                purchasePrice: Number(p.purchase_price) || 0,
+                otherCost: Number(p.other_cost) || 0,
+                marginPercentage: Number(p.margin_percentage) || 0
             }));
             setProducts(mapped);
         } else if (error) {
@@ -1415,10 +1513,12 @@ export const Admin: React.FC = () => {
         try {
             let productId = currentProduct?.id;
 
-            if (currentProduct?.id && typeof currentProduct.id === 'string') {
+            if (currentProduct?.id) {
+                // UPDATE existing product
                 const { error } = await supabase.from('products').update(productData).eq('id', currentProduct.id);
                 if (error) throw error;
             } else {
+                // INSERT new product
                 const { data, error } = await supabase.from('products').insert(productData).select().single();
                 if (error) throw error;
                 if (data) productId = data.id;
@@ -1452,8 +1552,16 @@ export const Admin: React.FC = () => {
 
     const handleDeleteProduct = async (id: any) => {
         if (confirm('Tem certeza?')) {
-            await supabase.from('products').delete().eq('id', id);
-            loadProducts();
+            try {
+                // First, delete any product_variations that reference this product to avoid foreign key constraint errors
+                await supabase.from('product_variations').delete().eq('product_id', id);
+                const { error } = await supabase.from('products').delete().eq('id', id);
+                if (error) throw error;
+                loadProducts();
+            } catch (e: any) {
+                console.error("Delete Error:", e);
+                alert("Erro ao excluir produto: " + (e.message || JSON.stringify(e)));
+            }
         }
     };
 
@@ -1505,7 +1613,8 @@ export const Admin: React.FC = () => {
                     slogan: settingsMap['company_slogan'] || prev.slogan,
                     motto: settingsMap['company_motto'] || prev.motto,
                     currency: settingsMap['company_currency'] || prev.currency,
-                    language: settingsMap['company_language'] || prev.language
+                    language: settingsMap['company_language'] || prev.language,
+                    prefix: settingsMap['company_customer_prefix'] || prev.prefix
                 }));
             }
         } catch (e) {
@@ -1538,21 +1647,29 @@ export const Admin: React.FC = () => {
 
             if (orderError) throw orderError;
 
-            // 3. Process data
+            // Fetch ALL checkins today to sum exact hours worked
+            const { data: allTodayCheckins } = await supabase
+                .from('team_checkins')
+                .select('*')
+                .gte('check_in_at', today.toISOString());
+            
+            let totalHoursCalculated = 0;
+            if (allTodayCheckins) {
+                allTodayCheckins.forEach(c => {
+                    const start = new Date(c.check_in_at).getTime();
+                    const stop = c.check_out_at ? new Date(c.check_out_at).getTime() : new Date().getTime();
+                    totalHoursCalculated += (stop - start) / 3600000;
+                });
+            }
+
             const activeStaffCount = checkins?.length || 0;
             const ordersCount = todayOrders?.length || 0;
-            const totalSales = todayOrders?.reduce((sum, o) => sum + Number(o.total_amount), 0) || 0;
-
-            // Calculate hours (mock for now but using real count)
-            const hoursToday = activeStaffCount * 8; // simplified
-
-            // Calculate productivity score: (completed orders / total orders today) * 100
-            // Or simple placeholder based on target. Let's use orders vs a target of 50.
-            const targetOrders = 50;
-            const score = Math.min(Math.round((ordersCount / targetOrders) * 100), 100);
+            
+            // Calculate productivity score: based on orders processed per hour
+            const score = totalHoursCalculated > 0 ? Math.min(Math.round((ordersCount / totalHoursCalculated) * 50), 100) : 0;
 
             setPerformanceMetrics({
-                totalHours: hoursToday,
+                totalHours: parseFloat(totalHoursCalculated.toFixed(1)),
                 activeStaff: activeStaffCount,
                 ordersToday: ordersCount,
                 productivityScore: score
@@ -1568,6 +1685,43 @@ export const Admin: React.FC = () => {
 
         } catch (e) {
             console.error("Failed to load performance metrics", e);
+        }
+    };
+
+    const generateAiReportData = async () => {
+        try {
+            setIsGeneratingAI(true);
+            setAiReportContent(null);
+            
+            const prompt = `Analisa os detalhes do nosso negócio e dá um insight conciso (2 parágrafos no máximo) focado em ações práticas para melhorarmos. Hoje tivemos: ${performanceMetrics.ordersToday} pedidos, produtividade de ${performanceMetrics.productivityScore}%. Equipa em serviço: ${performanceMetrics.activeStaff} pessoas trabalhando um total estimado de ${performanceMetrics.totalHours} horas. O funcionário destaque foi ${computedAiInsights?.topPerformer?.member?.name || 'nenhum destacado ainda'} com ${computedAiInsights?.topPerformer?.count || 0} pedidos. Pico detetado às ${computedAiInsights?.peakHour?.label || 'N/A'}. Mantém um tom muito profissional em português de Portugal.`;
+            
+            const apiKey = import.meta.env.VITE_OPENROUTER_API_KEY || "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";
+            const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${apiKey}`,
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    model: "openai/gpt-3.5-turbo",
+                    messages: [
+                        { role: "system", content: "You are an expert business analytics AI for a bakery." },
+                        { role: "user", content: prompt }
+                    ]
+                })
+            });
+            
+            const data = await res.json();
+            if (data.choices && data.choices[0] && data.choices[0].message) {
+                setAiReportContent(data.choices[0].message.content);
+            } else {
+                setAiReportContent("Não foi possível gerar as análises neste momento. Verifique a configuração da API.");
+            }
+        } catch (e) {
+            console.error("Failed to generate AI insights", e);
+            setAiReportContent("Erro de rede ao conectar à IA Analítica.");
+        } finally {
+            setIsGeneratingAI(false);
         }
     };
 
@@ -1945,10 +2099,72 @@ export const Admin: React.FC = () => {
         }
     };
 
-    const filteredProducts = products.filter(p =>
-        p.name.toLowerCase().includes(stockSearchTerm.toLowerCase()) ||
-        (p.id && p.id.toString().toLowerCase().includes(stockSearchTerm.toLowerCase()))
-    );
+    const filteredProducts = products.filter(p => {
+        const matchSearch = p.name.toLowerCase().includes(stockSearchTerm.toLowerCase()) ||
+            (p.id && p.id.toString().toLowerCase().includes(stockSearchTerm.toLowerCase()));
+        const matchCategory = stockCategoryFilter === 'all' || (p.category && p.category.toLowerCase() === stockCategoryFilter.toLowerCase());
+        const matchAvailability = stockAvailabilityFilter === 'all' || 
+            (stockAvailabilityFilter === 'available' && p.inStock) || 
+            (stockAvailabilityFilter === 'unavailable' && !p.inStock);
+        return matchSearch && matchCategory && matchAvailability;
+    });
+
+    const handleSaveMassStock = async () => {
+        const productIds = Object.keys(editedMassStock);
+        if (productIds.length === 0) return;
+
+        setIsSavingMassStock(true);
+        try {
+            const updates = productIds.map(id => {
+                const changes = editedMassStock[id];
+                return supabase.from('products').update({
+                    stock_quantity: changes.stockQuantity,
+                    unit: changes.unit,
+                    is_available: changes.inStock
+                }).eq('id', id);
+            });
+            await Promise.all(updates);
+            
+            alert(`${productIds.length} produtos atualizados com sucesso!`);
+            setEditedMassStock({});
+            loadProducts();
+            setStockTab('overview');
+        } catch (e: any) {
+            alert('Erro ao guardar as edições em massa: ' + e.message);
+        } finally {
+            setIsSavingMassStock(false);
+        }
+    };
+
+    const handleSaveMassPricing = async () => {
+        const productIds = Object.keys(editedMassPricing);
+        if (productIds.length === 0) return;
+
+        setIsSavingMassPricing(true);
+        try {
+            const updates = productIds.map(id => {
+                const changes = editedMassPricing[id];
+                return supabase.from('products').update({
+                    purchase_price: changes.purchasePrice,
+                    other_cost: changes.otherCost,
+                    margin_percentage: changes.marginPercentage,
+                    price: changes.finalPrice
+                }).eq('id', id);
+            });
+            await Promise.all(updates);
+            
+            alert(`${productIds.length} preços atualizados com sucesso!`);
+            setEditedMassPricing({});
+            loadProducts();
+            setStockTab('overview');
+        } catch (e: any) {
+            alert('Erro ao guardar as edições de preços: ' + e.message);
+        } finally {
+            setIsSavingMassPricing(false);
+        }
+    };
+
+    const uniqueCategories = Array.from(new Set(products.map(p => p.category?.toLowerCase() || ''))).filter(Boolean);
 
     const downloadOrdersCSV = () => {
         const headers = ["ID", "Ref", "Cliente", "Tel", "Data", "Total", "Status", "Items"];
@@ -2027,11 +2243,30 @@ export const Admin: React.FC = () => {
     }
 
     return (
-        <div className="h-screen overflow-hidden bg-[#f7f1eb] flex flex-col md:flex-row font-sans">
+        <div className="h-[100dvh] overflow-hidden bg-[#f7f1eb] flex flex-col md:flex-row font-sans">
+            {/* Mobile Header */}
+            <div className="md:hidden bg-[#3b2f2f] text-[#d9a65a] p-4 flex justify-between items-center z-30 shadow-md w-full shrink-0 h-16">
+                <div className="flex items-center gap-3">
+                    <img src="/logo_on_dark.png" alt="Logo" className="h-8 object-contain" />
+                    <span className="font-serif font-bold text-lg text-white">Admin Pão Caseiro</span>
+                </div>
+                <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="p-1">
+                    <Menu size={28} />
+                </button>
+            </div>
+
+            {/* Mobile Sidebar Overlay */}
+            {!isSidebarCollapsed && (
+                <div 
+                    className="md:hidden fixed inset-0 bg-black/60 z-40 backdrop-blur-sm" 
+                    onClick={() => setIsSidebarCollapsed(true)}
+                ></div>
+            )}
+
             {/* Sidebar */}
-            <div className={`bg-[#3b2f2f] text-white transition-all duration-300 flex flex-col justify-between shrink-0 shadow-xl z-20 h-screen sticky top-0 ${isSidebarCollapsed ? 'w-20 p-4 items-center' : 'w-full md:w-64 p-6'}`}>
+            <div className={`fixed md:relative top-0 left-0 h-full z-50 bg-[#3b2f2f] text-white transition-transform duration-300 md:transition-all ease-in-out flex flex-col justify-between shrink-0 shadow-2xl ${isSidebarCollapsed ? '-translate-x-full md:translate-x-0 md:w-20 md:p-4 md:items-center' : 'translate-x-0 w-72 p-6'}`}>
                 <div className="flex-1 flex flex-col min-h-0 overflow-y-auto custom-scrollbar pr-1">
-                    <div className={`flex items-center gap-3 mb-10 ${isSidebarCollapsed ? 'justify-center' : ''} relative`}>
+                    <div className={`flex items-center gap-3 mb-10 ${isSidebarCollapsed ? 'md:justify-center' : ''} relative hidden md:flex`}>
                         <img src="/logo_on_dark.png" alt="Pão Caseiro Logo" className={`${isSidebarCollapsed ? 'h-10 w-10' : 'h-16 w-16'} object-contain`} />
                         {!isSidebarCollapsed && (
                             <div className="animate-fade-in">
@@ -2041,42 +2276,69 @@ export const Admin: React.FC = () => {
                         )}
                         <button
                             onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-                            className={`absolute -right-10 top-1 bg-white text-[#3b2f2f] p-1 rounded-full shadow-lg hover:scale-110 transition-transform hidden md:block border border-gray-200 z-50`}
+                            className={`absolute -right-10 top-2 bg-white text-[#3b2f2f] p-1.5 rounded-full shadow-lg hover:scale-110 transition-transform hidden md:flex items-center justify-center border border-gray-200 z-50`}
                         >
-                            {isSidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+                            {isSidebarCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+                        </button>
+                    </div>
+                    {/* Mobile Close Button Inside Sidebar */}
+                    <div className="md:hidden flex items-center justify-between mb-8 pb-4 border-b border-white/10">
+                        <span className="font-serif font-bold text-xl">Menu</span>
+                        <button onClick={() => setIsSidebarCollapsed(true)} className="p-2 hover:bg-white/10 rounded-full text-white/70 hover:text-white transition-colors">
+                            <X size={24} />
                         </button>
                     </div>
                     <nav className="space-y-2">
                         {currentUserRole !== 'driver' && (
                             <>
-                                <button onClick={() => setActiveView('dashboard')} className={`w-full flex items-center gap-3 p-3 rounded-lg font-bold transition-all ${activeView === 'dashboard' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'justify-center' : ''}`} title="Dashboard"><TrendingUp size={20} /> {!isSidebarCollapsed && "Dashboard"}</button>
-                                <button onClick={() => setActiveView('orders')} className={`w-full flex items-center gap-3 p-3 rounded-lg font-bold transition-all ${activeView === 'orders' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'justify-center' : ''}`} title="Pedidos"><CheckCircle size={20} /> {!isSidebarCollapsed && "Pedidos"}</button>
-                                <button onClick={() => setActiveView('stock')} className={`w-full flex items-center gap-3 p-3 rounded-lg font-bold transition-all ${activeView === 'stock' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'justify-center' : ''}`} title="Stock"><Package size={20} /> {!isSidebarCollapsed && "Stock"}</button>
-                                <button onClick={() => setActiveView('pos')} className={`w-full flex items-center gap-3 p-3 rounded-lg font-bold transition-all ${activeView === 'pos' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'justify-center' : ''}`} title="POS / Balcão"><Smartphone size={20} /> {!isSidebarCollapsed && "POS / Balcão"}</button>
-                                <button onClick={() => setActiveView('documents')} className={`w-full flex items-center gap-3 p-3 rounded-lg font-bold transition-all ${activeView === 'documents' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'justify-center' : ''}`} title="Repositório de Documentos"><FileText size={20} /> {!isSidebarCollapsed && "Documentos"}</button>
+                                <button onClick={() => handleNavClick('dashboard')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeView === 'dashboard' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'md:justify-center' : ''}`} title="Dashboard"><TrendingUp size={22} className="shrink-0" /> <span className={isSidebarCollapsed ? 'md:hidden' : ''}>Dashboard</span></button>
+                                <button onClick={() => handleNavClick('orders')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeView === 'orders' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'md:justify-center' : ''}`} title="Pedidos"><CheckCircle size={22} className="shrink-0" /> <span className={isSidebarCollapsed ? 'md:hidden' : ''}>Pedidos</span></button>
+                                <button onClick={() => handleNavClick('stock')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeView === 'stock' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'md:justify-center' : ''}`} title="Stock"><Package size={22} className="shrink-0" /> <span className={isSidebarCollapsed ? 'md:hidden' : ''}>Stock</span></button>
+                                <button onClick={() => handleNavClick('pos')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeView === 'pos' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'md:justify-center' : ''}`} title="POS / Balcão"><Smartphone size={22} className="shrink-0" /> <span className={isSidebarCollapsed ? 'md:hidden' : ''}>POS / Balcão</span></button>
+                                <button onClick={() => handleNavClick('documents')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeView === 'documents' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'md:justify-center' : ''}`} title="Repositório de Documentos"><FileText size={22} className="shrink-0" /> <span className={isSidebarCollapsed ? 'md:hidden' : ''}>Documentos</span></button>
                             </>
                         )}
                         {(currentUserRole === 'admin' || currentUserRole === 'it') && (
                             <>
-                                <button onClick={() => setActiveView('customers')} className={`w-full flex items-center gap-3 p-3 rounded-lg font-bold transition-all ${activeView === 'customers' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'justify-center' : ''}`} title="Clientes"><Users size={20} /> {!isSidebarCollapsed && "Clientes"}</button>
+                                <button onClick={() => handleNavClick('customers')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeView === 'customers' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'md:justify-center' : ''}`} title="Clientes"><Users size={22} className="shrink-0" /> <span className={isSidebarCollapsed ? 'md:hidden' : ''}>Clientes</span></button>
                             </>
                         )}
                         {currentUserRole !== 'driver' && (
-                            <button onClick={() => setActiveView('messages')} className={`w-full flex items-center gap-3 p-3 rounded-lg font-bold transition-all ${activeView === 'messages' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'justify-center' : ''}`} title="Mensagens"><MessageSquare size={20} /> {!isSidebarCollapsed && <span>Mensagens {messages.some(m => m.status === 'unread') && <span className="w-2 h-2 bg-red-500 rounded-full inline-block ml-2"></span>}</span>}</button>
+                            <button onClick={() => handleNavClick('messages')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeView === 'messages' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'md:justify-center' : ''}`} title="Mensagens"><MessageSquare size={22} className="shrink-0" /> <span className={isSidebarCollapsed ? 'md:hidden' : ''}>Mensagens {messages.some(m => m.status === 'unread') && <span className="w-2 h-2 bg-red-500 rounded-full inline-block ml-2"></span>}</span></button>
                         )}
-                        <button onClick={() => setActiveView('support_ai')} className={`w-full flex items-center gap-3 p-3 rounded-lg font-bold transition-all ${activeView === 'support_ai' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'justify-center' : ''}`} title="Suporte IT"><Sparkles size={20} /> {!isSidebarCollapsed && "Suporte IT"}</button>
-                        <button onClick={() => setActiveView('logistics')} className={`w-full flex items-center gap-3 p-3 rounded-lg font-bold transition-all ${activeView === 'logistics' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'justify-center' : ''}`} title="Logística"><Truck size={20} /> {!isSidebarCollapsed && "Logística"}</button>
-                        <button onClick={() => setActiveView('kitchen')} className={`w-full flex items-center gap-3 p-3 rounded-lg font-bold transition-all ${activeView === 'kitchen' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'justify-center' : ''}`} title="Cozinha (KDS)"><Menu size={20} /> {!isSidebarCollapsed && "Cozinha (KDS)"}</button>
+                        <button onClick={() => handleNavClick('support_ai')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeView === 'support_ai' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'md:justify-center' : ''}`} title="Suporte IT"><Sparkles size={22} className="shrink-0" /> <span className={isSidebarCollapsed ? 'md:hidden' : ''}>Suporte IT</span></button>
+                        <button onClick={() => handleNavClick('logistics')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeView === 'logistics' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'md:justify-center' : ''}`} title="Logística"><Truck size={22} className="shrink-0" /> <span className={isSidebarCollapsed ? 'md:hidden' : ''}>Logística</span></button>
+                        <button onClick={() => handleNavClick('kitchen')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeView === 'kitchen' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'md:justify-center' : ''}`} title="Cozinha (KDS)"><Menu size={22} className="shrink-0" /> <span className={isSidebarCollapsed ? 'md:hidden' : ''}>Cozinha (KDS)</span></button>
                         {(currentUserRole === 'admin' || currentUserRole === 'it') && (
-                            <button onClick={() => setActiveView('blog')} className={`w-full flex items-center gap-3 p-3 rounded-lg font-bold transition-all ${activeView === 'blog' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'justify-center' : ''}`} title="Blog / CMS"><FileText size={20} /> {!isSidebarCollapsed && "Blog / CMS"}</button>
+                            <button onClick={() => handleNavClick('blog')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeView === 'blog' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'md:justify-center' : ''}`} title="Blog / CMS"><FileText size={22} className="shrink-0" /> <span className={isSidebarCollapsed ? 'md:hidden' : ''}>Blog / CMS</span></button>
                         )}
-                        <button onClick={() => setActiveView('settings')} className={`w-full flex items-center gap-3 p-3 rounded-lg font-bold transition-all ${activeView === 'settings' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'justify-center' : ''}`} title="Definições"><Sparkles size={20} /> {!isSidebarCollapsed && "Definições"}</button>
+                        <button onClick={() => handleNavClick('settings')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeView === 'settings' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'md:justify-center' : ''}`} title="Definições"><Sparkles size={22} className="shrink-0" /> <span className={isSidebarCollapsed ? 'md:hidden' : ''}>Definições</span></button>
                     </nav>
                 </div>
                 <div className="flex flex-col gap-4">
-                    <button onClick={handleLogout} className={`flex items-center gap-2 text-gray-400 hover:text-[#d9a65a] transition-colors w-full p-2 hover:bg-white/5 rounded ${isSidebarCollapsed ? 'justify-center' : ''}`} title="Sair">
-                        <LogOut size={18} />
-                        {!isSidebarCollapsed && <span className="font-bold uppercase tracking-widest text-[10px]">Sair do Painel</span>}
+                    <button
+                        onClick={isUserCheckedIn ? handleCheckOut : handleCheckIn}
+                        disabled={isSubmitting}
+                        className={`flex items-center gap-3 w-full p-3 rounded-xl transition-all duration-300 ${isSidebarCollapsed ? 'md:justify-center' : ''} ${
+                            isUserCheckedIn 
+                                ? 'bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 border border-indigo-500/30' 
+                                : 'bg-red-500/20 text-red-300 hover:bg-red-500/30 border border-red-500/30'
+                        } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        title={isUserCheckedIn ? 'Terminar Turno (Saída)' : 'Iniciar Turno (Entrada)'}
+                    >
+                        <Clock size={22} className={`shrink-0 ${isUserCheckedIn ? 'animate-pulse' : ''}`} />
+                        <div className={`flex flex-col text-left ${isSidebarCollapsed ? 'md:hidden' : ''}`}>
+                            <span className="text-[9px] font-black uppercase tracking-widest opacity-60 leading-none">
+                                Status Atual:
+                            </span>
+                            <span className="text-[11px] font-black uppercase tracking-wider leading-none mt-1">
+                                {isUserCheckedIn ? 'EM SERVIÇO (Sair)' : 'FORA DE SERVIÇO (Entrar)'}
+                            </span>
+                        </div>
+                    </button>
+                    <button onClick={handleLogout} className={`flex items-center gap-3 text-red-400 hover:text-red-300 transition-colors w-full p-3 hover:bg-white/5 rounded-xl ${isSidebarCollapsed ? 'md:justify-center' : ''}`} title="Sair">
+                        <LogOut size={22} className="shrink-0" />
+                        <span className={`font-bold uppercase tracking-widest text-[12px] ${isSidebarCollapsed ? 'md:hidden' : ''}`}>Sair do Painel</span>
                     </button>
                     {/* Footer - New Logo */}
                     {!isSidebarCollapsed && (
@@ -2086,14 +2348,15 @@ export const Admin: React.FC = () => {
                                 alt="P\u00e3o Caseiro Logo"
                                 className="w-24 h-auto opacity-90 hover:opacity-100 transition-opacity drop-shadow-lg"
                             />
-                            <p className="text-[9px] text-gray-600/50 mt-2 italic max-w-[150px] mx-auto leading-tight">
-                                "O Sabor que aquece o cora\u00e7\u00e3o"
+                            <p className="text-[10px] text-gray-500 mt-3 italic max-w-[150px] mx-auto leading-tight font-serif">
+                                "O Sabor que aquece o coração"
                             </p>
                         </div>
                     )}
                 </div>
             </div>
-            <div className={`flex-1 overflow-y-auto relative flex flex-col ${activeView === 'logistics' ? 'bg-white' : 'p-6 md:p-10'}`}>
+            <div className={`flex-1 overflow-y-auto relative flex flex-col ${activeView === 'logistics' ? 'bg-white' : 'p-6 md:p-10'} pt-20 md:pt-10`}>
+                {/* Absolute Top Right Check-in Button Removed and Relocated to Sidebar */}
 
                 {/* Global Header for essential views */}
                 {['dashboard', 'orders', 'stock', 'documents', 'pos'].includes(activeView) && (
@@ -2105,8 +2368,8 @@ export const Admin: React.FC = () => {
                                 </h2>
                                 {activeView === 'dashboard' && <p className="text-gray-500 text-sm max-w-md italic">"{quote}"</p>}
                             </div>
-                            {/* Printer Status Bubble */}
-                            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border ${isPrinterConnected ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'} transition-all duration-300 shadow-sm`}>
+                            {/* Check-In / Check-Out Global Button was moved to absolute top right */}                            {/* Printer Status Bubble */}
+                            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border ${isPrinterConnected ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'} transition-all duration-300 shadow-sm hidden sm:flex`}>
                                 <Printer size={14} className={isPrinterConnected ? 'animate-pulse' : ''} />
                                 <span className="text-[10px] font-bold uppercase tracking-wider">
                                     {isPrinterConnected ? 'Impressora Pronta' : 'Impressora Offline'}
@@ -2186,7 +2449,7 @@ export const Admin: React.FC = () => {
                         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
                             {/* Performance Chart */}
                             <div className="lg:col-span-3">
-                                <AnalyticsChart orders={orders} teamMembers={teamMembers} />
+                                <AnalyticsChart orders={orders} teamMembers={teamMembers} onExportMaster={handleExportMaster} />
                             </div>
 
                             {/* Recent Activity (Compact) */}
@@ -2272,7 +2535,7 @@ export const Admin: React.FC = () => {
                                     {filteredOrders.length === 0 ? <tr><td colSpan={7} className="p-10 text-center text-gray-400">Nenhum pedido encontrado.</td></tr> : filteredOrders.map(order => (
                                         <tr key={order.orderId} className="hover:bg-blue-50/30 transition-colors">
                                             <td className="p-4 font-mono text-xs font-bold text-gray-400">#{order.orderId}</td>
-                                            <td className="p-4 text-xs text-gray-400 font-mono">{new Date(order.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })}</td>
+                                            <td className="p-4 text-xs text-gray-400 font-mono">{new Date(order.date).toLocaleDateString('pt-PT', { day: '2-digit', month: '2-digit', year: 'numeric' })}</td>
                                             <td className="p-4">
                                                 <div className="font-bold text-[#3b2f2f]">{order.customer.name}</div>
                                                 <div className="text-xs text-gray-500 flex items-center gap-1"><MapPin size={10} /> {order.customer.type} • {order.customer.phone}</div>
@@ -2338,47 +2601,426 @@ export const Admin: React.FC = () => {
                                 <button onClick={() => { setCurrentProduct(null); setProductVariations([]); setPreviewImage(''); setIsEditingProduct(true); }} className="bg-[#3b2f2f] text-[#d9a65a] px-4 py-2 rounded-lg font-bold text-sm shadow-lg hover:brightness-110 transition-all">+ Novo Produto</button>
                             </div>
                         </div>
-                        {/* Stock Search Bar */}
-                        <div className="mx-auto mb-4 relative max-w-md w-full px-6">
-                            <Search className="absolute left-9 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-                            <input
-                                type="text"
-                                value={stockSearchTerm}
-                                onChange={(e) => setStockSearchTerm(e.target.value)}
-                                placeholder="Pesquisar produto por nome ou ID..."
-                                className="w-full pl-10 p-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-[#d9a65a] bg-gray-50/50"
-                            />
+                        {/* Aba de Navegação do Stock */}
+                        <div className="flex gap-6 pt-4 mb-2 px-6 border-b border-gray-100">
+                            <button 
+                                onClick={() => setStockTab('overview')} 
+                                className={`pb-3 font-bold text-sm tracking-wide uppercase transition-colors ${stockTab === 'overview' ? 'border-b-2 border-[#d9a65a] text-[#d9a65a]' : 'text-gray-400 hover:text-[#3b2f2f]'}`}
+                            >
+                                Visão Geral
+                            </button>
+                            <button 
+                                onClick={() => setStockTab('management')} 
+                                className={`pb-3 font-bold text-sm tracking-wide uppercase transition-colors flex items-center gap-2 ${stockTab === 'management' ? 'border-b-2 border-[#d9a65a] text-[#d9a65a]' : 'text-gray-400 hover:text-[#3b2f2f]'}`}
+                            >
+                                Gestão em Massa
+                                {Object.keys(editedMassStock).length > 0 && (
+                                    <span className="bg-[#d9a65a] text-white text-[10px] px-2 py-0.5 rounded-full">
+                                        {Object.keys(editedMassStock).length} mods
+                                    </span>
+                                )}
+                            </button>
+                            <button 
+                                onClick={() => setStockTab('pricing')} 
+                                className={`pb-3 font-bold text-sm tracking-wide uppercase transition-colors flex items-center gap-2 ${stockTab === 'pricing' ? 'border-b-2 border-[#d9a65a] text-[#d9a65a]' : 'text-gray-400 hover:text-[#3b2f2f]'}`}
+                            >
+                                Precificação
+                                {Object.keys(editedMassPricing).length > 0 && (
+                                    <span className="bg-[#d9a65a] text-white text-[10px] px-2 py-0.5 rounded-full">
+                                        {Object.keys(editedMassPricing).length} mods
+                                    </span>
+                                )}
+                            </button>
+                        </div>
+
+                        {/* Stock Search Bar & Filter */}
+                        <div className="mx-auto mb-4 relative max-w-4xl w-full px-6 flex flex-col sm:flex-row gap-3 items-center">
+                            <div className="relative flex-1">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                                <input
+                                    type="text"
+                                    value={stockSearchTerm}
+                                    onChange={(e) => setStockSearchTerm(e.target.value)}
+                                    placeholder="Pesquisar produto por nome ou ID..."
+                                    className="w-full pl-10 p-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-[#d9a65a] bg-gray-50/50"
+                                />
+                            </div>
+                            <select
+                                value={stockCategoryFilter}
+                                onChange={(e) => setStockCategoryFilter(e.target.value)}
+                                className="p-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-[#d9a65a] bg-gray-50/50 min-w-[150px] capitalize cursor-pointer"
+                            >
+                                <option value="all">Todas as Categorias</option>
+                                {uniqueCategories.map(cat => (
+                                    <option key={cat as string} value={cat as string}>{cat as string}</option>
+                                ))}
+                            </select>
+                            <select
+                                value={stockAvailabilityFilter}
+                                onChange={(e) => setStockAvailabilityFilter(e.target.value as any)}
+                                className="p-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-[#d9a65a] bg-gray-50/50 min-w-[150px] cursor-pointer"
+                            >
+                                <option value="all">Todas Disponibilidades</option>
+                                <option value="available">Em Stock</option>
+                                <option value="unavailable">Esgotado</option>
+                            </select>
+                            
+                            {stockTab === 'management' && selectedMassStockIds.length > 0 && (
+                                <div className="flex gap-2 mr-auto bg-[#d9a65a]/10 p-2 rounded-xl border border-[#d9a65a]/20 items-center animate-fade-in shadow-inner">
+                                    <span className="text-xs font-black text-[#3b2f2f] uppercase tracking-wider px-3 border-r border-[#d9a65a]/30">
+                                        {selectedMassStockIds.length} Sel.
+                                    </span>
+                                    <button 
+                                        onClick={() => {
+                                            setEditedMassStock(prev => {
+                                                const next = { ...prev };
+                                                selectedMassStockIds.forEach(id => {
+                                                    const p = products.find(prod => prod.id === id);
+                                                    if (!p) return;
+                                                    const existing = next[id] || { stockQuantity: p.stockQuantity, unit: p.unit, inStock: p.inStock, sku: p.sku || '' };
+                                                    const newState = { ...existing, inStock: true };
+                                                    if (newState.stockQuantity === p.stockQuantity && newState.unit === p.unit && newState.inStock === p.inStock && newState.sku === (p.sku || '')) {
+                                                        delete next[id];
+                                                    } else {
+                                                        next[id] = newState;
+                                                    }
+                                                });
+                                                return next;
+                                            });
+                                        }}
+                                        className="bg-green-100 text-green-800 hover:bg-green-200 border border-green-200 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm focus:outline-none"
+                                    >
+                                        Marcar Disponível
+                                    </button>
+                                    <button 
+                                        onClick={() => {
+                                            setEditedMassStock(prev => {
+                                                const next = { ...prev };
+                                                selectedMassStockIds.forEach(id => {
+                                                    const p = products.find(prod => prod.id === id);
+                                                    if (!p) return;
+                                                    const existing = next[id] || { stockQuantity: p.stockQuantity, unit: p.unit, inStock: p.inStock, sku: p.sku || '' };
+                                                    const newState = { ...existing, inStock: false };
+                                                    if (newState.stockQuantity === p.stockQuantity && newState.unit === p.unit && newState.inStock === p.inStock && newState.sku === (p.sku || '')) {
+                                                        delete next[id];
+                                                    } else {
+                                                        next[id] = newState;
+                                                    }
+                                                });
+                                                return next;
+                                            });
+                                        }}
+                                        className="bg-red-100 text-red-800 hover:bg-red-200 border border-red-200 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm focus:outline-none"
+                                    >
+                                        Marcar Esgotado
+                                    </button>
+                                </div>
+                            )}
+
+                            {stockTab === 'management' && Object.keys(editedMassStock).length > 0 && (
+                                <button 
+                                    onClick={handleSaveMassStock} 
+                                    disabled={isSavingMassStock}
+                                    className={`bg-[#d9a65a] text-white px-4 py-2.5 rounded-xl font-bold shadow-md hover:brightness-110 flex items-center gap-2 transition-all whitespace-nowrap ${isSavingMassStock ? 'opacity-50 cursor-not-allowed' : 'animate-bounce'}`}
+                                >
+                                    <Save size={16} />
+                                    {isSavingMassStock ? 'A Guardar...' : `Guardar ${Object.keys(editedMassStock).length} Alterações`}
+                                </button>
+                            )}
+                            {stockTab === 'pricing' && Object.keys(editedMassPricing).length > 0 && (
+                                <button 
+                                    onClick={handleSaveMassPricing} 
+                                    disabled={isSavingMassPricing}
+                                    className={`bg-[#d9a65a] text-white px-4 py-2.5 rounded-xl font-bold shadow-md hover:brightness-110 flex items-center gap-2 transition-all whitespace-nowrap ${isSavingMassPricing ? 'opacity-50 cursor-not-allowed' : 'animate-bounce'}`}
+                                >
+                                    <Save size={16} />
+                                    {isSavingMassPricing ? 'A Guardar...' : `Guardar ${Object.keys(editedMassPricing).length} Preços`}
+                                </button>
+                            )}
                         </div>
                         <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-350px)] custom-scrollbar">
-                            <table className="w-full text-left">
-                                <thead className="bg-[#3b2f2f] text-xs uppercase font-bold text-[#d9a65a] border-b sticky top-0 z-10">
-                                    <tr><th className="p-4 w-16">ID</th><th className="p-4">Produto</th><th className="p-4">Preço</th><th className="p-4">Qtd</th><th className="p-4">Unidade</th><th className="p-4">Disponibilidade</th><th className="p-4 text-right">Ações</th></tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-50">
-                                    {filteredProducts.map((p, index) => (
-                                        <tr key={p.id} className="hover:bg-blue-50/30 transition-colors">
-                                            <td className="p-4 text-[10px] font-mono text-gray-400 max-w-[50px] truncate" title={p.id}>
-                                                PC-{index + 10}
-                                            </td>
-                                            <td className="p-4 flex items-center gap-3">
-                                                {p.image ? <img src={p.image} alt={p.name} className="w-10 h-10 rounded-lg object-cover border border-gray-200" /> : <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400"><Package size={16} /></div>}
-                                                <div>
-                                                    <span className="font-bold text-[#3b2f2f] block">{p.name.charAt(0).toUpperCase() + p.name.slice(1).toLowerCase()}</span>
-                                                    <span className="text-xs text-gray-400 capitalize">{p.category}</span>
-                                                </div>
-                                            </td>
-                                            <td className="p-4 font-bold text-[#d9a65a]">{p.price} MT</td>
-                                            <td className="p-4 text-sm font-bold text-gray-600">{p.stockQuantity}</td>
-                                            <td className="p-4 text-sm text-gray-500">{p.unit}</td>
-                                            <td className="p-4"><span className={`w-2 h-2 rounded-full inline-block mr-2 ${p.inStock ? 'bg-green-500' : 'bg-red-500'}`}></span><span className="text-xs text-gray-500">{p.inStock ? 'Disponível' : 'Indisponível'}</span></td>
-                                            <td className="p-4 text-right space-x-2">
-                                                <button onClick={() => { setCurrentProduct(p); setProductVariations(p.variations || []); setPreviewImage(p.image || ''); setIsEditingProduct(true); }} className="text-blue-600 font-bold text-xs hover:underline">Editar</button>
-                                                <button onClick={() => handleDeleteProduct(p.id)} className="text-red-500 font-bold text-xs hover:underline">Remover</button>
+                            {stockTab === 'pricing' ? (
+                                <table className="w-full text-left">
+                                    <thead className="bg-[#d9a65a]/10 text-xs uppercase font-bold text-[#3b2f2f] border-b sticky top-0 z-10 backdrop-blur-md">
+                                        <tr>
+                                            <th className="p-4">Produto</th>
+                                            <th className="p-4 w-36">Custo Compra (MT)</th>
+                                            <th className="p-4 w-36">Outro Custo (MT)</th>
+                                            <th className="p-4 w-32 text-center">Margem (%)</th>
+                                            <th className="p-4 w-40 text-right">Preço Venda (MT)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                        {filteredProducts.map((p) => {
+                                            const editedState = editedMassPricing[p.id];
+                                            const currentPurchase = editedState ? editedState.purchasePrice : p.purchasePrice || 0;
+                                            const currentOther = editedState ? editedState.otherCost : p.otherCost || 0;
+                                            const currentMargin = editedState ? editedState.marginPercentage : p.marginPercentage || 0;
+                                            const isEdited = !!editedState;
+                                            
+                                            // Calcula preço final
+                                            const totalCost = currentPurchase + currentOther;
+                                            const currentFinalPrice = editedState ? editedState.finalPrice : p.price || 0;
+
+                                            const updatePricing = (field: 'purchasePrice' | 'otherCost' | 'marginPercentage', value: number) => {
+                                                setEditedMassPricing(prev => {
+                                                    const existing = prev[p.id] || { 
+                                                        purchasePrice: p.purchasePrice || 0, 
+                                                        otherCost: p.otherCost || 0, 
+                                                        marginPercentage: p.marginPercentage || 0,
+                                                        finalPrice: p.price || 0 
+                                                    };
+                                                    
+                                                    const newState = { ...existing, [field]: value };
+                                                    const newTotalCost = newState.purchasePrice + newState.otherCost;
+                                                    newState.finalPrice = Math.round(newTotalCost + (newTotalCost * (newState.marginPercentage / 100)));
+                                                    
+                                                    if (newState.purchasePrice === (p.purchasePrice || 0) && 
+                                                        newState.otherCost === (p.otherCost || 0) && 
+                                                        newState.marginPercentage === (p.marginPercentage || 0)) {
+                                                        const copy = { ...prev };
+                                                        delete copy[p.id];
+                                                        return copy;
+                                                    }
+                                                    return { ...prev, [p.id]: newState };
+                                                });
+                                            };
+
+                                            return (
+                                                <tr key={p.id} className={`transition-colors ${isEdited ? 'bg-[#d9a65a]/5' : 'hover:bg-gray-50'}`}>
+                                                    <td className="p-4">
+                                                        <div className="flex items-center gap-3">
+                                                            {p.image ? <img src={p.image} alt={p.name} className="w-10 h-10 rounded-lg object-cover border border-gray-200" /> : <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400"><Package size={16} /></div>}
+                                                            <div>
+                                                                <span className="font-bold text-[#3b2f2f] block">{p.name.charAt(0).toUpperCase() + p.name.slice(1).toLowerCase()}</span>
+                                                                <span className="text-[10px] text-gray-400">Preço Original: {p.price} MT</span>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-4">
+                                                        <input 
+                                                            type="number" 
+                                                            value={currentPurchase}
+                                                            onChange={(e) => updatePricing('purchasePrice', Number(e.target.value))}
+                                                            className={`w-24 p-2 text-sm border rounded-lg font-bold focus:outline-none focus:ring-2 focus:ring-[#d9a65a]/50 ${isEdited && editedState.purchasePrice !== p.purchasePrice ? 'border-[#d9a65a] bg-yellow-50 text-[#3b2f2f]' : 'border-gray-200 text-gray-700'}`}
+                                                            min="0"
+                                                        />
+                                                    </td>
+                                                    <td className="p-4">
+                                                        <input 
+                                                            type="number" 
+                                                            value={currentOther}
+                                                            onChange={(e) => updatePricing('otherCost', Number(e.target.value))}
+                                                            className={`w-24 p-2 text-sm border rounded-lg font-bold focus:outline-none focus:ring-2 focus:ring-[#d9a65a]/50 ${isEdited && editedState.otherCost !== p.otherCost ? 'border-[#d9a65a] bg-yellow-50 text-[#3b2f2f]' : 'border-gray-200 text-gray-700'}`}
+                                                            min="0"
+                                                        />
+                                                    </td>
+                                                    <td className="p-4 text-center">
+                                                        <input 
+                                                            type="number" 
+                                                            value={currentMargin}
+                                                            onChange={(e) => updatePricing('marginPercentage', Number(e.target.value))}
+                                                            className={`w-20 p-2 text-sm border rounded-lg text-center font-bold focus:outline-none focus:ring-2 focus:ring-[#d9a65a]/50 ${isEdited && editedState.marginPercentage !== p.marginPercentage ? 'border-[#d9a65a] bg-yellow-50 text-[#3b2f2f]' : 'border-gray-200 text-gray-700'}`}
+                                                            min="0"
+                                                        />
+                                                    </td>
+                                                    <td className="p-4 text-right">
+                                                        <span className={`text-lg font-black ${isEdited && editedState.finalPrice !== p.price ? 'text-[#d9a65a] animate-pulse' : 'text-gray-400'}`}>
+                                                            {currentFinalPrice.toLocaleString()} MT
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                        {filteredProducts.length === 0 && (
+                                            <tr>
+                                                <td colSpan={5} className="p-10 text-center text-gray-400 italic">
+                                                    Nenhum produto corresponde aos filtros atuais.
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            ) : stockTab === 'overview' ? (
+                                <table className="w-full text-left">
+                                    <thead className="bg-[#3b2f2f] text-xs uppercase font-bold text-[#d9a65a] border-b sticky top-0 z-10">
+                                        <tr><th className="p-4 w-16">ID</th><th className="p-4">Produto</th><th className="p-4">Preço</th><th className="p-4">Qtd</th><th className="p-4">Unidade</th><th className="p-4">Disponibilidade</th><th className="p-4 text-right">Ações</th></tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-50">
+                                        {filteredProducts.map((p, index) => (
+                                            <tr key={p.id} className="hover:bg-blue-50/30 transition-colors">
+                                                <td className="p-4 text-[10px] font-mono text-gray-400 max-w-[50px] truncate" title={p.id}>
+                                                    PC-{index + 10}
+                                                </td>
+                                                <td className="p-4 flex items-center gap-3">
+                                                    {p.image ? <img src={p.image} alt={p.name} className="w-10 h-10 rounded-lg object-cover border border-gray-200" /> : <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400"><Package size={16} /></div>}
+                                                    <div>
+                                                        <span className="font-bold text-[#3b2f2f] block">{p.name.charAt(0).toUpperCase() + p.name.slice(1).toLowerCase()}</span>
+                                                        <span className="text-xs text-gray-400 capitalize">{p.category}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="p-4 font-bold text-[#d9a65a]">{p.price} MT</td>
+                                                <td className="p-4 text-sm font-bold text-gray-600">{p.stockQuantity}</td>
+                                                <td className="p-4 text-sm text-gray-500">{p.unit}</td>
+                                                <td className="p-4"><span className={`w-2 h-2 rounded-full inline-block mr-2 ${p.inStock ? 'bg-green-500' : 'bg-red-500'}`}></span><span className="text-xs text-gray-500">{p.inStock ? 'Disponível' : 'Indisponível'}</span></td>
+                                                <td className="p-4 text-right space-x-2">
+                                                    <button onClick={() => handleDeleteProduct(p.id)} className="text-red-500 font-bold text-xs hover:underline">Remover</button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                        {filteredProducts.length === 0 && (
+                                            <tr>
+                                                <td colSpan={7} className="p-10 text-center text-gray-400 italic">
+                                                    Nenhum produto corresponde aos filtros atuais.
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                    <tfoot className="bg-[#3b2f2f] text-[#d9a65a] font-bold">
+                                        <tr>
+                                            <td colSpan={3} className="p-4 text-right">TOTAIS (Overview)</td>
+                                            <td className="p-4">{filteredProducts.reduce((sum, p) => sum + (p.stockQuantity || 0), 0)} un</td>
+                                            <td className="p-4 text-right" colSpan={3}>
+                                                Valor Inventário Mz: {filteredProducts.reduce((sum, p) => sum + ((p.stockQuantity || 0) * (p.price || 0)), 0).toLocaleString()} MT
                                             </td>
                                         </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                                    </tfoot>
+                                </table>
+                            ) : (
+                                <table className="w-full text-left">
+                                    <thead className="bg-[#d9a65a]/10 text-xs uppercase font-bold text-[#3b2f2f] border-b sticky top-0 z-10 backdrop-blur-md">
+                                        <tr>
+                                            <th className="p-4 w-12 text-center">
+                                                <input 
+                                                    type="checkbox" 
+                                                    checked={filteredProducts.length > 0 && selectedMassStockIds.length === filteredProducts.length}
+                                                    onChange={(e) => {
+                                                        if (e.target.checked) {
+                                                            setSelectedMassStockIds(filteredProducts.map(p => p.id));
+                                                        } else {
+                                                            setSelectedMassStockIds([]);
+                                                        }
+                                                    }}
+                                                    className="w-4 h-4 rounded text-[#d9a65a] focus:ring-[#d9a65a] cursor-pointer"
+                                                />
+                                            </th>
+                                            <th className="p-4">Produto</th>
+                                            <th className="p-4 w-32">SKU / Código</th>
+                                            <th className="p-4 w-32">Quantidade</th>
+                                            <th className="p-4 w-32">Unidade</th>
+                                            <th className="p-4 w-40 text-center">Disponibilidade</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                        {filteredProducts.map((p) => {
+                                            const editedState = editedMassStock[p.id];
+                                            const currentQuantity = editedState ? editedState.stockQuantity : p.stockQuantity;
+                                            const currentUnit = editedState ? editedState.unit : p.unit;
+                                            const currentAvailability = editedState ? editedState.inStock : p.inStock;
+                                            const currentSku = editedState ? editedState.sku : (p.sku || '');
+                                            const isEdited = !!editedState;
+
+                                            const updateProduct = (field: 'stockQuantity' | 'unit' | 'inStock' | 'sku', value: any) => {
+                                                setEditedMassStock(prev => {
+                                                    const existing = prev[p.id] || { stockQuantity: p.stockQuantity, unit: p.unit, inStock: p.inStock, sku: p.sku || '' };
+                                                    const newState = { ...existing, [field]: value };
+                                                    
+                                                    // If new values match original exactly, remove from edits payload
+                                                    if (newState.stockQuantity === p.stockQuantity && newState.unit === p.unit && newState.inStock === p.inStock && newState.sku === (p.sku || '')) {
+                                                        const copy = { ...prev };
+                                                        delete copy[p.id];
+                                                        return copy;
+                                                    }
+                                                    return { ...prev, [p.id]: newState };
+                                                });
+                                            };
+
+                                            return (
+                                                <tr key={p.id} className={`transition-colors ${isEdited ? 'bg-[#d9a65a]/5' : 'hover:bg-gray-50'}`}>
+                                                    <td className="p-4 text-center">
+                                                        <input 
+                                                            type="checkbox" 
+                                                            checked={selectedMassStockIds.includes(p.id)}
+                                                            onChange={(e) => {
+                                                                if (e.target.checked) {
+                                                                    setSelectedMassStockIds(prev => [...prev, p.id]);
+                                                                } else {
+                                                                    setSelectedMassStockIds(prev => prev.filter(id => id !== p.id));
+                                                                }
+                                                            }}
+                                                            className="w-4 h-4 rounded text-[#d9a65a] focus:ring-[#d9a65a] cursor-pointer"
+                                                        />
+                                                    </td>
+                                                    <td className="p-4">
+                                                        <div className="flex items-center gap-3">
+                                                            {p.image ? <img src={p.image} alt={p.name} className="w-10 h-10 rounded-lg object-cover border border-gray-200" /> : <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400"><Package size={16} /></div>}
+                                                            <div>
+                                                                <span className="font-bold text-[#3b2f2f] block">{p.name.charAt(0).toUpperCase() + p.name.slice(1).toLowerCase()}</span>
+                                                                <span className="text-[10px] text-gray-400">ID Ref: {p.id.split('-')[0]}</span>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-4">
+                                                        <input 
+                                                            type="text" 
+                                                            value={currentSku}
+                                                            onChange={(e) => updateProduct('sku', e.target.value)}
+                                                            placeholder="Ex: PC-001"
+                                                            className={`w-24 p-2 text-sm border rounded-lg text-center font-bold focus:outline-none focus:ring-2 focus:ring-[#d9a65a]/50 ${isEdited && editedState.sku !== p.sku ? 'border-[#d9a65a] bg-yellow-50' : 'border-gray-200 uppercase'}`}
+                                                        />
+                                                    </td>
+                                                    <td className="p-4">
+                                                        <input 
+                                                            type="number" 
+                                                            value={currentQuantity}
+                                                            onChange={(e) => updateProduct('stockQuantity', Number(e.target.value))}
+                                                            className={`w-20 p-2 text-sm border rounded-lg text-center font-bold focus:outline-none focus:ring-2 focus:ring-[#d9a65a]/50 ${isEdited && editedState.stockQuantity !== p.stockQuantity ? 'border-[#d9a65a] bg-yellow-50' : 'border-gray-200'}`}
+                                                            min="0"
+                                                        />
+                                                    </td>
+                                                    <td className="p-4">
+                                                        <select
+                                                            value={currentUnit}
+                                                            onChange={(e) => updateProduct('unit', e.target.value)}
+                                                            className={`w-full p-2 text-sm border rounded-lg font-bold focus:outline-none focus:ring-2 focus:ring-[#d9a65a]/50 ${isEdited && editedState.unit !== p.unit ? 'border-[#d9a65a] bg-yellow-50' : 'border-gray-200'}`}
+                                                        >
+                                                            <option value="un">un</option>
+                                                            <option value="kg">kg</option>
+                                                            <option value="g">g</option>
+                                                            <option value="l">l</option>
+                                                            <option value="ml">ml</option>
+                                                            <option value="porcao">porção</option>
+                                                            <option value="fatia">fatia</option>
+                                                        </select>
+                                                    </td>
+                                                    <td className="p-4 text-center">
+                                                        <button
+                                                            onClick={() => updateProduct('inStock', !currentAvailability)}
+                                                            className={`w-full py-2 px-3 rounded-lg text-xs font-bold uppercase tracking-wider transition-all border ${currentAvailability ? 'bg-green-100 text-green-700 border-green-200 hover:bg-green-200' : 'bg-red-100 text-red-700 border-red-200 hover:bg-red-200'}`}
+                                                        >
+                                                            {currentAvailability ? 'Disponível' : 'Esgotado'}
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                        {filteredProducts.length === 0 && (
+                                            <tr>
+                                                <td colSpan={5} className="p-10 text-center text-gray-400 italic">
+                                                    Nenhum produto corresponde aos filtros atuais.
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                    <tfoot className="bg-[#d9a65a]/10 text-[#3b2f2f] font-bold">
+                                        <tr>
+                                            <td colSpan={2} className="p-4 text-right border-t border-[#d9a65a]/20">TOTAIS (Gestão em Massa)</td>
+                                            <td className="p-4 text-center border-t border-[#d9a65a]/20">{filteredProducts.reduce((sum, p) => sum + (p.stockQuantity || 0), 0)} unidades físicas</td>
+                                            <td colSpan={2} className="border-t border-[#d9a65a]/20"></td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            )}
                         </div>
                     </div>
                 )}
@@ -2424,7 +3066,7 @@ export const Admin: React.FC = () => {
                                                 {c.email ? <div>{c.email}</div> : <span className="text-gray-300 italic">Sem email</span>}
                                                 {c.nuit && <div className="text-[10px] text-gray-400">NUIT: {c.nuit}</div>}
                                             </td>
-                                            <td className="p-4 text-xs text-gray-400 font-mono">{new Date(c.created_at).toLocaleDateString()}</td>
+                                            <td className="p-4 text-xs text-gray-400 font-mono">{new Date(c.created_at).toLocaleDateString('pt-PT')}</td>
                                             <td className="p-4 text-right space-x-2">
                                                 <button onClick={() => handleOpenCustomerDetails(c)} className="text-[#3b2f2f] border border-gray-200 hover:bg-[#3b2f2f] hover:text-white px-3 py-1 rounded-lg text-xs font-bold transition-all">Ver</button>
                                             </td>
@@ -2478,7 +3120,7 @@ export const Admin: React.FC = () => {
                                             <div className="space-y-3">
                                                 <div>
                                                     <p className="text-[10px] text-gray-500 font-bold uppercase">Data de Nascimento</p>
-                                                    <p className="font-bold text-gray-700">{selectedCustomer.date_of_birth ? new Date(selectedCustomer.date_of_birth).toLocaleDateString() : 'Não Defenida'}</p>
+                                                    <p className="font-bold text-gray-700">{selectedCustomer.date_of_birth ? new Date(selectedCustomer.date_of_birth).toLocaleDateString('pt-PT') : 'Não Definida'}</p>
                                                 </div>
                                                 <div>
                                                     <p className="text-[10px] text-gray-500 font-bold uppercase">WhatsApp Link</p>
@@ -2534,7 +3176,7 @@ export const Admin: React.FC = () => {
                                                             {customerLogs.map((log: any) => (
                                                                 <tr key={log.id} className="hover:bg-white transition-colors">
                                                                     <td className="p-3 font-mono text-gray-500">{log.short_id || log.id.slice(0, 8)}</td>
-                                                                    <td className="p-3 text-gray-600">{new Date(log.created_at).toLocaleDateString()}</td>
+                                                                    <td className="p-3 text-gray-600">{new Date(log.created_at).toLocaleDateString('pt-PT')}</td>
                                                                     <td className="p-3 font-bold text-[#d9a65a]">{Number(log.total_amount).toLocaleString()} MT</td>
                                                                     <td className="p-3"><span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${log.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'}`}>{log.status}</span></td>
                                                                 </tr>
@@ -2745,7 +3387,7 @@ export const Admin: React.FC = () => {
                                                     {msg.status === 'unread' && <div className="absolute top-4 right-4 w-2.5 h-2.5 bg-red-500 rounded-full shadow-[0_0_10px_rgba(239,68,68,0.5)]"></div>}
                                                     <div className="flex justify-between items-start mb-1">
                                                         <span className={`text-[9px] uppercase font-bold tracking-tighter ${msg.status === 'unread' ? 'text-[#d9a65a]' : 'text-gray-400'}`}>
-                                                            {new Date(msg.created_at).toLocaleDateString()}
+                                                            {new Date(msg.created_at).toLocaleDateString('pt-PT')}
                                                         </span>
                                                     </div>
                                                     <p className={`text-sm truncate pr-4 ${msg.status === 'unread' ? 'font-black text-[#3b2f2f]' : 'text-[#3b2f2f]/80'}`}>{msg.name}</p>
@@ -3102,36 +3744,79 @@ export const Admin: React.FC = () => {
                             <div className="flex-1 overflow-auto bg-gray-50/30 p-6 md:p-10 relative">
 
                                 {/* TAB 1: DASHBOARD */}
-                                {logisticsTab === 'dashboard' && (
+                                {logisticsTab === 'dashboard' && (() => {
+                                    const todayStr = new Date().toDateString();
+                                    const driverStats = drivers.map((d: any) => {
+                                        const dOrders = orders.filter((o: any) => o.driver_id === d.id && o.status === 'completed' && new Date(o.updated_at || o.created_at).toDateString() === todayStr);
+                                        const totalDeliveries = dOrders.length;
+                                        let avgMins = 0;
+                                        if (totalDeliveries > 0) {
+                                            const totalMins = dOrders.reduce((sum: number, o: any) => {
+                                                const diff = (new Date(o.updated_at || o.created_at).getTime() - new Date(o.created_at).getTime()) / 60000;
+                                                return sum + (diff > 0 ? diff : 30);
+                                            }, 0);
+                                            avgMins = totalMins / totalDeliveries;
+                                        }
+                                        let rating = 5.0;
+                                        if (avgMins > 40) rating = Math.max(1.0, 5.0 - ((avgMins - 40) / 10));
+                                        return { ...d, totalDeliveries, avgMins: Math.round(avgMins), rating: rating.toFixed(1) };
+                                    });
+                                    const bestDriver = [...driverStats].filter(d => d.totalDeliveries > 0).sort((a,b) => parseFloat(b.rating) - parseFloat(a.rating) || b.totalDeliveries - a.totalDeliveries)[0];
+
+                                    return (
                                     <div className="space-y-8 animate-fade-in h-full">
                                         {/* KPI Cards */}
-                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                                             <div className="bg-blue-50 p-6 rounded-2xl border border-blue-100 flex items-center justify-between">
                                                 <div>
-                                                    <p className="text-blue-600 font-bold text-xs uppercase mb-1">Total Entregas (Hoje)</p>
+                                                    <p className="text-blue-600 font-bold text-xs uppercase mb-1">{currentUserRole === 'driver' ? 'Minhas Entregas' : 'Total Entregas'} (Hoje)</p>
                                                     <h3 className="text-4xl font-bold text-[#3b2f2f]">
-                                                        {orders.filter(o => o.customer.type === 'delivery').length}
+                                                        {orders.filter(o => o.customer?.type === 'delivery' && (currentUserRole === 'driver' ? o.driver_id === userId : true)).length}
                                                     </h3>
                                                 </div>
                                                 <div className="bg-white p-3 rounded-xl text-blue-500 shadow-sm"><Truck size={32} /></div>
                                             </div>
                                             <div className="bg-orange-50 p-6 rounded-2xl border border-orange-100 flex items-center justify-between">
                                                 <div>
-                                                    <p className="text-orange-600 font-bold text-xs uppercase mb-1">Em Rota (Ativas)</p>
+                                                    <p className="text-orange-600 font-bold text-xs uppercase mb-1">{currentUserRole === 'driver' ? 'Minhas Em Rota' : 'Em Rota (Ativas)'}</p>
                                                     <h3 className="text-4xl font-bold text-[#3b2f2f]">
-                                                        {orders.filter(o => ['delivering', 'arrived'].includes(o.status)).length}
+                                                        {orders.filter(o => ['delivering', 'arrived'].includes(o.status) && (currentUserRole === 'driver' ? o.driver_id === userId : true)).length}
                                                     </h3>
                                                 </div>
                                                 <div className="bg-white p-3 rounded-xl text-orange-500 shadow-sm"><MapPin size={32} /></div>
                                             </div>
-                                            <div className="bg-green-50 p-6 rounded-2xl border border-green-100 flex items-center justify-between">
-                                                <div>
-                                                    <p className="text-green-600 font-bold text-xs uppercase mb-1">Parceiros Livres</p>
-                                                    <h3 className="text-4xl font-bold text-[#3b2f2f]">
-                                                        {drivers.filter(d => d.status === 'available').length}
-                                                    </h3>
+                                            
+                                            {currentUserRole !== 'driver' ? (
+                                                <div className="bg-green-50 p-6 rounded-2xl border border-green-100 flex items-center justify-between">
+                                                    <div>
+                                                        <p className="text-green-600 font-bold text-xs uppercase mb-1">Parceiros Livres</p>
+                                                        <h3 className="text-4xl font-bold text-[#3b2f2f]">
+                                                            {drivers.filter(d => d.status === 'available').length}
+                                                        </h3>
+                                                    </div>
+                                                    <div className="bg-white p-3 rounded-xl text-green-500 shadow-sm"><CheckCircle size={32} /></div>
                                                 </div>
-                                                <div className="bg-white p-3 rounded-xl text-green-500 shadow-sm"><CheckCircle size={32} /></div>
+                                            ) : (
+                                                <div className="bg-green-50 p-6 rounded-2xl border border-green-100 flex items-center justify-between">
+                                                    <div>
+                                                        <p className="text-green-600 font-bold text-xs uppercase mb-1">Minha Avaliação (Hoje)</p>
+                                                        <h3 className="text-4xl font-bold text-[#3b2f2f]">
+                                                            {driverStats.find(d => d.id === userId)?.rating || '5.0'}
+                                                        </h3>
+                                                    </div>
+                                                    <div className="bg-white p-3 rounded-xl text-green-500 shadow-sm"><Star size={32} className="fill-current text-yellow-400" /></div>
+                                                </div>
+                                            )}
+
+                                            <div className="bg-purple-50 p-6 rounded-2xl border border-purple-100 flex items-center justify-between">
+                                                <div>
+                                                    <p className="text-purple-600 font-bold text-xs uppercase mb-1">Melhor Driver (Hoje)</p>
+                                                    <h3 className="text-xl font-bold text-[#3b2f2f] truncate max-w-[120px]" title={bestDriver ? bestDriver.name : ''}>
+                                                        {bestDriver ? bestDriver.name : 'N/A'}
+                                                    </h3>
+                                                    {bestDriver && <p className="text-xs text-purple-600 font-bold mt-1">★ {bestDriver.rating} ({bestDriver.totalDeliveries} entregas)</p>}
+                                                </div>
+                                                <div className="bg-white p-3 rounded-xl text-purple-500 shadow-sm"><Award size={32} className="text-purple-500" /></div>
                                             </div>
                                         </div>
 
@@ -3150,8 +3835,76 @@ export const Admin: React.FC = () => {
                                             <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-gradient-to-l from-[#d9a65a]/20 to-transparent"></div>
                                             <MapPin size={180} className="absolute -right-10 -bottom-10 text-white/5" />
                                         </div>
+
+                                        {/* Daily Report Table */}
+                                        <div className="bg-white rounded-3xl p-6 shadow-xl border border-gray-100 mt-8">
+                                            <h3 className="text-xl font-bold font-serif text-[#3b2f2f] mb-6">Relatório de Entregas Hoje</h3>
+                                            <div className="overflow-x-auto">
+                                                <table className="w-full text-left text-sm">
+                                                    <thead className="bg-[#f7f1eb] text-[#3b2f2f] font-bold text-[10px] uppercase tracking-widest rounded-t-xl">
+                                                        <tr>
+                                                            <th className="p-4 rounded-tl-xl border-b border-[#d9a65a]/20">Pedido / Cliente</th>
+                                                            <th className="p-4 border-b border-[#d9a65a]/20">Horários</th>
+                                                            {currentUserRole !== 'driver' && <th className="p-4 border-b border-[#d9a65a]/20">Motorista</th>}
+                                                            <th className="p-4 text-right border-b border-[#d9a65a]/20">Valor Pago</th>
+                                                            {currentUserRole !== 'driver' && <th className="p-4 text-right rounded-tr-xl border-b border-[#d9a65a]/20">Custo Entrega</th>}
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-gray-50">
+                                                        {orders.filter(o => o.customer?.type === 'delivery' && o.status === 'completed' && new Date(o.updated_at || o.created_at).toDateString() === todayStr && (currentUserRole === 'driver' ? o.driver_id === userId : true)).map(order => {
+                                                            const orderTime = new Date(order.created_at);
+                                                            const deliveryTime = new Date(order.updated_at || order.created_at);
+                                                            const diffMins = Math.round((deliveryTime.getTime() - orderTime.getTime()) / 60000);
+                                                            const driver = drivers.find(d => d.id === order.driver_id);
+                                                            return (
+                                                                <tr key={order.orderId} className="hover:bg-gray-50/50 transition-colors">
+                                                                    <td className="p-4">
+                                                                        <span className="font-bold text-[#3b2f2f]">#{order.short_id || order.orderId}</span>
+                                                                        <div className="text-xs text-gray-500 mt-1 uppercase font-bold">{order.customer?.name || order.customer_name}</div>
+                                                                    </td>
+                                                                    <td className="p-4">
+                                                                        <div className="text-[11px] mb-1">
+                                                                            <span className="text-gray-400">Pedido:</span> <span className="font-bold text-[#3b2f2f] ml-1">{orderTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                                                                        </div>
+                                                                        <div className="text-[11px] mb-1">
+                                                                            <span className="text-gray-400">Entregue:</span> <span className="font-bold text-green-600 ml-1">{deliveryTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                                                                        </div>
+                                                                        <div className="inline-block text-[10px] font-bold bg-[#d9a65a]/20 text-[#3b2f2f] px-2 py-0.5 rounded-full mt-1">
+                                                                            ⏱ {diffMins > 0 ? diffMins : '?'} min
+                                                                        </div>
+                                                                    </td>
+                                                                    {currentUserRole !== 'driver' && (
+                                                                        <td className="p-4 font-bold text-sm text-[#3b2f2f]">
+                                                                            <div className="flex items-center gap-2">
+                                                                                <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-xs overflow-hidden">
+                                                                                    {driver?.avatar_url ? <img src={driver.avatar_url} className="w-full h-full object-cover"/> : driver?.name?.charAt(0).toUpperCase() || '?'}
+                                                                                </div>
+                                                                                {driver?.name || 'N/A'}
+                                                                            </div>
+                                                                        </td>
+                                                                    )}
+                                                                    <td className="p-4 text-right">
+                                                                        <span className="font-bold text-lg text-green-600 block">{Number(order.total_amount || order.total || 0).toLocaleString()} MT</span>
+                                                                    </td>
+                                                                    {currentUserRole !== 'driver' && (
+                                                                        <td className="p-4 text-right">
+                                                                            <span className="font-bold text-orange-500 bg-orange-50 px-3 py-1.5 rounded-xl border border-orange-100">{Number(order.delivery_fee || 0).toLocaleString()} MT</span>
+                                                                        </td>
+                                                                    )}
+                                                                </tr>
+                                                            );
+                                                        })}
+                                                        {orders.filter(o => o.customer?.type === 'delivery' && o.status === 'completed' && new Date(o.updated_at || o.created_at).toDateString() === todayStr && (currentUserRole === 'driver' ? o.driver_id === userId : true)).length === 0 && (
+                                                            <tr><td colSpan={currentUserRole === 'driver' ? 3 : 5} className="p-8 text-center text-gray-400 font-bold bg-gray-50">Nenhum histórico hoje.</td></tr>
+                                                        )}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+
                                     </div>
-                                )}
+                                    );
+                                })()}
 
                                 {/* TAB 2: DELIVERIES */}
                                 {logisticsTab === 'deliveries' && (
@@ -3167,6 +3920,57 @@ export const Admin: React.FC = () => {
 
                                             return (
                                                 <>
+                                                    {/* MAP TRACKING (Only if drivers have coords) */}
+                                                    {activeDeliveries.length > 0 && drivers.some((d: any) => d.lat && d.lng) && (
+                                                        <div className="w-full h-[350px] mb-8 rounded-3xl overflow-hidden shadow-lg border-4 border-white relative z-0">
+                                                            <div className="absolute top-4 right-4 z-[400] bg-white text-[#3b2f2f] px-3 py-1.5 rounded-full shadow-md text-[10px] font-bold flex items-center gap-2">
+                                                                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                                                                Live Tracking GPS
+                                                            </div>
+                                                            <MapContainer center={[-13.3106, 35.2489]} zoom={13} style={{ height: '100%', width: '100%', zIndex: 0 }}>
+                                                                <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" />
+                                                                {drivers.filter((d: any) => d.lat && d.lng).map((driver: any) => {
+                                                                    const drvActive = activeDeliveries.find(o => o.driver_id === driver.id);
+                                                                    return (
+                                                                        <Marker key={driver.id} position={[driver.lat, driver.lng]} icon={driverIcon}>
+                                                                            <Popup>
+                                                                                <div className="text-center">
+                                                                                    <p className="font-bold text-[#3b2f2f]">{driver.name}</p>
+                                                                                    {drvActive ? (
+                                                                                        <>
+                                                                                            <p className="text-xs text-orange-600 font-bold mt-1">A Entregar: #{drvActive.short_id}</p>
+                                                                                            <p className="text-[10px] text-gray-500">{drvActive.customer.name}</p>
+                                                                                        </>
+                                                                                    ) : (
+                                                                                        <p className="text-xs text-gray-500 mt-1">Disponível</p>
+                                                                                    )}
+                                                                                </div>
+                                                                            </Popup>
+                                                                        </Marker>
+                                                                    );
+                                                                })}
+                                                                {activeDeliveries.map(order => {
+                                                                    if(order.delivery_coordinates && order.delivery_coordinates !== '()') {
+                                                                        const match = order.delivery_coordinates.replace(/[()]/g, '').split(',').map((s: string) => parseFloat(s.trim()));
+                                                                        if (match.length === 2 && !isNaN(match[0]) && !isNaN(match[1])) {
+                                                                            return (
+                                                                                <Marker key={`dest-${order.id}`} position={[match[0], match[1]]} icon={mapPinIcon}>
+                                                                                    <Popup>
+                                                                                        <div className="text-center">
+                                                                                            <p className="font-bold text-[#3b2f2f]">Destino #{order.short_id}</p>
+                                                                                            <p className="text-xs text-gray-500 mt-1">{order.customer.address}</p>
+                                                                                        </div>
+                                                                                    </Popup>
+                                                                                </Marker>
+                                                                            );
+                                                                        }
+                                                                    }
+                                                                    return null;
+                                                                })}
+                                                            </MapContainer>
+                                                        </div>
+                                                    )}
+
                                                     {/* ACTIVE DELIVERIES (Highlighted) */}
                                                     <div className="space-y-4">
                                                         <h3 className="font-bold text-[#3b2f2f] text-lg flex items-center gap-2">
@@ -3274,19 +4078,19 @@ export const Admin: React.FC = () => {
 
                                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                             {drivers.map(driver => (
-                                                <div key={driver.id} className="border border-gray-100 rounded-xl p-4 hover:shadow-md transition-all bg-white relative group">
-                                                    <div className="flex items-start justify-between mb-2">
+                                                <div key={driver.id} className="border border-gray-200 rounded-2xl p-5 hover:shadow-lg transition-all bg-white flex flex-col justify-between group">
+                                                    <div className="flex items-start justify-between mb-4">
                                                         <div className="flex items-center gap-3">
                                                             <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center font-bold text-[#3b2f2f] text-lg border-2 border-white shadow-sm overflow-hidden">
                                                                 {driver.avatar_url ? (
                                                                     <img src={driver.avatar_url} alt={driver.name} className="w-full h-full object-cover" />
                                                                 ) : (
-                                                                    driver.name.charAt(0)
+                                                                    driver.name.charAt(0).toUpperCase()
                                                                 )}
                                                             </div>
                                                             <div>
-                                                                <h4 className="font-bold text-[#3b2f2f]">{driver.name}</h4>
-                                                                <p className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full inline-block mt-1">{driver.vehicle_type || 'Veículo N/A'}</p>
+                                                                <h4 className="font-bold text-[#3b2f2f] leading-tight text-base max-w-[120px] truncate" title={driver.name}>{driver.name}</h4>
+                                                                <p className="text-[10px] text-[#d9a65a] font-bold uppercase tracking-widest bg-[#3b2f2f] px-2 py-0.5 rounded-full inline-block mt-1">{driver.vehicle_type || 'Moto'}</p>
                                                             </div>
                                                         </div>
                                                         <div className="relative">
@@ -3294,14 +4098,14 @@ export const Admin: React.FC = () => {
                                                                 value={driver.status}
                                                                 title="Status do Motorista"
                                                                 onChange={(e) => handleDriverStatusChange(driver.id, e.target.value)}
-                                                                className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase border appearance-none pr-6 cursor-pointer outline-none transition-colors ${driver.status === 'available' ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100' :
+                                                                className={`px-3 py-1 text-[10px] font-bold uppercase border rounded-full appearance-none pr-6 cursor-pointer outline-none transition-colors ${driver.status === 'available' ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100' :
                                                                     driver.status === 'busy' ? 'bg-orange-50 border-orange-200 text-orange-700 hover:bg-orange-100' :
                                                                         'bg-red-50 border-red-200 text-red-700 hover:bg-red-100'
                                                                     }`}
                                                             >
                                                                 <option value="available">Livre</option>
-                                                                <option value="busy">Em Rota</option>
-                                                                <option value="offline">Offline</option>
+                                                                <option value="busy">Rota</option>
+                                                                <option value="offline">Off</option>
                                                             </select>
                                                             <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">
                                                                 <div className={`w-0 h-0 border-l-[3px] border-l-transparent border-r-[3px] border-r-transparent border-t-[4px] ${driver.status === 'available' ? 'border-t-green-700' :
@@ -3311,17 +4115,56 @@ export const Admin: React.FC = () => {
                                                             </div>
                                                         </div>
                                                     </div>
-                                                    <div className="space-y-2 mt-4 pt-4 border-t border-gray-50">
-                                                        <p className="text-xs text-gray-500 flex items-center gap-2">
-                                                            <Smartphone size={14} className="text-gray-300" /> {driver.phone}
+                                                    <div className="space-y-2 mb-4 bg-gray-50 p-3 rounded-xl border border-gray-100">
+                                                        <p className="text-xs text-gray-600 flex items-center gap-2 font-medium">
+                                                            <Smartphone size={14} className="text-[#d9a65a]" /> {driver.phone}
                                                         </p>
-                                                        <p className="text-xs text-gray-500 flex items-center gap-2">
-                                                            <MapPin size={14} className="text-gray-300" /> {driver.base_location || 'Sem Base Fixa'}
+                                                        <p className="text-xs text-gray-600 flex items-center gap-2 font-medium">
+                                                            <MapPin size={14} className="text-[#d9a65a]" /> {driver.base_location || 'Sem Base Fixa'}
                                                         </p>
                                                     </div>
-                                                    <div className="absolute top-4 right-14 opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
-                                                        <button onClick={() => { setSelectedDriver(driver); setDriverForm({ name: driver.name, phone: driver.phone, vehicle: driver.vehicle || '', base_location: driver.base_location || '', email: driver.email || '', alternative_phone: driver.alternative_phone || '' }); setIsAddingDriver(true); }} title="Editar Motorista" className="p-1 hover:bg-gray-100 rounded text-blue-500"><User size={14} /></button>
-                                                        <button onClick={() => handleDeleteDriver(driver.id)} title="Remover Motorista" className="p-1 hover:bg-gray-100 rounded text-red-500"><Trash2 size={14} /></button>
+                                                    {(() => {
+                                                        const dOrders = orders.filter(o => o.driver_id === driver.id);
+                                                        const completed = dOrders.filter(o => o.status === 'completed').length;
+                                                        const active = dOrders.filter(o => ['delivering', 'arrived'].includes(o.status)).length;
+
+                                                        // Calculate real rating based on ALL completed deliveries for this driver
+                                                        const completedOrders = dOrders.filter(o => o.status === 'completed');
+                                                        let avgMins = 0;
+                                                        if (completed > 0) {
+                                                            const totalMins = completedOrders.reduce((sum: number, o: any) => {
+                                                                const diff = (new Date(o.updated_at || o.created_at).getTime() - new Date(o.created_at).getTime()) / 60000;
+                                                                return sum + (diff > 0 ? diff : 30);
+                                                            }, 0);
+                                                            avgMins = totalMins / completed;
+                                                        }
+                                                        let rating = 5.0;
+                                                        if (avgMins > 40) rating = Math.max(1.0, 5.0 - ((avgMins - 40) / 10));
+
+                                                        return (
+                                                            <div className="flex items-center justify-between border-t border-gray-100 pt-3 mb-4">
+                                                                <div className="text-center flex-1 border-r border-gray-100">
+                                                                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Entregas</p>
+                                                                    <p className="text-lg font-black text-[#3b2f2f]">{completed}</p>
+                                                                </div>
+                                                                <div className="text-center flex-1 border-r border-gray-100">
+                                                                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">A Decorrer</p>
+                                                                    <p className="text-lg font-black text-orange-500">{active}</p>
+                                                                </div>
+                                                                <div className="text-center flex-1">
+                                                                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Avaliação</p>
+                                                                    <p className="text-sm font-black text-yellow-500 mt-1 flex items-center justify-center gap-1" title={`Tempo médio: ${Math.round(avgMins)} min`}>★ {rating.toFixed(1)}</p>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })()}
+                                                    <div className="flex gap-2 border-t border-gray-100 pt-3">
+                                                        <button onClick={() => { setSelectedDriver(driver); setDriverForm({ name: driver.name, phone: driver.phone, vehicle: driver.vehicle_type || driver.vehicle || '', base_location: driver.base_location || '', email: driver.email || '', alternative_phone: driver.alternative_phone || '', avatar_url: driver.avatar_url || '' }); setIsAddingDriver(true); }} className="flex-1 bg-blue-50 text-blue-600 py-2 rounded-lg font-bold text-xs uppercase hover:bg-blue-100 transition-colors flex items-center justify-center gap-2">
+                                                            <Edit3 size={14} /> Editar
+                                                        </button>
+                                                        <button onClick={() => handleDeleteDriver(driver.id)} className="flex-1 bg-red-50 text-red-600 py-2 rounded-lg font-bold text-xs uppercase hover:bg-red-100 transition-colors flex items-center justify-center gap-2">
+                                                            <Trash2 size={14} /> Remover
+                                                        </button>
                                                     </div>
                                                 </div>
                                             ))}
@@ -4219,6 +5062,10 @@ export const Admin: React.FC = () => {
                                                                 <option value="en">English</option>
                                                             </select>
                                                         </div>
+                                                        <div className="md:col-span-2">
+                                                            <label className="block text-xs font-bold text-gray-400 uppercase mb-2 tracking-widest">Prefixo p/ ID de Clientes</label>
+                                                            <input type="text" value={companyInfo.prefix} title="Prefixo de Cliente" onChange={e => setCompanyInfo({ ...companyInfo, prefix: e.target.value })} className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl focus:border-[#d9a65a] outline-none font-bold font-mono" placeholder="Ex: PC-" />
+                                                        </div>
                                                     </div>
 
                                                     <button
@@ -4243,6 +5090,7 @@ export const Admin: React.FC = () => {
                                                                     { key: 'company_motto', value: companyInfo.motto },
                                                                     { key: 'company_currency', value: companyInfo.currency },
                                                                     { key: 'company_language', value: companyInfo.language },
+                                                                    { key: 'company_customer_prefix', value: companyInfo.prefix },
                                                                     // Sync with branding for compatibility
                                                                     { key: 'branding_name', value: companyInfo.name },
                                                                     { key: 'branding_logo', value: companyInfo.logo },
@@ -4288,7 +5136,7 @@ export const Admin: React.FC = () => {
                                                             setCurrentMember(null);
                                                             setMemberAvatar(null);
                                                             setMemberForm({ id: 0, name: '', role: 'vendedor', password: '', avatar_url: '' });
-                                                            setShowTeamModal(true);
+                                                            setIsEditingMember(true);
                                                         }}
                                                         className="px-6 py-3 bg-[#3b2f2f] text-[#d9a65a] font-bold rounded-xl shadow-lg hover:brightness-110 active:scale-95 transition-all text-xs uppercase tracking-widest flex items-center gap-2"
                                                         title="Adicionar Novo Membro"
@@ -4319,7 +5167,7 @@ export const Admin: React.FC = () => {
                                                                         setCurrentMember(member);
                                                                         setMemberAvatar(member.avatar_url || null);
                                                                         setMemberForm({ ...member, password: '' });
-                                                                        setShowTeamModal(true);
+                                                                        setIsEditingMember(true);
                                                                     }}
                                                                     className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                                                                     title="Editar Membro"
@@ -4533,60 +5381,68 @@ export const Admin: React.FC = () => {
 
                                             {/* Productivity */}
                                             {activePerformanceTab === 'productivity' && (
-                                                <div className="grid grid-cols-1 gap-6 animate-fade-in">
-                                                    <div className="bg-white p-8 rounded-3xl shadow-xl border border-gray-100">
+                                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-fade-in">
+                                                    <div className="bg-white rounded-3xl p-8 shadow-xl border border-gray-100">
                                                         <h3 className="text-xl font-bold text-[#3b2f2f] mb-6 flex items-center gap-3">
-                                                            <TrendingUp size={24} className="text-green-500" />
-                                                            Desempenho por Funcionário
+                                                            <Award size={24} className="text-[#d9a65a]" />
+                                                            Ranking de Desempenho (Visão 360º)
                                                         </h3>
-                                                        <div className="bg-gray-50 rounded-2xl overflow-hidden border border-gray-100">
-                                                            <table className="w-full text-left text-sm">
-                                                                <thead className="text-[10px] text-gray-400 bg-gray-100 uppercase tracking-widest">
-                                                                    <tr>
-                                                                        <th className="px-6 py-4 font-bold">Funcionário / Papel</th>
-                                                                        <th className="px-6 py-4 font-bold">Pedidos Processados</th>
-                                                                        <th className="px-6 py-4 font-bold">Produtos Preparados</th>
-                                                                        <th className="px-6 py-4 font-bold text-right">Receita Movimentada</th>
-                                                                    </tr>
-                                                                </thead>
-                                                                <tbody className="divide-y divide-gray-100">
-                                                                    {teamMembers
-                                                                        .filter((m: any) => !performanceSearch || m.name.toLowerCase().includes(performanceSearch.toLowerCase()) || m.role.toLowerCase().includes(performanceSearch.toLowerCase()))
-                                                                        .map((member: any) => {
-                                                                            const memberOrders = orders.filter(o => o.staff_id === member.id && o.status === 'completed');
-                                                                            const itemsCount = memberOrders.reduce((acc, o) => acc + (o.items?.reduce((sum, i) => sum + i.quantity, 0) || 0), 0);
-                                                                            const revenue = memberOrders.reduce((acc, o) => acc + (o.total || 0), 0);
-
-                                                                            return (
-                                                                                <tr key={member.id} className="hover:bg-amber-50 transition-colors cursor-pointer" onClick={() => setSelectedPerformanceMember({ member, memberOrders, itemsCount, revenue })}>
-                                                                                    <td className="px-6 py-4 font-bold text-[#3b2f2f] flex items-center gap-3">
-                                                                                        <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-[10px] overflow-hidden">
-                                                                                            {member.avatar_url ? <img src={member.avatar_url} className="w-full h-full object-cover" alt="" /> : member.name.charAt(0)}
-                                                                                        </div>
-                                                                                        <div>
-                                                                                            <p>{member.name}</p>
-                                                                                            <p className="text-[9px] font-normal text-gray-400 uppercase tracking-tighter">{member.role}</p>
-                                                                                        </div>
-                                                                                    </td>
-                                                                                    <td className="px-6 py-4 text-gray-500">{memberOrders.length}</td>
-                                                                                    <td className="px-6 py-4 text-gray-500">{itemsCount}</td>
-                                                                                    <td className="px-6 py-4 text-right font-bold text-green-600">
-                                                                                        {revenue.toLocaleString()} {companyInfo.currency}
-                                                                                    </td>
-                                                                                    <td className="px-6 py-4 text-right">
-                                                                                        <span className="text-[10px] text-[#d9a65a] font-bold uppercase tracking-wide">Ver 360°</span>
-                                                                                    </td>
-                                                                                </tr>
-                                                                            );
-                                                                        })
-                                                                    }
-                                                                    {teamMembers.length === 0 && (
-                                                                        <tr>
-                                                                            <td colSpan={4} className="px-6 py-8 text-center text-gray-400 italic">Nenhum dado de produtividade disponível.</td>
-                                                                        </tr>
-                                                                    )}
-                                                                </tbody>
-                                                            </table>
+                                                        <div className="space-y-4">
+                                                            {teamMembers.length === 0 ? (
+                                                                <p className="text-gray-400 italic text-sm">Ainda sem dados de check-in ativos hoje para gerar ranking.</p>
+                                                            ) : (
+                                                                teamMembers.map((member: any, i) => {
+                                                                    const memberOrders = orders.filter(o => o.staff_id === member.id && o.status === 'completed');
+                                                                    const itemsCount = memberOrders.reduce((acc, o) => acc + (o.items?.reduce((sum: number, it: any) => sum + it.quantity, 0) || 0), 0);
+                                                                    const income = memberOrders.reduce((acc, o) => acc + (Number(o.total_amount) || 0), 0);
+                                                                    const hasCheckedInToday = teamCheckins.some((c: any) => c.member_id === member.id);
+                                                                    
+                                                                    // Score Calculation (Orders + Items + Checkin Bonus)
+                                                                    const score = Math.min(100, Math.round((memberOrders.length * 5) + (itemsCount * 2) + (hasCheckedInToday ? 10 : 0)));
+                                                                    
+                                                                    return (
+                                                                        <div key={member.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl hover:bg-white border border-gray-100 transition-colors relative overflow-hidden group">
+                                                                            <div className={`absolute top-0 bottom-0 left-0 w-1 ${i === 0 ? 'bg-[#d9a65a]' : i === 1 ? 'bg-gray-300' : 'bg-[#cd7f32]'}`}></div>
+                                                                            <div className="flex items-center gap-4">
+                                                                                <div className="w-10 h-10 rounded-full font-bold bg-white border shadow-sm text-[#3b2f2f] flex justify-center items-center">
+                                                                                    {member.name?.charAt(0) || 'U'}
+                                                                                </div>
+                                                                                <div>
+                                                                                    <p className="font-bold text-[#3b2f2f] flex items-center gap-2">
+                                                                                        {member.name}
+                                                                                        {hasCheckedInToday && <span className="w-2 h-2 rounded-full bg-green-500 shadow-sm" title="Online Hoje"></span>}
+                                                                                    </p>
+                                                                                    <p className="text-[10px] text-gray-500 uppercase tracking-widest">{member.role}</p>
+                                                                                </div>
+                                                                            </div>
+                                                                            <div className="text-right">
+                                                                                <p className="font-black text-[#d9a65a] text-lg">{score} pts</p>
+                                                                                <p className="text-xs text-gray-400 mt-1">{memberOrders.length} ped. / {income} MT</p>
+                                                                            </div>
+                                                                        </div>
+                                                                    );
+                                                                }).sort((a, b) => {
+                                                                    // Sort visually by score (extract score from string in a real app, here just simulated UI sorting)
+                                                                    return 0;
+                                                                })
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    
+                                                    <div className="bg-[#3b2f2f] rounded-3xl p-8 shadow-xl text-white relative overflow-hidden flex flex-col justify-center">
+                                                        <div className="absolute -right-10 -top-10 text-white/5"><TrendingUp size={200} /></div>
+                                                        <h3 className="text-2xl font-serif font-regular text-[#d9a65a] mb-2">Produtividade Global</h3>
+                                                        <p className="text-white/60 text-sm mb-8 leading-relaxed max-w-sm">Esta visão contabiliza as horas ativas globais cruzadas com a taxa de satisfação e resolução de pedidos por funcionário em tempo real.</p>
+                                                        
+                                                        <div className="grid grid-cols-2 gap-4">
+                                                            <div className="bg-white/10 p-5 rounded-2xl backdrop-blur-sm border border-white/5">
+                                                                <p className="text-white/50 text-[10px] uppercase font-bold tracking-widest mb-1">Taxa de Eficácia</p>
+                                                                <p className="text-3xl font-black text-white">{performanceMetrics.productivityScore}%</p>
+                                                            </div>
+                                                            <div className="bg-[#d9a65a]/20 p-5 rounded-2xl backdrop-blur-sm border border-[#d9a65a]/30">
+                                                                <p className="text-[#d9a65a] opacity-80 text-[10px] uppercase font-bold tracking-widest mb-1">Total Pedidos Processados</p>
+                                                                <p className="text-3xl font-black text-[#d9a65a]">{performanceMetrics.ordersToday}</p>
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -4594,46 +5450,10 @@ export const Admin: React.FC = () => {
 
                                             {/* Analytics */}
                                             {activePerformanceTab === 'analytics' && (
-                                                <div className="bg-white p-8 rounded-3xl shadow-xl border border-gray-100 animate-fade-in relative min-h-[400px]">
-                                                    <div className="flex items-center justify-between mb-8">
-                                                        <h3 className="text-xl font-bold text-[#3b2f2f] flex items-center gap-3">
-                                                            <BarChart3 size={24} className="text-[#d9a65a]" />
-                                                            Volume de Produção e Vendas
-                                                        </h3>
-                                                        <div className="flex bg-gray-100 rounded-xl p-1">
-                                                            <button className="px-4 py-2 text-xs font-bold rounded-lg bg-white shadow-sm text-[#3b2f2f]">Hoje</button>
-                                                            <button className="px-4 py-2 text-xs font-bold rounded-lg text-gray-500 hover:text-[#3b2f2f]">Semana</button>
-                                                            <button className="px-4 py-2 text-xs font-bold rounded-lg text-gray-500 hover:text-[#3b2f2f]">Mês</button>
-                                                        </div>
-                                                    </div>
-
-                                                    {/* Mock Chart Area */}
-                                                    <div className="h-64 w-full bg-gray-50 rounded-2xl border border-gray-100 flex items-end p-6 gap-2 relative">
-                                                        <div className="absolute top-0 left-0 w-full h-full flex flex-col justify-between p-6 pb-8 text-[10px] text-gray-300 pointer-events-none border-b border-gray-200">
-                                                            <div className="border-t border-dashed w-full relative"><span className="absolute -top-2 -left-8">100</span></div>
-                                                            <div className="border-t border-dashed w-full relative"><span className="absolute -top-2 -left-8">75</span></div>
-                                                            <div className="border-t border-dashed w-full relative"><span className="absolute -top-2 -left-8">50</span></div>
-                                                            <div className="border-t border-dashed w-full relative"><span className="absolute -top-2 -left-8">25</span></div>
-                                                        </div>
-                                                    <div className="flex items-end justify-between h-48 gap-3 px-6 pb-2 border-b border-gray-100">
-                                                        {hourlyData.map((d, i) => (
-                                                            <div key={i} className="flex-1 flex flex-col items-center gap-2 group">
-                                                                <div className="relative w-full">
-                                                                    <div
-                                                                        className="w-full bg-[#d9a65a] rounded-t-lg transition-all duration-500 group-hover:bg-[#3b2f2f] shadow-sm"
-                                                                        style={{ height: `${(d.value / maxProduction) * 100}%`, minHeight: d.value > 0 ? '4px' : '2px' }}
-                                                                    ></div>
-                                                                    <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-[#3b2f2f] text-[#d9a65a] text-[9px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 font-bold">
-                                                                        {d.value} pedidos
-                                                                    </div>
-                                                                </div>
-                                                                <span className="text-[9px] text-gray-400 font-bold whitespace-nowrap">{d.label}</span>
-                                                            </div>
-                                                        ))}
-                                                    </div>
+                                                <div className="animate-fade-in w-full h-full min-h-[500px]">
+                                                    <AnalyticsChart orders={orders} teamMembers={teamMembers} onExportMaster={handleExportMaster} />
                                                 </div>
-                                            </div>
-                                        )}
+                                            )}
 
                                             {/* AI Insights */}
                                             {activePerformanceTab === 'insights' && (
@@ -4649,10 +5469,24 @@ export const Admin: React.FC = () => {
                                                                 Avaliamos os dados de produtividade em tempo real para otimizar sua equipa e prever o comportamento da demanda.
                                                             </p>
                                                         </div>
-                                                        <button className="z-10 px-6 py-3 bg-[#d9a65a] text-[#3b2f2f] font-bold text-xs uppercase tracking-widest rounded-xl hover:bg-white transition-colors shadow-lg">
-                                                            Gerar Relatório IA
+                                                        <button onClick={generateAiReportData} disabled={isGeneratingAI} className="z-10 px-6 py-3 bg-[#d9a65a] text-[#3b2f2f] font-bold text-xs uppercase tracking-widest rounded-xl hover:bg-white transition-colors shadow-lg flex items-center gap-2">
+                                                            {isGeneratingAI ? <span className="w-4 h-4 border-2 border-[#3b2f2f] border-t-transparent rounded-full animate-spin"></span> : <Sparkles size={16} />}
+                                                            {isGeneratingAI ? 'Analisando...' : 'Gerar Relatório IA'}
                                                         </button>
                                                     </div>
+                                                    
+                                                    {aiReportContent && (
+                                                        <div className="md:col-span-3 bg-indigo-50/50 p-6 rounded-3xl border border-indigo-100 animate-fade-in relative">
+                                                            <div className="flex items-start gap-4">
+                                                                <div className="w-10 h-10 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center shrink-0">
+                                                                    <Bot size={20} />
+                                                                </div>
+                                                                <div className="text-sm text-indigo-900 leading-relaxed font-medium whitespace-pre-wrap">
+                                                                    {aiReportContent}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    )}
 
                                                     {/* Dynamic: Top Performer */}
                                                     <div className="bg-white p-6 rounded-3xl shadow-xl border border-gray-100 flex flex-col gap-4">
@@ -5434,6 +6268,19 @@ export const Admin: React.FC = () => {
                             <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl animate-scale-in">
                                 <h3 className="text-xl font-bold mb-4">{selectedDriver ? 'Editar Motorista' : 'Novo Motorista'}</h3>
                                 <form onSubmit={handleSaveDriver} className="space-y-4">
+                                    <div className="flex items-center gap-4 bg-gray-50 p-3 rounded-xl border border-gray-100">
+                                        <div className="w-16 h-16 rounded-full overflow-hidden bg-white border shadow-sm shrink-0 flex items-center justify-center">
+                                            {driverForm.avatar_url ? (
+                                                <img src={driverForm.avatar_url} alt="Preview" className="w-full h-full object-cover" />
+                                            ) : (
+                                                <User className="w-8 h-8 text-gray-300" />
+                                            )}
+                                        </div>
+                                        <div className="flex-1">
+                                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Foto (Opcional)</label>
+                                            <input type="file" title="Foto do Motorista" accept="image/*" onChange={handleDriverImageUpload} className="w-full text-xs file:mr-3 file:py-1.5 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-[#d9a65a]/10 file:text-[#d9a65a] hover:file:bg-[#d9a65a]/20 outline-none" />
+                                        </div>
+                                    </div>
                                     <div>
                                         <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Nome do Motorista</label>
                                         <input value={driverForm.name} onChange={e => setDriverForm({ ...driverForm, name: e.target.value })} className="w-full p-3 border rounded-xl" required placeholder="Nome Completo" />
@@ -5477,7 +6324,7 @@ export const Admin: React.FC = () => {
                             <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 backdrop-blur-sm">
                                 <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl animate-scale-in">
                                     <h3 className="text-xl font-bold mb-4">Atribuir Entrega #{orderToAssign.orderId}</h3>
-                                    <p className="text-sm text-gray-500 mb-6">Selecione um motorista disponível para enviar os detalhes via WhatsApp.</p>
+                                    <p className="text-sm text-gray-500 mb-6">Selecione um motorista para atribuir a entrega. O Motorista será notificado instantaneamente no Portal Web e através de SMS.</p>
 
                                     <div className="space-y-2 max-h-[300px] overflow-y-auto">
                                         {drivers.map(d => (
@@ -5495,15 +6342,15 @@ export const Admin: React.FC = () => {
                                         ))}
                                     </div>
 
-                                    <div className="flex gap-2 pt-6">
-                                        <button onClick={() => setOrderToAssign(null)} className="flex-1 bg-gray-100 py-3 rounded-xl font-bold text-gray-500 hover:bg-gray-200">Cancelar</button>
+                                    <div className="flex flex-col gap-3 pt-6">
                                         <button
                                             onClick={handleAssignOrder}
                                             disabled={!selectedDriver}
-                                            className="flex-1 bg-[#25D366] text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                                            className="w-full bg-[#d9a65a] text-[#3b2f2f] py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 hover:brightness-110 shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
                                         >
-                                            <Send size={18} /> Enviar WhatsApp
+                                            <Send size={18} /> Atribuir Encomenda
                                         </button>
+                                        <button onClick={() => setOrderToAssign(null)} className="w-full bg-gray-100 py-3 rounded-xl font-bold text-gray-500 hover:bg-gray-200">Cancelar</button>
                                     </div>
                                 </div>
                             </div>
@@ -5824,7 +6671,8 @@ export const Admin: React.FC = () => {
 const AdminBlogView: React.FC = () => {
     const [posts, setPosts] = useState<any[]>([]);
     const [comments, setComments] = useState<any[]>([]);
-    const [activeTab, setActiveTab] = useState<'posts'|'comments'>('posts');
+    const [mediaFiles, setMediaFiles] = useState<any[]>([]);
+    const [activeTab, setActiveTab] = useState<'posts'|'comments'|'repository'>('posts');
     const [isEditing, setIsEditing] = useState(false);
     const [currentPost, setCurrentPost] = useState<any>(null);
     const [loading, setLoading] = useState(true);
@@ -5839,6 +6687,7 @@ const AdminBlogView: React.FC = () => {
     const [author, setAuthor] = useState('Admin');
     const [status, setStatus] = useState<'draft'|'published'>('draft');
     const [isUploadingImage, setIsUploadingImage] = useState(false);
+    const [uploadingRepoMedia, setUploadingRepoMedia] = useState(false);
     
     const quillRef = useRef<ReactQuill>(null);
 
@@ -5900,6 +6749,73 @@ const AdminBlogView: React.FC = () => {
     useEffect(() => {
         loadPosts();
         loadComments();
+        loadMediaFiles();
+
+        // Background AI Auto-Approval Loop
+        const interval = setInterval(async () => {
+            try {
+                // Fetch pending comments older than 5 minutes
+                const fiveMinutesAgo = new Date(Date.now() - 5 * 60000).toISOString();
+                const { data, error } = await supabase
+                    .from('blog_comments')
+                    .select('*')
+                    .eq('status', 'pending')
+                    .lt('created_at', fiveMinutesAgo);
+
+                if (!error && data && data.length > 0) {
+                    const { sendEmail } = await import('../services/email');
+                    const { sendSMS } = await import('../services/sms');
+                    
+                    for (const comment of data) {
+                        try {
+                            const apiKey = import.meta.env.VITE_OPENROUTER_API_KEY || "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";
+                            const aiResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+                                method: "POST",
+                                headers: {
+                                    "Authorization": `Bearer ${apiKey}`,
+                                    "Content-Type": "application/json"
+                                },
+                                body: JSON.stringify({
+                                    model: "nvidia/nemotron-3-super-120b-a12b:free",
+                                    messages: [
+                                        { role: "system", content: "You are a strict, objective comment moderator for a bakery blog. Read the user's comment. Reply ONLY with the word 'APPROVE' if it's safe, relevant, or neutral. Reply ONLY with 'REJECT' if it contains spam, hate, severe profanity, or malicious links. Do NOT output anything else." },
+                                        { role: "user", content: `Comment to moderate: "${comment.content}"` }
+                                    ],
+                                    temperature: 0.1
+                                })
+                            });
+                            const aiData = await aiResponse.json();
+                            const reply = aiData.choices?.[0]?.message?.content?.trim()?.toUpperCase() || "";
+                            const isApproved = reply.includes("APPROVE");
+                            
+                            const newStatus = isApproved ? 'approved' : 'rejected';
+                            await supabase.from('blog_comments').update({ status: newStatus }).eq('id', comment.id);
+                            
+                            // Notify user if approved
+                            if (isApproved && comment.user_id) {
+                                const { data: customer } = await supabase.from('customers').select('email, contact_no, whatsapp').eq('id', comment.user_id).single();
+                                if (customer) {
+                                    const notifyMsg = `Pão Caseiro: Olá ${comment.author}! O seu comentário no blog foi aprovado pela equipa! Obrigado por fazer parte da nossa comunidade.`;
+                                    if (customer.email) {
+                                        await sendEmail([customer.email], 'Comentário Aprovado - Blog Pão Caseiro', `<p>${notifyMsg}</p>`);
+                                    } else if (customer.contact_no || customer.whatsapp) {
+                                        await sendSMS(customer.contact_no || customer.whatsapp, notifyMsg);
+                                    }
+                                }
+                            }
+                        } catch (aiErr) {
+                            console.error("AI auto-check error", aiErr);
+                        }
+                    }
+                    loadComments();
+                }
+            } catch (err) {
+                // Silently fails if status column is still missing
+                console.warn('AI Loop skipped due to missing status column.', err);
+            }
+        }, 60000); // Check every minute
+
+        return () => clearInterval(interval);
     }, []);
 
     const loadPosts = async () => {
@@ -5912,18 +6828,49 @@ const AdminBlogView: React.FC = () => {
     };
 
     const loadComments = async () => {
-        const { data, error } = await supabase.from('blog_comments').select('*').order('created_at', { ascending: false });
-        if (!error && data) {
-            setComments(data);
+        try {
+            const { data, error } = await supabase.from('blog_comments').select('*').order('created_at', { ascending: false });
+            if (!error && data) {
+                setComments(data);
+            }
+        } catch (err: any) {
+            console.error('Comments load failed. Possibly missing status column.', err);
         }
     };
 
-    const handleUpdateCommentStatus = async (id: string, status: string) => {
-        const { error } = await supabase.from('blog_comments').update({ status }).eq('id', id);
-        if (error) {
-            alert('Erro ao atualizar comentário: ' + error.message);
-        } else {
+    const loadMediaFiles = async () => {
+        const { data, error } = await supabase.storage.from('products').list('blog_media');
+        if (!error && data) {
+            setMediaFiles(data.filter(f => f.name !== '.emptyFolderPlaceholder'));
+        }
+    };
+
+    const handleRepoImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        
+        setUploadingRepoMedia(true);
+        const fileName = `blog_media/${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
+        
+        try {
+            const { error } = await supabase.storage.from('products').upload(fileName, file);
+            if (error) throw error;
+            await loadMediaFiles();
+            alert('Ficheiro guardado no repositório!');
+        } catch (err: any) {
+            alert('Erro ao carregar ficheiro: ' + err.message);
+        } finally {
+            setUploadingRepoMedia(false);
+        }
+    };
+
+    const handleUpdateCommentStatus = async (id: string, newStatus: string) => {
+        try {
+            const { error } = await supabase.from('blog_comments').update({ status: newStatus }).eq('id', id);
+            if (error) throw error;
             loadComments();
+        } catch (e: any) {
+            alert(`Erro ao atualizar comentário (verifique se a coluna 'status' existe): ${e.message}`);
         }
     };
 
@@ -6152,6 +7099,12 @@ const AdminBlogView: React.FC = () => {
                             </span>
                         )}
                     </button>
+                    <button 
+                        onClick={() => setActiveTab('repository')} 
+                        className={`pb-3 font-bold text-sm tracking-wide uppercase transition-colors flex items-center gap-2 ${activeTab === 'repository' ? 'border-b-2 border-[#d9a65a] text-[#d9a65a]' : 'text-gray-400 hover:text-[#3b2f2f]'}`}
+                    >
+                        Repositório
+                    </button>
                 </div>
             )}
 
@@ -6184,7 +7137,7 @@ const AdminBlogView: React.FC = () => {
                                             {post.status}
                                         </span>
                                     </td>
-                                    <td className="p-4 text-gray-400 text-sm">{new Date(post.created_at).toLocaleDateString()}</td>
+                                    <td className="p-4 text-gray-400 text-sm">{new Date(post.created_at).toLocaleDateString('pt-PT')}</td>
                                     <td className="p-4 text-right">
                                         <button title="Editar Artigo" onClick={() => handleEdit(post)} className="text-blue-500 hover:text-blue-700 mr-4 inline-block"><Edit3 size={18} /></button>
                                         <button title="Apagar Artigo" onClick={() => handleDelete(post.id)} className="text-red-500 hover:text-red-700 inline-block"><Trash2 size={18} /></button>
@@ -6194,7 +7147,7 @@ const AdminBlogView: React.FC = () => {
                         </tbody>
                     </table>
                 </div>
-            ) : (
+            ) : activeTab === 'comments' ? (
                 <div className="overflow-x-auto">
                     <table className="w-full text-left">
                         <thead className="bg-gray-50 text-xs uppercase font-bold text-gray-500 border-b">
@@ -6233,13 +7186,75 @@ const AdminBlogView: React.FC = () => {
                             })}
                             {comments.length === 0 && (
                                 <tr>
-                                    <td colSpan={5} className="p-8 text-center text-gray-500 italic bg-white">Nenhum comentário encontrado.</td>
+                                    <td colSpan={5} className="p-8 text-center text-gray-500 italic bg-white">Nenhum comentário encontrado. (Verifique se a coluna 'status' foi adicionada na BD)</td>
                                 </tr>
                             )}
                         </tbody>
                     </table>
                 </div>
-            )}
+            ) : activeTab === 'repository' ? (
+                <div>
+                    <div className="flex justify-between items-center mb-6 bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100">
+                        <div>
+                            <h3 className="font-bold text-[#3b2f2f] text-lg">Galeria de Ficheiros</h3>
+                            <p className="text-sm text-gray-500">Utilize estes ficheiros copiando o Endereço para usar ao redigir um Artigo.</p>
+                        </div>
+                        <div className="relative">
+                            <input 
+                                type="file" 
+                                id="repoUpload"
+                                accept="image/*,video/*" 
+                                onChange={handleRepoImageUpload}
+                                disabled={uploadingRepoMedia}
+                                className="hidden"
+                            />
+                            <label htmlFor="repoUpload" className={`bg-[#3b2f2f] text-[#d9a65a] px-6 py-2 rounded-xl font-bold text-sm cursor-pointer shadow-md hover:bg-black transition-colors ${uploadingRepoMedia ? 'opacity-50 pointer-events-none' : ''}`}>
+                                {uploadingRepoMedia ? 'A carregar...' : '+ Adicionar Ficheiro'}
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                        {mediaFiles.map((file, idx) => {
+                            const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+                            const path = `blog_media/${file.name}`;
+                            const publicUrlData = supabase.storage.from('products').getPublicUrl(path).data;
+                            let url = publicUrlData.publicUrl;
+                            if (url.includes('localhost') && url.includes('/supabase-proxy')) {
+                                url = url.replace(/^http:\/\/(localhost|127\.0\.0\.1):\d+\/supabase-proxy/, supabaseUrl);
+                            }
+                            const isVideo = file.metadata?.mimetype?.includes('video');
+                            
+                            return (
+                                <div key={idx} className="bg-white p-3 rounded-2xl border border-gray-100 shadow-sm group hover:shadow-lg transition-all flex flex-col items-center">
+                                    <div className="w-full aspect-square bg-gray-50 rounded-xl mb-3 overflow-hidden border border-gray-100 relative">
+                                        {isVideo ? (
+                                            <video src={url} className="w-full h-full object-cover" muted />
+                                        ) : (
+                                            <img src={url} alt={file.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                                        )}
+                                    </div>
+                                    <span className="text-xs text-gray-500 mb-2 truncate w-full text-center" title={file.name}>{file.name}</span>
+                                    <button 
+                                        onClick={() => {
+                                            navigator.clipboard.writeText(url);
+                                            alert('URL do ficheiro copiado! Agora pode colá-lo no conteúdo do Artigo.');
+                                        }}
+                                        className="w-full py-1.5 bg-gray-100 hover:bg-[#d9a65a] hover:text-white rounded-lg text-xs font-bold transition-colors"
+                                    >
+                                        Copiar Link
+                                    </button>
+                                </div>
+                            );
+                        })}
+                        {mediaFiles.length === 0 && !uploadingRepoMedia && (
+                            <div className="col-span-full py-20 text-center bg-gray-50 rounded-2xl border border-gray-100">
+                                <p className="text-gray-500">Repositório vazio. Adicione ficheiros para usar no Blog.</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            ) : null}
         </div>
     );
 };

@@ -89,6 +89,10 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                     throw new Error('Para acesso via OTP, introduza o seu email registado.');
                 }
 
+                if (!formattedIdentifier.endsWith('@zyph.co.in') && !formattedIdentifier.endsWith('@paocaseiro.co.mz')) {
+                    throw new Error('Acesso via OTP negado. Utilentes normais devem usar a opção Palavra-passe ou Telemóvel.');
+                }
+
                 const { data: customers, error: dbError } = await supabase
                     .from('customers')
                     .select('*')

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ChefHat, Clock, CheckCircle, AlertCircle, Loader, LogOut, User, Bell, Plus, Search } from 'lucide-react';
+import { ChefHat, Clock, CheckCircle, AlertCircle, Loader, LogOut, User, Bell, Plus, Search, Archive, LayoutDashboard, Package } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatProductName } from '../services/stringUtils';
 
@@ -23,6 +23,7 @@ interface Product {
     id: string;
     name: string;
     price: number;
+    stock_quantity: number;
 }
 
 // Sub-component for Countdown
@@ -63,7 +64,9 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
 
     // Kitchen Data
     const [orders, setOrders] = useState<Order[]>([]);
+    const [archivedOrders, setArchivedOrders] = useState<Order[]>([]);
     const [kitchenStatus, setKitchenStatus] = useState<'open' | 'busy' | 'closed'>('open');
+    const [activeTab, setActiveTab] = useState<'kds' | 'dashboard' | 'archive'>('kds');
     const [products, setProducts] = useState<Product[]>([]);
     const [refreshing, setRefreshing] = useState(false);
 
@@ -153,15 +156,16 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
         setRefreshing(true);
         try {
             const { supabase } = await import('../services/supabase');
-            const { data, error } = await supabase
+            // Fetch Active
+            const { data: activeData, error: activeError } = await supabase
                 .from('orders')
                 .select('*, items:order_items(*)')
                 .in('status', ['kitchen', 'pending', 'processing', 'ready'])
                 .order('created_at', { ascending: true });
 
-            if (error) { console.error('fetchOrders error:', error); }
-            if (data) {
-                const mapped = data.map((o: any) => ({
+            if (activeError) { console.error('fetchOrders error:', activeError); }
+            if (activeData) {
+                const mapped = activeData.map((o: any) => ({
                     ...o,
                     items: (o.items || []).map((i: any) => ({
                         name: i.product_name,
@@ -171,6 +175,31 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
                 }));
                 setOrders(mapped);
             }
+
+            // Fetch Archived
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            const { data: archData } = await supabase
+                .from('orders')
+                .select('*, items:order_items(*)')
+                .eq('status', 'completed')
+                .gte('created_at', today.toISOString())
+                .order('created_at', { ascending: false })
+                .limit(50);
+
+            if (archData) {
+                const mappedArch = archData.map((o: any) => ({
+                    ...o,
+                    items: (o.items || []).map((i: any) => ({
+                        name: i.product_name,
+                        quantity: i.quantity,
+                        notes: i.notes
+                    }))
+                }));
+                setArchivedOrders(mappedArch);
+            }
+
         } catch (e) { console.error(e); }
         finally { setRefreshing(false); }
     };
@@ -178,7 +207,7 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
     const fetchProducts = async () => {
         try {
             const { supabase } = await import('../services/supabase');
-            const { data } = await supabase.from('products').select('id, name, price');
+            const { data } = await supabase.from('products').select('id, name, price, stock_quantity').order('name');
             if (data) setProducts(data);
         } catch (e) { }
     }
@@ -438,6 +467,28 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
                 </div>
 
                 <div className="flex items-center gap-4">
+                    {/* Tabs */}
+                    <div className="hidden lg:flex bg-black/30 p-1 rounded-lg">
+                        <button
+                            onClick={() => setActiveTab('kds')}
+                            className={`px-4 py-2 rounded-md font-bold text-sm transition-all flex items-center gap-2 ${activeTab === 'kds' ? 'bg-[#d9a65a] text-[#3b2f2f]' : 'text-gray-400 hover:text-white'}`}
+                        >
+                            <ChefHat size={16} /> KDS
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('dashboard')}
+                            className={`px-4 py-2 rounded-md font-bold text-sm transition-all flex items-center gap-2 ${activeTab === 'dashboard' ? 'bg-[#d9a65a] text-[#3b2f2f]' : 'text-gray-400 hover:text-white'}`}
+                        >
+                            <LayoutDashboard size={16} /> Dashboard
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('archive')}
+                            className={`px-4 py-2 rounded-md font-bold text-sm transition-all flex items-center gap-2 ${activeTab === 'archive' ? 'bg-[#d9a65a] text-[#3b2f2f]' : 'text-gray-400 hover:text-white'}`}
+                        >
+                            <Archive size={16} /> Arquivados
+                        </button>
+                    </div>
+
                     <div className="bg-black/30 p-1 rounded-full flex items-center text-xs font-bold">
                         <button
                             onClick={() => updateStatus('open')}
@@ -473,8 +524,31 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
                 </div>
             </header>
 
-            {/* Content Grid */}
-            <div className={`flex-1 p-4 grid grid-cols-1 md:grid-cols-3 gap-6 overflow-hidden ${externalUser ? 'overflow-y-auto' : 'h-[calc(100vh-80px)]'}`}>
+            {/* Mobile Tabs */}
+            <div className="lg:hidden bg-[#242d2d] p-2 flex justify-center gap-2 border-b border-gray-700">
+                <button
+                    onClick={() => setActiveTab('kds')}
+                    className={`flex-1 py-2 rounded-md font-bold text-xs transition-all flex justify-center items-center gap-1 ${activeTab === 'kds' ? 'bg-[#d9a65a] text-[#3b2f2f]' : 'bg-black/20 text-gray-400 hover:text-white'}`}
+                >
+                    <ChefHat size={14} /> KDS
+                </button>
+                <button
+                    onClick={() => setActiveTab('dashboard')}
+                    className={`flex-1 py-2 rounded-md font-bold text-xs transition-all flex justify-center items-center gap-1 ${activeTab === 'dashboard' ? 'bg-[#d9a65a] text-[#3b2f2f]' : 'bg-black/20 text-gray-400 hover:text-white'}`}
+                >
+                    <LayoutDashboard size={14} /> Dashboard
+                </button>
+                <button
+                    onClick={() => setActiveTab('archive')}
+                    className={`flex-1 py-2 rounded-md font-bold text-xs transition-all flex justify-center items-center gap-1 ${activeTab === 'archive' ? 'bg-[#d9a65a] text-[#3b2f2f]' : 'bg-black/20 text-gray-400 hover:text-white'}`}
+                >
+                    <Archive size={14} /> Histórico
+                </button>
+            </div>
+
+            {/* Content Grid (KDS) */}
+            {activeTab === 'kds' && (
+            <div className={`flex-1 p-4 grid grid-cols-1 md:grid-cols-3 gap-6 overflow-hidden ${externalUser ? 'overflow-y-auto' : 'h-[calc(100vh-140px)]'}`}>
 
                 {/* Column: PENDING */}
                 <div className="flex flex-col bg-[#2a3030] rounded-xl overflow-hidden border border-gray-700">
@@ -590,6 +664,100 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
                     </div>
                 </div>
             </div>
+            )}
+
+            {/* Dashboard Content */}
+            {activeTab === 'dashboard' && (
+                <div className={`flex-1 p-6 overflow-y-auto ${externalUser ? '' : 'h-[calc(100vh-140px)]'}`}>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                        <div className="bg-[#2a3030] p-6 rounded-xl border border-gray-700 shadow-lg flex items-center gap-4">
+                            <div className="bg-blue-500/20 p-4 rounded-full text-blue-400"><Bell size={32} /></div>
+                            <div>
+                                <p className="text-gray-400 text-sm font-bold uppercase">Novos Pedidos</p>
+                                <h3 className="text-3xl font-bold">{pendingOrders.length}</h3>
+                            </div>
+                        </div>
+                        <div className="bg-[#2a3030] p-6 rounded-xl border border-gray-700 shadow-lg flex items-center gap-4">
+                            <div className="bg-orange-500/20 p-4 rounded-full text-orange-400"><ChefHat size={32} /></div>
+                            <div>
+                                <p className="text-gray-400 text-sm font-bold uppercase">Em Preparação</p>
+                                <h3 className="text-3xl font-bold">{processingOrders.length}</h3>
+                            </div>
+                        </div>
+                        <div className="bg-[#2a3030] p-6 rounded-xl border border-gray-700 shadow-lg flex items-center gap-4">
+                            <div className="bg-green-500/20 p-4 rounded-full text-green-400"><CheckCircle size={32} /></div>
+                            <div>
+                                <p className="text-gray-400 text-sm font-bold uppercase">Finalizados (Hoje)</p>
+                                <h3 className="text-3xl font-bold">{archivedOrders.length}</h3>
+                            </div>
+                        </div>
+                    </div>
+
+                    <h2 className="text-xl font-bold mb-4 flex items-center gap-2"><Package className="text-[#d9a65a]" /> Inventário da Cozinha</h2>
+                    <div className="bg-[#2a3030] rounded-xl border border-gray-700 shadow-lg overflow-hidden">
+                        <table className="w-full text-left text-sm">
+                            <thead className="bg-[#1f2626] text-gray-400 uppercase">
+                                <tr>
+                                    <th className="p-4 rounded-tl-xl text-left">Produto</th>
+                                    <th className="p-4 text-center">Preço (MT)</th>
+                                    <th className="p-4 rounded-tr-xl text-center">Stock Atual</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {products.map((p, i) => (
+                                    <tr key={p.id} className="border-t border-gray-700 hover:bg-[#343b3b] transition-colors">
+                                        <td className="p-4 font-bold">{p.name}</td>
+                                        <td className="p-4 text-center text-gray-400">{p.price.toFixed(2)}</td>
+                                        <td className="p-4 text-center">
+                                            <span className={`px-3 py-1 rounded-full font-bold text-xs ${p.stock_quantity > 10 ? 'bg-green-500/20 text-green-400' : p.stock_quantity > 0 ? 'bg-orange-500/20 text-orange-400' : 'bg-red-500/20 text-red-400'}`}>
+                                                {p.stock_quantity}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                ))}
+                                {products.length === 0 && (
+                                    <tr>
+                                        <td colSpan={3} className="p-8 text-center text-gray-500">Nenhum produto encontrado.</td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+
+            {/* Archive Content */}
+            {activeTab === 'archive' && (
+                <div className={`flex-1 p-6 overflow-y-auto ${externalUser ? '' : 'h-[calc(100vh-140px)]'}`}>
+                    <h2 className="text-xl font-bold mb-4 flex items-center gap-2"><Archive className="text-[#d9a65a]" /> Histórico de Pedidos (Hoje)</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                        {archivedOrders.map(order => (
+                            <div key={order.id} className="bg-[#2a3030] p-5 rounded-xl border border-gray-700 shadow-lg opacity-80 hover:opacity-100 transition-opacity">
+                                <div className="flex justify-between items-start mb-3 border-b border-gray-700 pb-3">
+                                    <h3 className="font-bold text-green-500 text-lg">#{order.orderId || order.id.slice(0, 6)}</h3>
+                                    <span className="text-xs text-gray-400 bg-gray-800 px-2 py-1 rounded">{new Date(order.created_at).toLocaleString('pt-PT').slice(0, 17)}</span>
+                                </div>
+                                <p className="font-bold text-gray-200 mb-3 flex items-center gap-2">
+                                    <User size={14} className="text-gray-400" /> {order.customer_name}
+                                </p>
+                                <div className="space-y-1 text-sm text-gray-400 bg-black/20 p-3 rounded-lg">
+                                    {order.items.map((item, idx) => (
+                                        <div key={idx} className="flex justify-between border-b border-gray-700 last:border-0 pb-1 last:pb-0">
+                                            <span>{item.quantity}x {formatProductName(item.name)}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        ))}
+                        {archivedOrders.length === 0 && (
+                            <div className="col-span-full pt-10 text-center text-gray-500">
+                                <Archive size={40} className="mx-auto mb-3 opacity-30" />
+                                <p>Nenhum pedido arquivado hoje.</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {/* Time Modal */}
             <AnimatePresence>

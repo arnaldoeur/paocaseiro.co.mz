@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { Language, translations } from '../translations';
-import { X, Calendar, Clock, MessageSquare, User, Phone, Search, Plus, Minus, Trash2, ShoppingBag } from 'lucide-react';
+import { X, Calendar, Clock, MessageSquare, User, Phone, Search, Plus, Minus, Trash2, ShoppingBag, CreditCard } from 'lucide-react';
 import { formatProductName } from '../services/stringUtils';
+import { useCart } from '../context/CartContext';
 
 interface ScheduleOrderModalProps {
     isOpen: boolean;
@@ -20,6 +21,7 @@ export const ScheduleOrderModal: React.FC<ScheduleOrderModalProps> = ({ isOpen, 
     // Product Selection
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedItems, setSelectedItems] = useState<{ item: any; quantity: number }[]>([]);
+    const { clearCart, addToCart } = useCart();
 
     // Safety check for menuSections
     const safeSections = Array.isArray(menuSections) ? menuSections : [];
@@ -72,24 +74,35 @@ export const ScheduleOrderModal: React.FC<ScheduleOrderModalProps> = ({ isOpen, 
             return;
         }
 
-        let itemsText = '';
-        if (selectedItems.length > 0) {
-            itemsText = `%0A*Itens Selecionados:*%0A` + selectedItems.map(i => `- ${i.quantity}x ${i.item.name}`).join('%0A') + `%0A`;
+        if (selectedItems.length === 0) {
+            alert(language === 'pt' ? 'Por favor escolha produtos para agendar.' : 'Please select products to schedule.');
+            return;
         }
 
         const formattedDate = date.split('-').reverse().join('/');
+        
+        // Save details to Cart checkout
+        localStorage.setItem('checkout_details', JSON.stringify({
+            name,
+            phone,
+            address: '', 
+            street: '',
+            referencePoint: '',
+            notes: `Agendado para ${formattedDate} às ${time}h. ${notes ? 'Notas: ' + notes : ''}`,
+            type: 'delivery',
+            isScheduled: true
+        }));
 
-        const message = `*AGENDAMENTO DE ENCOMENDA*%0A%0A` +
-            `*Nome:* ${name}%0A` +
-            `*Telefone:* ${phone}%0A` +
-            `*Data:* ${formattedDate}%0A` +
-            `*Hora:* ${time}h%0A` +
-            itemsText + `%0A` +
-            `*Notas/Detalhes:*%0A${notes || 'Nenhum'}`;
+        // Insert items into cart
+        clearCart();
+        selectedItems.forEach(selection => {
+            addToCart({ ...selection.item, quantity: selection.quantity });
+        });
 
-        const whatsappUrl = `https://wa.me/258846930960?text=${message}`;
-        window.open(whatsappUrl, '_blank');
         onClose();
+        
+        // Open Cart Sidebar
+        window.dispatchEvent(new Event('open-cart'));
     };
 
     if (!isOpen) return null;
@@ -177,10 +190,10 @@ export const ScheduleOrderModal: React.FC<ScheduleOrderModalProps> = ({ isOpen, 
 
                         <button
                             type="submit"
-                            className="w-full py-4 bg-[#25D366] hover:bg-[#128C7E] text-white font-bold rounded-xl shadow-lg transition-transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2 mt-4"
+                            className="w-full py-4 bg-[#d9a65a] hover:bg-[#c2934f] text-[#3b2f2f] font-bold rounded-xl shadow-lg transition-transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2 mt-4"
                         >
-                            <MessageSquare size={20} />
-                            {language === 'pt' ? 'Agendar via WhatsApp' : 'Schedule via WhatsApp'}
+                            <CreditCard size={20} />
+                            {language === 'pt' ? 'Prosseguir para Pagamento (70%)' : 'Proceed to Checkout (70%)'}
                         </button>
                     </form>
                 </div>

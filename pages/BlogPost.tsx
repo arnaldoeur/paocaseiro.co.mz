@@ -71,6 +71,37 @@ export const BlogPost: React.FC<{ language: Language }> = ({ language }) => {
             if (!postError && postData) {
                 setPost(postData);
                 
+                // --- Advanced SEO & Open Graph Tags ---
+                document.title = `${postData.title} | Pão Caseiro`;
+                const setMetaTag = (property: string, content: string) => {
+                    // Handle both name and property attributes for better compatibility
+                    const attr = property.includes(':') ? 'property' : 'name';
+                    let element = document.querySelector(`meta[${attr}="${property}"]`);
+                    if (!element) {
+                        element = document.createElement('meta');
+                        element.setAttribute(attr, property);
+                        document.head.appendChild(element);
+                    }
+                    element.setAttribute('content', content);
+                };
+
+                const excerpt = postData.excerpt || postData.content?.substring(0, 150).replace(/<[^>]*>?/gm, '') + '...';
+                const image = postData.image_url || 'https://paocaseiro.co.mz/images/about-bread.jpeg';
+
+                setMetaTag('description', excerpt);
+                setMetaTag('og:title', postData.title);
+                setMetaTag('og:description', excerpt);
+                setMetaTag('og:image', image);
+                setMetaTag('og:url', window.location.href);
+                setMetaTag('og:type', 'article');
+                
+                // Twitter / X cards
+                setMetaTag('twitter:card', 'summary_large_image');
+                setMetaTag('twitter:title', postData.title);
+                setMetaTag('twitter:description', excerpt);
+                setMetaTag('twitter:image', image);
+                // ---------------------------------------
+
                 // Fetch comments for this post
                 const { data: commentsData } = await supabase
                     .from('blog_comments')
@@ -90,13 +121,16 @@ export const BlogPost: React.FC<{ language: Language }> = ({ language }) => {
 
     const handleShare = async () => {
         try {
+            // Guarantee full actual URL for sharing
+            const shareUrl = window.location.href;
             if (navigator.share) {
                 await navigator.share({
                     title: post?.title,
-                    url: window.location.href,
+                    text: post?.excerpt,
+                    url: shareUrl,
                 });
             } else {
-                navigator.clipboard.writeText(window.location.href);
+                navigator.clipboard.writeText(shareUrl);
                 alert('Link copiado para a área de transferência!');
             }
         } catch (err) {

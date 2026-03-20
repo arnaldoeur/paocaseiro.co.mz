@@ -93,7 +93,7 @@ export const Blog: React.FC<{ language: Language }> = ({ language }) => {
                     <div className="w-full md:w-1/2">
                         <div className="w-full aspect-video rounded-[2rem] overflow-hidden shadow-2xl relative bg-[#3b2f2f] group">
                             <video 
-                                src="/videos/anicor-final.mp4" 
+                                src="https://backup.aegraphics.in/wp-content/uploads/2025/12/ANICOR-FINAL.mp4" 
                                 className="w-full h-full object-cover"
                                 autoPlay 
                                 muted 

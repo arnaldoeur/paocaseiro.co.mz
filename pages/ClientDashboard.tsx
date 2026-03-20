@@ -237,7 +237,7 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
 
     const handleSupportOrder = (orderId: string) => {
         const shortId = orderId.slice(-6).toUpperCase();
-        setSupportMsg(`Olá Equipa Pão Caseiro,\nPreciso de suporte com a minha encomenda #${shortId} do dia ${new Date().toLocaleDateString()}.\n\n[Descreva aqui o problema...]`);
+        setSupportMsg(`Olá Equipa Pão Caseiro,\nPreciso de suporte com a minha encomenda #${shortId} do dia ${new Date().toLocaleDateString('pt-PT')}.\n\n[Descreva aqui o problema...]`);
 
         const supportSection = document.getElementById('support-section');
         if (supportSection) {

@@ -12,7 +12,6 @@ const NAV_ITEMS = [
     { id: 'about', labelKey: 'about' },
     { id: 'services', labelKey: 'services' },
     { id: 'classics', labelKey: 'classics' },
-    { id: 'gallery', labelKey: 'gallery' },
     { id: 'contact', labelKey: 'contact' },
 ] as const;
 
@@ -66,6 +65,15 @@ export const Footer: React.FC<FooterProps> = ({ language }) => {
                             ))}
                             <li>
                                 <button
+                                    onClick={() => navigate('/gallery')}
+                                    className="hover:text-[#d9a65a] hover:translate-x-2 transition-all duration-300 flex items-center justify-center md:justify-start gap-2 text-[#f7f1eb]/80"
+                                >
+                                    <span className="w-1.5 h-1.5 rounded-full bg-[#d9a65a] shrink-0" />
+                                    {language === 'pt' ? 'Galeria' : 'Gallery'}
+                                </button>
+                            </li>
+                            <li>
+                                <button
                                     onClick={() => navigate('/menu')}
                                     className="hover:text-[#d9a65a] hover:translate-x-2 transition-all duration-300 flex items-center justify-center md:justify-start gap-2 font-bold text-[#d9a65a]"
                                 >
@@ -73,6 +81,7 @@ export const Footer: React.FC<FooterProps> = ({ language }) => {
                                     Menu
                                 </button>
                             </li>
+
                             <li>
                                 <button
                                     onClick={() => navigate('/privacidade')}
@@ -119,18 +128,18 @@ export const Footer: React.FC<FooterProps> = ({ language }) => {
                                     <Phone className="w-4 h-4" />
                                 </div>
                                 <div className="text-left">
-                                    <span className="block text-[#f7f1eb] font-bold text-sm">Telefone</span>
+                                    <span className="block text-[#f7f1eb] font-bold text-sm">Telefone / Encomendas</span>
                                     <span className="text-xs opacity-80">+258 87 9146 662</span>
                                 </div>
                             </a>
 
-                            <a href="https://wa.me/258846930960" target="_blank" rel="noopener noreferrer" className="flex items-center gap-4 group hover:opacity-80 transition-opacity w-full max-w-xs md:max-w-none">
+                            <a href="https://wa.me/258879146662" target="_blank" rel="noopener noreferrer" className="flex items-center gap-4 group hover:opacity-80 transition-opacity w-full max-w-xs md:max-w-none">
                                 <div className="bg-[#d9a65a]/10 p-2 rounded-full text-[#d9a65a] group-hover:bg-[#d9a65a] group-hover:text-[#2a2121] transition-colors shrink-0">
                                     <MessageCircle className="w-4 h-4" />
                                 </div>
                                 <div className="text-left">
                                     <span className="block text-[#f7f1eb] font-bold text-sm">WhatsApp</span>
-                                    <span className="text-xs opacity-80">+258 84 6930 960</span>
+                                    <span className="text-xs opacity-80">+258 87 9146 662</span>
                                 </div>
                             </a>
 

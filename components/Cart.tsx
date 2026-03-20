@@ -10,6 +10,7 @@ import { translations, Language } from '../translations';
 import { notifyTeam, notifyCustomer, sendSMS } from '../services/sms';
 import { saveOrderToSupabase, supabase } from '../services/supabase';
 import { formatProductName } from '../services/stringUtils';
+import { ClientLoginModal } from './ClientLoginModal';
 
 
 type CheckoutStep = 'cart' | 'details' | 'payment' | 'processing' | 'receipt';
@@ -35,6 +36,11 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [step, setStep] = useState<CheckoutStep>('cart');
     const isInitialLoad = React.useRef(true);
+    
+    // Auth State
+    const [user, setUser] = useState<any>(null);
+    const [manualUserPhone, setManualUserPhone] = useState<string | null>(null);
+    const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
 
     // Form State
     const [details, setDetails] = useState({
@@ -50,11 +56,17 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
         notes: '', // New Field
         tableZone: 'Sala Interior', // New Field for Dine-in
         tablePeople: 1, // New Field for Dine-in
-        type: 'delivery' as OrderType
+        type: 'delivery' as OrderType,
+        isScheduled: false // Scheduled items flag 70%
     });
     const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('mpesa');
     const [paymentPhone, setPaymentPhone] = useState('');
     const [error, setError] = useState('');
+    
+    // Frictionless Auth
+    const [createAccount, setCreateAccount] = useState(true);
+    const [checkoutPassword, setCheckoutPassword] = useState('');
+    const [isCreatingAccount, setIsCreatingAccount] = useState(false);
 
     // Delivery & Fees
     const [deliveryLocation, setDeliveryLocation] = useState<{ lat: number; lng: number; confirmed: boolean } | null>(null);
@@ -71,6 +83,35 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
 
     // Order Metadata for Receipt
     const [completedOrder, setCompletedOrder] = useState<any>(null);
+
+    // Global listener to open cart from modals
+    useEffect(() => {
+        const handleOpenCart = () => setIsOpen(true);
+        window.addEventListener('open-cart', handleOpenCart);
+        
+        // Setup Auth Listeners
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            setUser(session?.user ?? null);
+        });
+        setManualUserPhone(localStorage.getItem('pc_auth_phone'));
+
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+            setUser(session?.user ?? null);
+        });
+
+        const checkManual = () => {
+            setManualUserPhone(localStorage.getItem('pc_auth_phone'));
+        };
+        window.addEventListener('storage', checkManual);
+        window.addEventListener('pc_user_update', checkManual);
+
+        return () => {
+            window.removeEventListener('open-cart', handleOpenCart);
+            subscription.unsubscribe();
+            window.removeEventListener('storage', checkManual);
+            window.removeEventListener('pc_user_update', checkManual);
+        };
+    }, []);
 
     // Load saved details on mount
     useEffect(() => {
@@ -107,6 +148,28 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
         setDetails(initialDetails);
     }, []);
 
+    // Sync Details when user logs in via ClientLoginModal
+    useEffect(() => {
+        const userData = localStorage.getItem('pc_user_data');
+        if (userData) {
+            try {
+                const userObj = JSON.parse(userData);
+                setDetails(prev => ({
+                    ...prev,
+                    name: userObj.name || prev.name,
+                    phone: userObj.contact_no || prev.phone,
+                    email: userObj.email || prev.email,
+                    whatsapp: userObj.whatsapp || prev.whatsapp,
+                    address: userObj.address || prev.address,
+                    street: userObj.street || prev.street,
+                    referencePoint: userObj.reference_point || prev.referencePoint,
+                    nuit: userObj.nuit || prev.nuit,
+                    dateOfBirth: userObj.date_of_birth || prev.dateOfBirth
+                }));
+            } catch(e) {}
+        }
+    }, [user, manualUserPhone]);
+
     // Save details on change
     useEffect(() => {
         if (details.name || details.phone) {
@@ -121,7 +184,8 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                 street: details.street,
                 referencePoint: details.referencePoint,
                 notes: details.notes,
-                type: details.type
+                type: details.type,
+                isScheduled: details.isScheduled
             }));
         }
     }, [details]);
@@ -235,10 +299,16 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
     const packagingFee = details.type === 'delivery' && totalItems > 0 ? Math.ceil(totalItems / 3) * 20 : 0;
 
     const finalTotal = total + (deliveryFee > 0 ? deliveryFee : 0) + packagingFee;
-    const amountToPay = payDeposit ? finalTotal / 2 : finalTotal;
+    let amountToPay = payDeposit ? finalTotal / 2 : finalTotal;
+    
+    // Scheduled orders require 70% upfront
+    if (details.isScheduled) {
+        amountToPay = finalTotal * 0.7;
+    }
+    
     const remainingBalance = finalTotal - amountToPay;
 
-    const handleNextStep = () => {
+    const handleNextStep = async () => {
         if (step === 'cart') {
             // Check Shop Hours
             const now = new Date();
@@ -279,9 +349,58 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                 setError('Por favor preencha os dados obrigatórios: Nome, Telefone e Email.');
                 return;
             }
+            if (details.phone.replace(/\D/g, '').length < 9) {
+                setError('O celular é obrigatório e deve conter um número válido de no mínimo 9 dígitos.');
+                return;
+            }
             if (details.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(details.email)) {
                 setError('Por favor introduza um endereço de Email válido.');
                 return;
+            }
+
+            // [NEW] Frictionless Registration Check
+            if (!user && !manualUserPhone) {
+                if (!createAccount) {
+                    setError('Tem de marcar a opção de criar conta ou fazer login para prosseguir.');
+                    return;
+                }
+                if (checkoutPassword.length < 6) {
+                    setError('A senha para criar a conta deve ter pelo menos 6 caracteres.');
+                    return;
+                }
+                
+                setIsCreatingAccount(true);
+                setError('');
+                try {
+                    const { data: authData, error: authError } = await supabase.auth.signUp({
+                        email: details.email,
+                        password: checkoutPassword,
+                        options: {
+                            data: {
+                                full_name: details.name,
+                                phone: details.phone
+                            }
+                        }
+                    });
+                    
+                    if (authError) {
+                        setIsCreatingAccount(false);
+                        if (authError.message.includes('already registered')) {
+                            setError('Este email já está registado na plataforma. Por favor suba e clique em "Já tenho conta".');
+                        } else {
+                            setError('Erro ao criar conta: Ocorreu uma incompatibilidade na plataforma (' + authError.message + '). Tente no painel de Log In.');
+                        }
+                        return;
+                    }
+                    
+                    // Proceed: Account created successfully! supabase.auth will automatically sign them in shortly.
+                    setManualUserPhone(details.phone); // temporary local bypass
+                    setIsCreatingAccount(false);
+                } catch (err: any) {
+                    setIsCreatingAccount(false);
+                    setError('Falha de conexão ao criar a conta.');
+                    return;
+                }
             }
 
             // [NEW] Minimum Order Validation
@@ -467,7 +586,7 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
             packaging_fee: packagingFee,
             amount_paid: amountToPay,
             balance: remainingBalance,
-            status: 'pending'
+            status: details.isScheduled ? 'pending' : 'pending' // Agendamentos mantêm-se pending para Admin ver
         };
 
         // If user wants to save changes to profile
@@ -618,6 +737,7 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                                         <span>{total} MT</span>
                                     </div>
                                 </div>
+                                
                                 <button
                                     onClick={handleNextStep}
                                     className="w-full bg-[#d9a65a] text-[#3b2f2f] py-4 rounded-xl font-bold uppercase tracking-widest hover:bg-[#3b2f2f] hover:text-[#d9a65a] transition-all flex items-center justify-center gap-2 shadow-lg"
@@ -635,6 +755,40 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                     <div className="p-6 space-y-6 overflow-y-auto h-full">
                         <div className="space-y-4">
                             <h3 className="font-serif text-2xl text-[#3b2f2f]">{t.checkout.details}</h3>
+
+                            {(!user && !manualUserPhone) && (
+                                <div className="bg-red-50 border border-red-200 p-4 rounded-xl flex flex-col gap-3 shadow-sm animate-fade-in mb-4">
+                                    <div className="flex items-center gap-2 text-red-700 font-bold">
+                                        <Lock className="w-5 h-5" />
+                                        <span>Conta Obrigatória</span>
+                                    </div>
+                                    <p className="text-red-600 text-sm leading-relaxed">
+                                        Para processar uma encomenda tem que ter conta connosco. Vamos criar uma rapidamente preenchendo os dados abaixo!
+                                    </p>
+                                    <button 
+                                        onClick={() => setIsLoginModalOpen(true)}
+                                        className="bg-white text-red-600 border border-red-200 py-2 rounded-lg font-bold hover:bg-red-50 transition-colors flex items-center justify-center gap-2"
+                                    >
+                                        <User className="w-4 h-4" /> Já tenho conta (Entrar Rápido)
+                                    </button>
+                                </div>
+                            )}
+
+                            {details.isScheduled && (
+                                <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl flex items-start gap-3 text-blue-800 shadow-sm animate-fade-in relative overflow-hidden">
+                                    <div className="absolute top-0 right-0 w-16 h-16 bg-blue-100 rounded-bl-full -z-10 opacity-50"></div>
+                                    <Clock className="w-6 h-6 shrink-0 mt-0.5" />
+                                    <div>
+                                        <span className="font-bold text-base block mb-1">
+                                            Pedido Agendado
+                                        </span>
+                                        <p className="text-sm">
+                                            O sistema requer um sinal obrigatório de <b>70%</b> do total da fatura para confirmar a sua reserva.<br/>
+                                            A restante quantia será paga no ato de entrega.
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
 
                             <div className="space-y-2">
                                 <label className="text-sm font-bold text-[#3b2f2f]/80">{t.checkout.name}</label>
@@ -862,12 +1016,43 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                                 </div>
                             )}
 
+                            {(!user && !manualUserPhone) && (
+                                <div className="p-4 bg-red-50 rounded-2xl border border-red-200 space-y-3 mt-4 animate-fade-in">
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={createAccount}
+                                            onChange={(e) => setCreateAccount(e.target.checked)}
+                                            className="w-4 h-4 rounded text-red-600 focus:ring-red-500"
+                                        />
+                                        <span className="text-sm font-bold text-red-700">Criar uma conta rapidamente com estes dados</span>
+                                    </label>
+                                    
+                                    {createAccount && (
+                                        <div className="space-y-2 mt-2 pl-6">
+                                            <label className="text-xs font-bold text-red-700">Senha para a nova conta (mín. 6 caretéres)</label>
+                                            <div className="relative">
+                                                <Lock className="absolute left-3 top-3 text-red-400 w-4 h-4" />
+                                                <input
+                                                    type="password"
+                                                    value={checkoutPassword}
+                                                    onChange={(e) => setCheckoutPassword(e.target.value)}
+                                                    className="w-full pl-9 p-2 rounded-lg border border-red-200 focus:border-red-400 outline-none bg-white text-sm"
+                                                    placeholder="Sua senha secreta"
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
                             <button
                                 onClick={handleNextStep}
+                                disabled={isCreatingAccount}
                                 title={t.checkout.continue}
-                                className="w-full bg-[#3b2f2f] text-[#d9a65a] py-4 rounded-xl font-bold uppercase tracking-widest hover:bg-[#d9a65a] hover:text-[#3b2f2f] transition-all shadow-lg mt-4"
+                                className="w-full bg-[#3b2f2f] text-[#d9a65a] py-4 rounded-xl font-bold uppercase tracking-widest hover:bg-[#d9a65a] hover:text-[#3b2f2f] transition-all shadow-lg mt-4 disabled:opacity-50 flex justify-center items-center gap-2"
                             >
-                                {t.checkout.continue}
+                                {isCreatingAccount ? <Loader className="w-5 h-5 animate-spin" /> : t.checkout.continue}
                             </button>
                         </div>
                     </div>
@@ -1104,6 +1289,13 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                     />
                 )
             }
+
+            <ClientLoginModal
+                isOpen={isLoginModalOpen}
+                onClose={() => setIsLoginModalOpen(false)}
+                language={language}
+                isCheckoutFlow={true}
+            />
 
         </>
     );

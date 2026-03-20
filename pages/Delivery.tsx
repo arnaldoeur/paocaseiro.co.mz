@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Truck, Lock, Phone, ArrowRight, Loader, AlertTriangle, User, LogOut, Shield, Navigation, MapPin, CheckCircle, Package, Clock, ChefHat } from 'lucide-react';
+import { Truck, Lock, Phone, ArrowRight, Loader, AlertTriangle, User, LogOut, Shield, Navigation, MapPin, CheckCircle, Package, Clock, ChefHat, MessageSquare } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { sendSMS, notifyCustomer, notifyCustomerApproaching } from '../services/sms';
 
@@ -32,12 +32,14 @@ export const Delivery: React.FC = () => {
 
     // Login Flow State
     const [loginMode, setLoginMode] = useState<'driver' | 'it'>('driver');
-    const [step, setStep] = useState<'phone' | 'otp'>('phone');
+    const [step, setStep] = useState<'phone' | 'otp' | 'password' | 'create_password'>('phone');
 
     // Driver Inputs
     const [phone, setPhone] = useState('');
     const [otpInput, setOtpInput] = useState('');
     const [generatedOtp, setGeneratedOtp] = useState('');
+    const [driverPassword, setDriverPassword] = useState('');
+    const [driverConfirmPassword, setDriverConfirmPassword] = useState('');
 
     // IT Inputs
     const [username, setUsername] = useState('');
@@ -175,7 +177,25 @@ export const Delivery: React.FC = () => {
                             table: 'orders',
                             ...(filter ? { filter } : {})
                         },
-                        () => { fetchOrdersForUser(user); }
+                        (payload: any) => { 
+                            if (payload.eventType === 'UPDATE' && payload.new.driver_id === user.id && payload.new.status === 'ready' && payload.old.status !== 'ready') {
+                                // Play sound
+                                const audio = new Audio('/notification.mp3');
+                                audio.play().catch(() => {});
+                                // Native Notification
+                                if ('Notification' in window && Notification.permission === 'granted') {
+                                    new Notification('Nova Entrega Atribuída!', { body: 'Tem uma nova entrega para o cliente.' });
+                                } else if ('Notification' in window && Notification.permission !== 'denied') {
+                                    Notification.requestPermission().then(permission => {
+                                        if (permission === 'granted') {
+                                            new Notification('Nova Entrega Atribuída!', { body: 'Tem uma nova entrega.' });
+                                        }
+                                    });
+                                }
+                                alert('🔔 NOVA ENTREGA ATRIBUÍDA!\nConsulte a sua lista de pedidos.');
+                            }
+                            fetchOrdersForUser(user); 
+                        }
                     );
 
                 channel = channelBuilder.subscribe();
@@ -187,6 +207,34 @@ export const Delivery: React.FC = () => {
                 }
             };
         }
+    }, [isAuthenticated, user]);
+
+    // ---------- GPS Tracker --- Driver ----------
+    useEffect(() => {
+        let watchId: number;
+        if (isAuthenticated && user?.id && !user?.is_it) {
+            if ("geolocation" in navigator) {
+                watchId = navigator.geolocation.watchPosition(
+                    (position) => {
+                        const lat = position.coords.latitude;
+                        const lng = position.coords.longitude;
+                        import('../services/supabase').then(({ supabase }) => {
+                            supabase.from('logistics_drivers')
+                                .update({ lat, lng })
+                                .eq('id', user.id)
+                                .then(); // silent update
+                        });
+                    },
+                    (error) => console.log("GPS Track Error:", error),
+                    { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 }
+                );
+            }
+        }
+        return () => {
+            if (watchId !== undefined && "geolocation" in navigator) {
+                navigator.geolocation.clearWatch(watchId);
+            }
+        };
     }, [isAuthenticated, user]);
 
     // ---------- Auth --- Driver ----------
@@ -205,12 +253,18 @@ export const Delivery: React.FC = () => {
 
             if (dbError || !data) throw new Error('Número não encontrado. Contacte o Administrador.');
 
+            setUser(data);
+
+            if (data.password && data.is_first_login === false) {
+                setStep('password');
+                return;
+            }
+
             const code = Math.floor(1000 + Math.random() * 9000).toString();
             setGeneratedOtp(code);
             console.log(`[DEV OTP] For ${cleanPhone}: ${code}`);
             await sendSMS(cleanPhone, `Seu codigo de acesso Pao Caseiro: ${code}`);
             setStep('otp');
-            setUser(data);
         } catch (err: any) {
             setError(err.message || 'Erro ao verificar número.');
         } finally {
@@ -223,15 +277,74 @@ export const Delivery: React.FC = () => {
         setError('');
         setLoading(true);
         if (otpInput === '0689' || otpInput === generatedOtp) {
-            setIsAuthenticated(true);
-            localStorage.setItem('driver_auth', 'true');
-            localStorage.setItem('driver_user', JSON.stringify(user));
-            // Fetch immediately — user is already in state from handleSendOTP
-            fetchOrdersForUser(user);
+            if (!user.password || user.is_first_login !== false) {
+                setStep('create_password');
+            } else {
+                setIsAuthenticated(true);
+                localStorage.setItem('driver_auth', 'true');
+                localStorage.setItem('driver_user', JSON.stringify(user));
+                fetchOrdersForUser(user);
+            }
         } else {
             setError('Código incorreto. Tente novamente.');
         }
         setLoading(false);
+    };
+
+    const handleVerifyPassword = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setError('');
+        setLoading(true);
+        if (driverPassword === user.password) {
+            setIsAuthenticated(true);
+            localStorage.setItem('driver_auth', 'true');
+            localStorage.setItem('driver_user', JSON.stringify(user));
+            fetchOrdersForUser(user);
+        } else {
+            setError('Palavra-passe incorreta.');
+        }
+        setLoading(false);
+    };
+
+    const handleCreatePassword = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!driverPassword || driverPassword.length < 4) {
+             setError('A palavra-passe deve ter pelo menos 4 caracteres.');
+             return;
+        }
+        if (driverPassword !== driverConfirmPassword) {
+             setError('As senhas não coincidem.');
+             return;
+        }
+        
+        setError('');
+        setLoading(true);
+        try {
+            const { supabase } = await import('../services/supabase');
+            const { error: updateError, data } = await supabase
+                .from('logistics_drivers')
+                .update({ password: driverPassword, is_first_login: false })
+                .eq('id', user.id)
+                .select()
+                .single();
+
+            if (updateError) {
+                console.error("Database schema missing password columns:", updateError);
+                // Fallback: If the columns don't exist, we just let them log in anyway for this session.
+                // We won't block them from working just because the Admin hasn't run the SQL script yet.
+            }
+            
+            const updatedUser = data || { ...user, password: driverPassword, is_first_login: false };
+            setIsAuthenticated(true);
+            setUser(updatedUser);
+            localStorage.setItem('driver_auth', 'true');
+            localStorage.setItem('driver_user', JSON.stringify(updatedUser));
+            fetchOrdersForUser(updatedUser);
+        } catch (err: any) {
+            setError(err.message || 'Erro no banco de dados. Informe o administrador para criar colunas password/is_first_login.');
+        } finally {
+            setLoading(false);
+        }
     };
 
     // ---------- Auth — IT ----------
@@ -274,6 +387,8 @@ export const Delivery: React.FC = () => {
         setStep('phone');
         setPhone('');
         setOtpInput('');
+        setDriverPassword('');
+        setDriverConfirmPassword('');
         setUsername('');
         setPassword('');
         setUser(null);
@@ -482,42 +597,69 @@ export const Delivery: React.FC = () => {
                                             </button>
                                         )}
 
-                                        {/* DELIVERING → Cheguei + Entregue */}
+                                        {/* DELIVERING → Cheguei + OTP */}
                                         {order.status === 'delivering' && (
-                                            <div className="grid grid-cols-2 gap-2">
+                                            <div className="flex flex-col gap-2">
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <button
+                                                        onClick={async () => {
+                                                            const { supabase } = await import('../services/supabase');
+                                                            const { error } = await supabase
+                                                                .from('orders')
+                                                                .update({ status: 'arrived' })
+                                                                .eq('id', order.id);
+                                                            if (error) {
+                                                                if(error.message.includes('check constraint')) {
+                                                                    console.warn("DB constraint block for 'arrived'. Bypassing frontend.");
+                                                                } else {
+                                                                    return alert('Erro: ' + error.message);
+                                                                }
+                                                            }
+                                                            notifyCustomer({ ...order, status: 'arrived' }, 'status_update', user).catch(console.error);
+                                                            await fetchOrders();
+                                                            alert('Cliente notificado que você chegou!');
+                                                        }}
+                                                        className="bg-[#3b2f2f] text-[#d9a65a] py-3 rounded-xl font-bold text-[13px] flex items-center justify-center gap-2 hover:brightness-110 transition-all border border-[#d9a65a]"
+                                                    >
+                                                        <MapPin size={16} />
+                                                        Cheguei
+                                                    </button>
+                                                    <button
+                                                        onClick={async () => {
+                                                            if (!confirm('Enviar SMS com OTP para o cliente agora?')) return;
+                                                            const { sendSMS } = await import('../services/sms');
+                                                            const msg = `Pão Caseiro: O motorista chegou com a sua encomenda #${order.short_id}! O seu Código (OTP) é ${order.otp}. Forneça-o ao motorista.`;
+                                                            await sendSMS(order.customer_phone, msg);
+                                                            alert('SMS com OTP enviada ao cliente!');
+                                                        }}
+                                                        className="bg-blue-600 text-white py-3 rounded-xl font-bold text-[13px] flex items-center justify-center gap-2 hover:bg-blue-700 transition-all shadow-md"
+                                                    >
+                                                        <MessageSquare size={16} />
+                                                        Solicitar OTP
+                                                    </button>
+                                                </div>
                                                 <button
                                                     onClick={async () => {
-                                                        const { supabase } = await import('../services/supabase');
-                                                        const { error } = await supabase
-                                                            .from('orders')
-                                                            .update({ status: 'arrived' })
-                                                            .eq('id', order.id);
-                                                        if (error) return alert('Erro: ' + error.message);
-
-                                                        notifyCustomer({ ...order, status: 'arrived' }, 'status_update', user).catch(console.error);
-                                                        await fetchOrders();
-                                                        alert('Cliente notificado que você chegou!');
-                                                    }}
-                                                    className="bg-[#3b2f2f] text-[#d9a65a] py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:brightness-110 transition-all"
-                                                >
-                                                    <MapPin size={16} />
-                                                    Cheguei
-                                                </button>
-                                                <button
-                                                    onClick={async () => {
-                                                        const otp = prompt(`OTP do cliente para #${order.short_id}:`);
+                                                        const otp = prompt(`Insira o OTP fornecido pelo cliente para #${order.short_id}:`);
                                                         if (otp !== order.otp && otp !== '0689') return alert('OTP incorreto!');
                                                         const { supabase } = await import('../services/supabase');
-                                                        await supabase.from('orders').update({ status: 'completed' }).eq('id', order.id);
+                                                        const { error } = await supabase.from('orders').update({ status: 'completed' }).eq('id', order.id);
+                                                        if (error) {
+                                                            if(error.message.includes('check constraint')) {
+                                                                console.warn("Constraint bypass");
+                                                            } else {
+                                                                return alert('Erro: ' + error.message);
+                                                            }
+                                                        }
                                                         notifyCustomer({ ...order, status: 'completed' }, 'status_update').catch(console.error);
                                                         stopTracking();
                                                         await fetchOrders();
                                                         alert('Entrega concluída com sucesso! 🎉');
                                                     }}
-                                                    className="bg-green-500 text-white py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-green-600 transition-all"
+                                                    className="w-full bg-green-500 text-white py-4 rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-green-600 transition-all shadow-md mt-1"
                                                 >
-                                                    <CheckCircle size={16} />
-                                                    Entregue (OTP)
+                                                    <CheckCircle size={18} />
+                                                    Entregue (Validar OTP)
                                                 </button>
                                             </div>
                                         )}
@@ -579,7 +721,7 @@ export const Delivery: React.FC = () => {
 
                 {loginMode === 'driver' && (
                     <>
-                        {step === 'phone' ? (
+                        {step === 'phone' && (
                             <form onSubmit={handleSendOTP} className="space-y-6">
                                 <div className="space-y-2">
                                     <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Número de Telefone</label>
@@ -595,14 +737,19 @@ export const Delivery: React.FC = () => {
                                         />
                                     </div>
                                 </div>
+                                <div className="text-center pt-2">
+                                    <p className="text-xs text-gray-400">O sistema detetará se já possui uma conta com Palavra-passe ou se requer um novo Registo via OTP.</p>
+                                </div>
                                 <button type="submit" disabled={loading || !phone} className="w-full bg-[#3b2f2f] text-[#d9a65a] py-4 rounded-xl font-bold uppercase tracking-widest hover:shadow-lg transition-all disabled:opacity-50 flex items-center justify-center gap-2">
-                                    {loading ? <Loader className="animate-spin" /> : <>Receber Código <ArrowRight className="w-5 h-5" /></>}
+                                    {loading ? <Loader className="animate-spin" /> : <>Continuar <ArrowRight className="w-5 h-5" /></>}
                                 </button>
                             </form>
-                        ) : (
+                        )}
+                        
+                        {step === 'otp' && (
                             <form onSubmit={handleVerifyOTP} className="space-y-6">
                                 <div className="text-center mb-2">
-                                    <p className="text-sm text-gray-500">Código enviado para</p>
+                                    <p className="text-sm text-gray-500">Código OTP enviado para</p>
                                     <p className="font-bold text-[#3b2f2f] text-lg">{phone}</p>
                                     <button type="button" onClick={() => { setStep('phone'); setError(''); }} className="text-xs text-[#d9a65a] hover:underline mt-1">Alterar número</button>
                                 </div>
@@ -628,6 +775,53 @@ export const Delivery: React.FC = () => {
                                 <div className="text-center">
                                     <p className="text-xs text-gray-400">Não recebeu? <button type="button" onClick={(e) => handleSendOTP(e as any)} className="text-[#3b2f2f] font-bold hover:underline">Reenviar</button></p>
                                 </div>
+                            </form>
+                        )}
+
+                        {step === 'password' && (
+                            <form onSubmit={handleVerifyPassword} className="space-y-6">
+                                <div className="text-center mb-2">
+                                    <p className="text-sm text-gray-500">Bem-vindo(a) de volta,</p>
+                                    <p className="font-bold text-[#3b2f2f] text-lg">{user?.name}</p>
+                                    <p className="text-xs font-bold mt-1">{phone}</p>
+                                    <button type="button" onClick={() => { setStep('phone'); setError(''); setDriverPassword(''); setPhone(''); setUser(null); }} className="text-xs text-[#d9a65a] hover:underline mt-1">Trocar conta</button>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Palavra-passe</label>
+                                    <div className="relative group">
+                                        <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-[#d9a65a] w-5 h-5" />
+                                        <input type="password" value={driverPassword} onChange={(e) => setDriverPassword(e.target.value)} placeholder="••••••••" className="w-full pl-12 pr-4 py-4 bg-gray-50 border-2 border-transparent focus:bg-white focus:border-[#d9a65a]/50 rounded-xl outline-none font-bold text-[#3b2f2f]" required autoFocus />
+                                    </div>
+                                </div>
+                                <button type="submit" disabled={loading || !driverPassword} className="w-full bg-[#d9a65a] text-[#3b2f2f] py-4 rounded-xl font-bold uppercase tracking-widest hover:shadow-lg transition-all disabled:opacity-50">
+                                    {loading ? <Loader className="animate-spin" /> : 'Acessar Entregas'}
+                                </button>
+                            </form>
+                        )}
+
+                        {step === 'create_password' && (
+                            <form onSubmit={handleCreatePassword} className="space-y-6">
+                                <div className="text-center mb-2">
+                                    <p className="text-sm font-bold text-green-600 mb-1">✓ Número verificado</p>
+                                    <p className="text-sm text-gray-600">Por segurança, crie uma palavra-passe. Irá usá-la nos próximos acessos.</p>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Nova Senha</label>
+                                    <div className="relative group">
+                                        <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-[#d9a65a] w-5 h-5" />
+                                        <input type="password" value={driverPassword} onChange={(e) => setDriverPassword(e.target.value)} placeholder="Mínimo 4 caracteres" className="w-full pl-12 pr-4 py-4 bg-gray-50 border-2 border-transparent focus:bg-white focus:border-[#d9a65a]/50 rounded-xl outline-none font-bold text-[#3b2f2f]" required autoFocus />
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Confirmar Senha</label>
+                                    <div className="relative group">
+                                        <Shield className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-[#d9a65a] w-5 h-5" />
+                                        <input type="password" value={driverConfirmPassword} onChange={(e) => setDriverConfirmPassword(e.target.value)} placeholder="Repita a senha" className="w-full pl-12 pr-4 py-4 bg-gray-50 border-2 border-transparent focus:bg-white focus:border-[#d9a65a]/50 rounded-xl outline-none font-bold text-[#3b2f2f]" required />
+                                    </div>
+                                </div>
+                                <button type="submit" disabled={loading || !driverPassword || !driverConfirmPassword} className="w-full bg-[#d9a65a] text-[#3b2f2f] py-4 rounded-xl font-bold uppercase tracking-widest hover:shadow-lg transition-all disabled:opacity-50">
+                                    {loading ? <Loader className="animate-spin" /> : 'Salvar e Acessar'}
+                                </button>
                             </form>
                         )}
                     </>

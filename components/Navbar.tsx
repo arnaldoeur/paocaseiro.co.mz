@@ -128,15 +128,28 @@ export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
     <>
       <nav className="fixed top-0 left-0 right-0 z-50 bg-[#f7f1eb]/90 backdrop-blur-md shadow-sm border-b border-[#3b2f2f]/5 h-20 flex items-center">
         <div className="container mx-auto px-6 flex justify-between lg:grid lg:grid-cols-3 items-center">
-          {/* Left: Logo */}
-          <div className="flex justify-start">
+          {/* Left: Logo & Language */}
+          <div className="flex items-center justify-start gap-4">
             <div className="cursor-pointer" onClick={() => handleNavigation('hero')}>
               <Logo className="h-16 lg:h-20" />
             </div>
+            {/* Desktop Language Toggle */}
+            <button
+              onClick={toggleLanguage}
+              title={language === 'pt' ? 'Mudar para Inglês' : 'Change to Portuguese'}
+              className="hidden lg:flex items-center justify-center h-6 w-9 rounded-sm hover:scale-110 transition-transform overflow-hidden shadow-sm border border-[#3b2f2f]/10 shrink-0"
+              aria-label="Toggle Language"
+            >
+              {language === 'pt' ? (
+                <img src="https://flagcdn.com/mz.svg" alt="MZ" className="w-full h-full object-cover" />
+              ) : (
+                <img src="https://flagcdn.com/us.svg" alt="US" className="w-full h-full object-cover" />
+              )}
+            </button>
           </div>
 
-          {/* Center: Nav Items (Perfectly Centered on Desktop) */}
-          <div className="hidden lg:flex items-center justify-center gap-8 text-sm font-bold tracking-wide uppercase text-[#4b3a2f]">
+          {/* Center: Nav Items (Centered) */}
+          <div className="hidden lg:flex items-center justify-center gap-5 xl:gap-8 text-sm font-bold tracking-wide uppercase text-[#4b3a2f]">
             {NAV_ITEMS.map((item) => (
               <button
                 key={item.id}
@@ -160,18 +173,8 @@ export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
             </button>
           </div>
 
-          {/* Right Side: Language, Account, and Call button */}
+          {/* Right Side: Account and Call button */}
           <div className="hidden lg:flex items-center justify-end gap-3 xl:gap-4">
-            <button
-              onClick={toggleLanguage}
-              title={language === 'pt' ? 'Mudar Idioma' : 'Change Language'}
-              className="flex items-center gap-2 px-3 py-1 rounded-full border border-[#3b2f2f]/10 hover:border-[#d9a65a] hover:text-[#d9a65a] transition-all"
-              aria-label="Toggle Language"
-            >
-              <Languages className="w-4 h-4" />
-              <span className="text-xs font-bold uppercase">{language}</span>
-            </button>
-
             {(user || manualUserPhone) ? (
               <button
                 onClick={() => navigate('/dashboard')}
@@ -280,11 +283,15 @@ export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
 
             <button
               onClick={() => { toggleLanguage(); setMobileMenuOpen(false); }}
-              className="flex items-center gap-2 px-4 py-2 rounded-full border border-white/20 hover:border-[#d9a65a] hover:text-[#d9a65a] transition-all mt-4"
+              className="flex items-center gap-3 px-6 py-3 rounded-full border border-white/20 hover:border-[#d9a65a] hover:text-[#d9a65a] transition-all mt-4"
               title={language === 'pt' ? 'Mudar para Inglês' : 'Change to Portuguese'}
             >
-              <Languages className="w-5 h-5" />
-              <span className="text-sm font-bold uppercase">{language === 'pt' ? 'English' : 'Português'}</span>
+              {language === 'pt' ? (
+                <img src="https://flagcdn.com/mz.svg" alt="MZ" className="w-6 h-auto drop-shadow-md rounded-sm" />
+              ) : (
+                <img src="https://flagcdn.com/us.svg" alt="US" className="w-6 h-auto drop-shadow-md rounded-sm" />
+              )}
+              <span className="text-lg font-bold uppercase tracking-wider">{language === 'pt' ? 'English' : 'Português'}</span>
             </button>
 
             {/* Mobile Login/Account Button */}

@@ -199,11 +199,11 @@ export const UpsellModal: React.FC<UpsellModalProps> = ({ isOpen, onClose, langu
                                             {upsellItems.length > 0 ? (
                                                 upsellItems.map((item, idx) => (
                                                     <div key={idx} className="flex gap-4 p-3 bg-white rounded-xl shadow-sm border border-gray-100 hover:border-[#d9a65a]/40 transition-all items-center">
-                                                        <div className="w-16 h-16 rounded-lg overflow-hidden bg-gray-50 shrink-0">
+                                                        <div className="w-16 h-16 rounded-lg overflow-hidden relative shrink-0 flex items-center justify-center">
                                                             <img 
                                                                 src={item?.image || '/images/pao_caseiro.png'} 
                                                                 alt={formatProductName(item?.name)} 
-                                                                className="w-full h-full object-cover"
+                                                                className="w-full h-full object-contain object-center p-1 group-hover:scale-105 transition-transform"
                                                                 onError={(e) => {
                                                                     e.currentTarget.onerror = null;
                                                                     e.currentTarget.src = '/images/pao_caseiro.png';

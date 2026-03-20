@@ -85,8 +85,10 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
                                 ? (product.image.startsWith('http') || product.image.startsWith('/')) 
                                     ? product.image 
                                     : `/images/${product.image}`
-                                : '/images/placeholder.png',
+                                : '/images/pao_caseiro.png',
                             desc: product.description,
+                            description_en: product.description_en,
+                            name_en: product.name_en,
                             prepTime: product.prep_time,
                             deliveryTime: product.delivery_time,
                             variations: product.variations || [],
@@ -105,6 +107,7 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
 
                     // Sort newSections based on a preferred order
                     const categoryOrder = [
+                        'Pão',
                         'Pães',
                         'Doces & Pastelaria',
                         'Folhados & Salgados',
@@ -139,6 +142,7 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
 
                     // Apply same category order as live DB path
                     const categoryOrder = [
+                        'Pão',
                         'Pães',
                         'Doces & Pastelaria',
                         'Folhados & Salgados',
@@ -459,16 +463,16 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
                                 </div>
                             </button>
 
-                            <div className={`transition-all duration-500 ease-in-out ${activeSections.includes(section.title) ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'}`}>
+                            <div className={`transition-all duration-500 ease-in-out ${activeSections.includes(section.title) ? 'max-h-[8000px] opacity-100' : 'max-h-0 opacity-0'}`}>
                                 <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                     {section.items.map((item: any, idx: number) => (
                                         <div
                                             key={idx}
                                             onClick={() => handleProductClick(item)}
-                                            className="group flex gap-4 p-4 rounded-xl hover:bg-white border border-transparent hover:border-[#d9a65a]/20 hover:shadow-xl transition-all cursor-pointer bg-[#f9f9f9] items-stretch h-40"
+                                            className="group flex gap-4 p-4 rounded-xl border border-gray-100 hover:border-[#d9a65a]/30 shadow-sm hover:shadow-xl transition-all cursor-pointer bg-white items-stretch h-40"
                                         >
                                             <div
-                                                className="w-32 h-32 shrink-0 rounded-xl overflow-hidden bg-white relative shadow-sm self-center"
+                                                className="w-32 h-32 shrink-0 rounded-xl overflow-hidden relative self-center flex items-center justify-center p-2"
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                     handleProductClick(item);
@@ -477,7 +481,7 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
                                                 <img
                                                     src={item.image}
                                                     alt={(language === 'en' && item.name_en) ? formatProductName(item.name_en) : formatProductName(item.name)}
-                                                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                                                    className="w-full h-full object-contain object-center group-hover:scale-105 transition-transform duration-500"
                                                 />
                                             </div>
                                             <div className="flex-1 flex flex-col justify-between py-1 min-h-0">
@@ -512,7 +516,9 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
 
                                                 <div className="flex items-center justify-between gap-2 mt-1">
                                                     <span className="font-bold text-lg text-[#d9a65a]">
-                                                        {item.price} MT
+                                                        {item.price === 0 && item.variations && item.variations.length > 0
+                                                            ? `A partir de ${Math.min(...item.variations.map((v: any) => v.price))} MT`
+                                                            : `${item.price} MT`}
                                                         {item.unit && item.unit !== 'un' && <span className="text-sm font-normal text-gray-400 ml-1">/ {item.unit}</span>}
                                                     </span>
                                                     {item.isAvailable && (

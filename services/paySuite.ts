@@ -27,8 +27,8 @@ const API_KEY = '1298|OxFmkooNPDC14WPRIjomqAyJ0np4wp22Fm12j1pt76fd238e';
 export const initiatePayment = async (data: PaymentRequest): Promise<PaymentResponse> => {
 
     // Ensure phone number starts with 258 and contains only digits
-    let formattedPhone = data.msisdn.replace(/\D/g, '');
-    if (!formattedPhone.startsWith('258')) {
+    let formattedPhone = data.msisdn ? data.msisdn.replace(/\D/g, '') : '';
+    if (formattedPhone && !formattedPhone.startsWith('258') && formattedPhone !== '000000000') {
         formattedPhone = `258${formattedPhone}`;
     }
 
@@ -36,17 +36,24 @@ export const initiatePayment = async (data: PaymentRequest): Promise<PaymentResp
         amount: String(data.amount.toFixed(2)),
         reference: data.reference,
         description: `Pagamento ${data.reference}`,
-        mobile: formattedPhone,
-        msisdn: formattedPhone,
-        phone: formattedPhone,
-        customer_msisdn: formattedPhone,
-        customer_phone: formattedPhone,
         first_name: data.customerName?.split(' ')[0] || 'Cliente',
         last_name: data.customerName?.split(' ').slice(1).join(' ') || 'Pão Caseiro',
         email: data.customerEmail || 'geral@paocaseiro.co.mz',
         return_url: typeof window !== 'undefined' ? window.location.origin : 'https://paocaseiro.co.mz',
         cancel_url: typeof window !== 'undefined' ? window.location.origin : 'https://paocaseiro.co.mz'
     };
+
+    // Só enviamos os campos de telemóvel se formos forçar um número real.
+    // O número '000000000' é usado no frontend para evitar que a API force
+    // apenas o canal compatível com o prefixo. Enviando VAZIO, a página da PaySuite
+    // mostra logo tudos os métodos disponíveis.
+    if (formattedPhone && formattedPhone !== '258000000000' && formattedPhone !== '000000000') {
+        payload.mobile = formattedPhone;
+        payload.msisdn = formattedPhone;
+        payload.phone = formattedPhone;
+        payload.customer_msisdn = formattedPhone;
+        payload.customer_phone = formattedPhone;
+    }
 
     if (data.method) {
         payload.channel = data.method;

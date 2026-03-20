@@ -29,9 +29,9 @@ import { ChartFilters, type TimeRange } from './ChartFilters';
 import { ChartExport } from './ChartExport';
 import { KPISummary } from './KPISummary';
 import { ReportTemplate } from './ReportTemplate';
-import { Loader2, LayoutGrid, Activity, BarChart3, Maximize2, TrendingUp, Users } from 'lucide-react';
-import jsPDF from 'jspdf';
+import { Loader2, LayoutGrid, Activity, BarChart3, Maximize2, TrendingUp, Users, Sparkles, Bot } from 'lucide-react';
 import html2canvas from 'html2canvas';
+import { generateMetricReport } from '../../services/reportGenerator';
 
 interface Order {
     id: string;
@@ -45,9 +45,10 @@ interface Order {
 interface AnalyticsChartProps {
     orders: Order[];
     teamMembers?: any[];
+    onExportMaster?: () => void;
 }
 
-export const AnalyticsChart: React.FC<AnalyticsChartProps> = ({ orders = [], teamMembers = [] }) => {
+export const AnalyticsChart: React.FC<AnalyticsChartProps> = ({ orders = [], teamMembers = [], onExportMaster }) => {
     const [metric, setMetric] = useState<MetricType>('sales');
     const [range, setRange] = useState<TimeRange>('7d');
     const [selectedStaff, setSelectedStaff] = useState<string>('all');
@@ -58,14 +59,74 @@ export const AnalyticsChart: React.FC<AnalyticsChartProps> = ({ orders = [], tea
     });
     const [loading, setLoading] = useState(false);
     const chartRef = useRef<any>(null);
+    const [aiInsights, setAiInsights] = useState<string | null>(null);
+    const [isGeneratingInsights, setIsGeneratingInsights] = useState(false);
+
+    const generateInsights = async () => {
+        if (!chartData || chartData.length === 0) return;
+        setIsGeneratingInsights(true);
+        setAiInsights(null);
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 60000);
+            
+            const summaryData = chartData.map(d => ({
+                data: d.date,
+                [metric]: d[metric]
+            }));
+
+            const metricLabel = metric === 'sales' ? 'Vendas' :
+                metric === 'orders' ? 'Pedidos' :
+                metric === 'customers' ? 'Clientes' :
+                metric === 'efficiency' ? 'Eficiência' :
+                metric === 'avg_ticket' ? 'Ticket Médio' : metric;
+
+            const prompt = `Analise os seguintes dados de ${metricLabel} correspondentes a ${summaryData.length} dias da padaria 'Pão Caseiro' e forneça 3 insights diretos, curtos e muito relevantes para o negócio. Formatação: use markdown simples com bullet points. Foque em apontar tendências de crescimento/queda, ou anomalias notáveis. Evite formalidades exageradas, vá direto ao ponto.\n\nDados: ${JSON.stringify(summaryData)}`;
+
+            const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+                method: 'POST',
+                signal: controller.signal,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer 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',
+                    'HTTP-Referer': window.location.origin || 'https://paocaseiro.co.mz',
+                    'X-Title': 'Pão Caseiro Admin'
+                },
+                body: JSON.stringify({
+                    model: 'nvidia/nemotron-3-super-120b-a12b:free',
+                    messages: [
+                        { role: 'system', content: 'Você é a Zyph AI, a IA analítica de negócios do painel Pão Caseiro. Seja extremamente técnica, direta e assertiva. Responda em Português.' },
+                        { role: 'user', content: prompt }
+                    ]
+                })
+            });
+            
+            clearTimeout(timeoutId);
+
+            if (!response.ok) throw new Error('Falha ao gerar insights');
+            const data = await response.json();
+            if (data.choices && data.choices.length > 0) {
+                setAiInsights(data.choices[0].message.content);
+            } else {
+                throw new Error('Sem resposta válida');
+            }
+        } catch (error) {
+            console.error('AI Insights Error:', error);
+            setAiInsights('Não foi possível gerar insights com a Zyph AI no momento. Tente novamente mais tarde.');
+        } finally {
+            setIsGeneratingInsights(false);
+        }
+    };
 
     const companyBranding = React.useMemo(() => {
         const saved = localStorage.getItem('message_settings');
         return saved ? JSON.parse(saved) : {
             senderId: 'Pão Caseiro',
             icon: '/images/logo_receipt.png',
-            address: 'Lichinga, Av. Acordo de Lusaka',
-            phone: '+258 87 9146 662'
+            address: 'Av. Acordo de Lusaka, Xiquelene, Maputo',
+            phone: '+258 87 9146 662',
+            email: 'geral@paocaseiro.co.mz',
+            website: 'www.paocaseiro.co.mz'
         };
     }, []);
 
@@ -251,144 +312,82 @@ export const AnalyticsChart: React.FC<AnalyticsChartProps> = ({ orders = [], tea
     };
 
     const handleExport = async (format: 'png' | 'svg' | 'pdf-current' | 'pdf-full') => {
+        if (format === 'pdf-full') {
+            if (onExportMaster) onExportMaster();
+            return;
+        }
+
         if (!chartRef.current) return;
         const instance = chartRef.current.getEchartsInstance();
 
-        // Ensure accurate export by waiting for next tick
+        setLoading(true);
         setTimeout(async () => {
-            if (format === 'png' || format === 'svg') {
-                try {
-                    const url = instance.getDataURL({
-                        type: format === 'svg' ? 'svg' : 'png',
-                        pixelRatio: 4,
-                        backgroundColor: '#fff',
-                        excludeComponents: ['dataZoom'] // Clean export
-                    });
-                    const link = document.createElement('a');
-                    link.download = `Analytics_${metric}_${range}_${new Date().toISOString().split('T')[0]}.${format}`;
-                    link.href = url;
-                    link.click();
-                } catch (err) {
-                    console.error('Export failed:', err);
-                    alert('Erro ao exportar imagem. Tente novamente.');
-                }
-            } else {
-                setLoading(true);
-                try {
-                    // 1. Get Chart Image
+            try {
+                if (format === 'png' || format === 'svg') {
+                    // Branded Wrapper Image Export
+                    const exportNode = document.getElementById('report-template-wrapper');
+                    if (exportNode) {
+                        const canvas = await html2canvas(exportNode, { scale: 2, useCORS: true, backgroundColor: '#fcf9f6' });
+                        const finalImg = canvas.toDataURL(`image/${format === 'svg' ? 'svg+xml' : 'png'}`);
+                        const link = document.createElement('a');
+                        link.download = `Analytics_${metric}_${range}_${new Date().toISOString().split('T')[0]}.${format}`;
+                        link.href = finalImg;
+                        link.click();
+                    } else {
+                        // Fallback
+                        const chartUrl = instance.getDataURL({
+                            type: format === 'svg' ? 'svg' : 'png',
+                            pixelRatio: 4,
+                            backgroundColor: '#fff',
+                            excludeComponents: ['dataZoom']
+                        });
+                        const link = document.createElement('a');
+                        link.download = `Analytics_${metric}_${range}_${new Date().toISOString().split('T')[0]}.${format}`;
+                        link.href = chartUrl;
+                        link.click();
+                    }
+                } else if (format === 'pdf-current') {
                     const chartUrl = instance.getDataURL({
                         type: 'png',
                         pixelRatio: 2,
                         backgroundColor: '#fff',
                         excludeComponents: ['dataZoom']
                     });
-
-                    // 2. Prepare Template Props
+                    
                     const kpis = {
                         totalSales: chartData.reduce((acc, curr) => acc + curr.sales, 0),
                         orders: chartData.reduce((acc, curr) => acc + curr.orders, 0),
                         customers: chartData.reduce((acc, curr) => acc + curr.customers, 0),
                         avgTicket: Math.floor(chartData.reduce((acc, curr) => acc + curr.sales, 0) / (chartData.reduce((acc, curr) => acc + curr.orders, 0) || 1))
                     };
-
-                    // 3. Render PDF
-                    const pdf = new jsPDF('p', 'mm', 'a4');
-                    const pageWidth = pdf.internal.pageSize.getWidth();
-
-                    // --- Page 1: Summary & Chart ---
-                    // Add Branding
-                    pdf.setFontSize(22);
-                    pdf.setTextColor(59, 47, 47); // #3b2f2f
-                    pdf.text(companyBranding.senderId.toUpperCase(), 15, 25);
-
-                    pdf.setFontSize(10);
-                    pdf.setTextColor(150, 150, 150);
-                    pdf.text('RELATÓRIO DE PERFORMANCE EMPRESARIAL', 15, 32);
-
-                    pdf.setFontSize(8);
-                    pdf.text(companyBranding.address, 15, 38);
-                    pdf.text(companyBranding.phone, 15, 42);
-
-                    // Add Title
-                    pdf.setFontSize(16);
-                    pdf.setTextColor(217, 166, 90); // #d9a65a
-                    pdf.text(`Análise de: ${metric.toUpperCase()}`, 15, 55);
-                    pdf.setFontSize(10);
-                    pdf.setTextColor(100, 100, 100);
-                    pdf.text(`Período: ${range.toUpperCase()} | Gerado em: ${new Date().toLocaleString()}`, 15, 62);
-
-                    // KPI Cards (Simplified for PDF)
-                    const kpiY = 75;
-                    pdf.setFillColor(252, 249, 246);
-                    pdf.roundedRect(15, kpiY, 40, 25, 3, 3, 'F');
-                    pdf.roundedRect(60, kpiY, 40, 25, 3, 3, 'F');
-                    pdf.roundedRect(105, kpiY, 40, 25, 3, 3, 'F');
-                    pdf.roundedRect(150, kpiY, 45, 25, 3, 3, 'F');
-
-                    pdf.setFontSize(8);
-                    pdf.setTextColor(150, 150, 150);
-                    pdf.text('VENDAS', 20, kpiY + 8);
-                    pdf.text('PEDIDOS', 65, kpiY + 8);
-                    pdf.text('CLIENTES', 110, kpiY + 8);
-                    pdf.text('TICKET MÉDIO', 155, kpiY + 8);
-
-                    pdf.setFontSize(12);
-                    pdf.setTextColor(59, 47, 47);
-                    pdf.text(`${kpis.totalSales.toLocaleString()} MT`, 20, kpiY + 18);
-                    pdf.text(`${kpis.orders}`, 65, kpiY + 18);
-                    pdf.text(`${kpis.customers}`, 110, kpiY + 18);
-                    pdf.text(`${kpis.avgTicket.toLocaleString()} MT`, 155, kpiY + 18);
-
-                    // Add Chart
-                    pdf.addImage(chartUrl, 'PNG', 15, 110, 180, 80);
-
-                    // Footer Page 1
-                    pdf.setFontSize(8);
-                    pdf.setTextColor(200, 200, 200);
-                    pdf.text('System powered by Zyph Tech Intelligence', 15, 285);
-                    pdf.text('Página 1', 190, 285);
-
-                    // --- Page 2+: Detailed Table (Only for pdf-full) ---
-                    if (format === 'pdf-full') {
-                        pdf.addPage();
-                        pdf.setFontSize(14);
-                        pdf.setTextColor(59, 47, 47);
-                        pdf.text('DETALHAMENTO DIÁRIO DA OPERAÇÃO', 15, 20);
-
-                        import('jspdf-autotable').then((autoTableModule) => {
-                            const autoTable = autoTableModule.default;
-                            autoTable(pdf, {
-                                startY: 30,
-                                head: [['Data', 'Vendas (MT)', 'Pedidos', 'Clientes', 'Eficiência (%)', 'Ticket Médio (MT)']],
-                                body: chartData.map(day => [
-                                    new Date(day.date).toLocaleDateString('pt-PT'),
-                                    day.sales.toLocaleString(),
-                                    day.orders,
-                                    day.customers,
-                                    `${day.efficiency}%`,
-                                    day.avg_ticket.toLocaleString()
-                                ]),
-                                headStyles: { fillColor: [59, 47, 47], textColor: [217, 166, 90], fontStyle: 'bold' },
-                                alternateRowStyles: { fillColor: [252, 249, 246] },
-                                margin: { left: 15, right: 15 },
-                                styles: { fontSize: 9 },
-                                didDrawPage: (data) => {
-                                    pdf.setFontSize(8);
-                                    pdf.setTextColor(200, 200, 200);
-                                    pdf.text(`System powered by Zyph Tech • Página ${pdf.getNumberOfPages()}`, 15, 285);
-                                }
-                            });
-                            pdf.save(`Relatorio_Full_${metric}_${range}_${new Date().toISOString().split('T')[0]}.pdf`);
-                        });
-                    } else {
-                        pdf.save(`Relatorio_Simples_${metric}_${range}_${new Date().toISOString().split('T')[0]}.pdf`);
+                    
+                    let filteredOrders: any[] | undefined = undefined;
+                    if(metric === 'sales' || metric === 'orders') {
+                        filteredOrders = orders;
                     }
-                } catch (err) {
-                    console.error('PDF Export failed:', err);
-                    alert('Erro ao gerar relatório PDF.');
-                } finally {
-                    setLoading(false);
+
+                    await generateMetricReport(
+                        metric, 
+                        range, 
+                        chartData, 
+                        kpis, 
+                        {
+                            name: companyBranding.senderId,
+                            address: companyBranding.address,
+                            phone: companyBranding.phone,
+                            email: companyBranding.email,
+                            website: companyBranding.website,
+                            logo: companyBranding.icon
+                        }, 
+                        chartUrl,
+                        filteredOrders
+                    );
                 }
+            } catch (err) {
+                console.error('Export failed:', err);
+                alert('Erro ao exportar o Relatório. Tente de novo.');
+            } finally {
+                setLoading(false);
             }
         }, 100);
     };
@@ -453,14 +452,77 @@ export const AnalyticsChart: React.FC<AnalyticsChartProps> = ({ orders = [], tea
                 </div>
 
                 <div className="flex items-center gap-3">
+                    <button 
+                        onClick={generateInsights}
+                        disabled={isGeneratingInsights}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all shadow-sm font-bold text-[10px] md:text-xs uppercase tracking-wider ${isGeneratingInsights ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-[#3b2f2f] hover:bg-[#2a2121] text-[#d9a65a] hover:shadow-md'}`}
+                        title="Gerar Insights com IA"
+                    >
+                        {isGeneratingInsights ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+                        <span className="hidden sm:inline">IA Insights</span>
+                    </button>
                     <ChartFilters selected={range} onChange={setRange} />
                     <div className="h-8 w-[1px] bg-gray-200 hidden sm:block"></div>
                     <ChartExport onExport={handleExport} />
                 </div>
             </div>
 
+            {/* AI Insights Panel */}
+            <AnimatePresence>
+                {(aiInsights || isGeneratingInsights) && (
+                    <motion.div 
+                        initial={{ opacity: 0, height: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, height: 'auto', scale: 1 }}
+                        exit={{ opacity: 0, height: 0, scale: 0.95 }}
+                        className="mb-6 overflow-hidden w-full"
+                    >
+                        <div className="bg-gradient-to-br from-[#3b2f2f] to-[#2a2121] rounded-[2rem] p-6 md:p-8 text-white shadow-xl border border-[#d9a65a]/20 relative overflow-hidden">
+                            <div className="absolute top-1/2 -translate-y-1/2 right-4 md:right-10 opacity-5 pointer-events-none">
+                                <Bot size={150} />
+                            </div>
+                            <div className="relative z-10">
+                                <div className="flex items-center justify-between mb-4">
+                                    <h3 className="flex items-center gap-2 text-[#d9a65a] font-black uppercase tracking-widest text-sm">
+                                        <Sparkles size={18} /> Insights por Zyph AI
+                                    </h3>
+                                    {aiInsights && (
+                                        <button onClick={() => setAiInsights(null)} className="text-gray-400 hover:text-white transition-colors text-[10px] font-bold uppercase tracking-wider bg-white/5 hover:bg-white/10 px-3 py-1.5 rounded-full">
+                                            Fechar
+                                        </button>
+                                    )}
+                                </div>
+                                
+                                {isGeneratingInsights ? (
+                                    <div className="flex items-center gap-3 text-gray-300 py-4">
+                                        <Loader2 size={20} className="animate-spin text-[#d9a65a]" />
+                                        <span className="text-sm font-medium animate-pulse">A analisar {chartData.length} pontos de dados para identificar tendências...</span>
+                                    </div>
+                                ) : (
+                                    <div className="text-gray-200 space-y-3 font-medium leading-relaxed text-sm max-w-4xl relative z-10">
+                                        {aiInsights?.split('\n').filter(line => line.trim() !== '').map((line, i) => {
+                                            const isBullet = line.trim().startsWith('-') || line.trim().startsWith('*');
+                                            const text = isBullet ? line.trim().substring(1).trim() : line.trim();
+                                            const formattedText = text
+                                                .replace(/\*\*(.*?)\*\*/g, '<strong class="text-white">$1</strong>')
+                                                .replace(/\*(.*?)\*/g, '<em class="text-[#d9a65a]/80">$1</em>');
+                                                
+                                            return (
+                                                <div key={i} className={`flex gap-3 ${isBullet ? 'ml-2' : ''}`}>
+                                                    {isBullet && <span className="text-[#d9a65a] mt-0.5 shrink-0">•</span>}
+                                                    <span dangerouslySetInnerHTML={{ __html: formattedText }} />
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
             {/* Chart Container */}
-            <div className="bg-white rounded-[2.5rem] p-8 border border-gray-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative flex-1 min-h-[400px]">
+            <div className="bg-white rounded-[2.5rem] p-6 md:p-8 border border-gray-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative flex-1 min-h-[300px] md:min-h-[400px]">
 
                 {chartData.length > 0 ? (
                     <ReactECharts
@@ -478,23 +540,25 @@ export const AnalyticsChart: React.FC<AnalyticsChartProps> = ({ orders = [], tea
                 )}
             </div>
 
-            {/* Hidden Report Template for PDF Generation */}
-            <ReportTemplate
-                data={chartData}
-                range={range}
-                kpis={{
-                    totalSales: chartData.reduce((acc, curr) => acc + curr.sales, 0),
-                    orders: chartData.reduce((acc, curr) => acc + curr.orders, 0),
-                    customers: chartData.reduce((acc, curr) => acc + curr.customers, 0),
-                    avgTicket: Math.floor(chartData.reduce((acc, curr) => acc + curr.sales, 0) / (chartData.reduce((acc, curr) => acc + curr.orders, 0) || 1))
-                }}
-                branding={{
-                    name: companyBranding.senderId,
-                    address: companyBranding.address,
-                    phone: companyBranding.phone,
-                    logo: companyBranding.icon
-                }}
-            />
+            {/* Hidden Report Template for Image Export Generation */}
+            <div id="report-template-wrapper" className="absolute left-[-9999px] top-[-9999px]">
+                <ReportTemplate
+                    data={chartData}
+                    range={range}
+                    kpis={{
+                        totalSales: chartData.reduce((acc, curr) => acc + curr.sales, 0),
+                        orders: chartData.reduce((acc, curr) => acc + curr.orders, 0),
+                        customers: chartData.reduce((acc, curr) => acc + curr.customers, 0),
+                        avgTicket: Math.floor(chartData.reduce((acc, curr) => acc + curr.sales, 0) / (chartData.reduce((acc, curr) => acc + curr.orders, 0) || 1))
+                    }}
+                    branding={{
+                        name: companyBranding.senderId,
+                        address: companyBranding.address,
+                        phone: companyBranding.phone,
+                        logo: companyBranding.icon
+                    }}
+                />
+            </div>
         </div>
     );
 };

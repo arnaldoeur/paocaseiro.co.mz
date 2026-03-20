@@ -35,7 +35,7 @@ const brandedEmailLayout = (content: string) => `
 /**
  * Send an email using the Resend API via Vite Proxy.
  */
-export const sendEmail = async (to: string[], subject: string, html: string, replyTo?: string, fromOverride?: string, bcc: string[] = []) => {
+export const sendEmail = async (to: string[], subject: string, html: string, replyTo?: string, fromOverride?: string, bcc: string[] = [], attachments: any[] = []) => {
     try {
         // Automatically CC the bakery on all platform dispatch emails so they never miss anything
         const finalBcc = Array.from(new Set([...bcc, 'geral@paocaseiro.co.mz']));
@@ -50,6 +50,9 @@ export const sendEmail = async (to: string[], subject: string, html: string, rep
 
         if (replyTo) {
             payload.reply_to = replyTo;
+        }
+        if (attachments && attachments.length > 0) {
+            payload.attachments = attachments;
         }
 
         // Using /api/resend proxy to avoid CORS
@@ -72,9 +75,36 @@ export const sendEmail = async (to: string[], subject: string, html: string, rep
         }
 
         console.log('Email sent successfully:', data);
+
+        // --- Asynchronous Logging of Communication ---
+        Promise.resolve().then(async () => {
+            try {
+                const { data: settings } = await supabase.from('system_settings').select('value').eq('key', 'sms_pricing').single();
+                const cost = settings?.value?.cost_per_email || 0;
+                await supabase.from('sms_logs').insert([{
+                    type: 'email',
+                    recipient: to.join(', '),
+                    content: subject, // Log the subject as content
+                    status: 'sent',
+                    cost: cost
+                }]);
+            } catch (e) {
+                console.error("Failed to log email communication", e);
+            }
+        });
+
         return { success: true, data };
     } catch (error: any) {
         console.error('Email service error:', error);
+        Promise.resolve().then(async () => {
+            await supabase.from('sms_logs').insert([{
+                type: 'email',
+                recipient: to.join(', '),
+                content: subject,
+                status: 'error',
+                cost: 0
+            }]);
+        }).catch(() => { });
         return { success: false, error: error.message };
     }
 };

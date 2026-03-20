@@ -1,4 +1,5 @@
 import { formatProductName } from './stringUtils';
+import { supabase } from './supabase';
 
 const TWILIO_ACCOUNT_SID = import.meta.env.VITE_TWILIO_ACCOUNT_SID || 'AC7a59f45b0d408ba109c49780237b45e1';
 const TWILIO_AUTH_TOKEN = import.meta.env.VITE_TWILIO_AUTH_TOKEN || 'c50cb41a4c9a303aae6881f7dabb8b21';
@@ -53,12 +54,42 @@ export const sendSMS = async (to: string, body: string) => {
 
         if (data.status === 'error' || data.error === true) {
             console.error('Turbo Host SMS Error:', data);
+
+            // Log Error
+            Promise.resolve().then(async () => {
+                await supabase.from('sms_logs').insert([{
+                    type: 'sms', recipient: formattedNumber, content: body, status: 'error', cost: 0
+                }]);
+            }).catch(() => { });
+
             throw new Error(data.message || 'Failed to send SMS via Turbo Host');
         }
+
+        // --- Asynchronous Logging of Communication ---
+        Promise.resolve().then(async () => {
+            try {
+                const { data: settings } = await supabase.from('system_settings').select('value').eq('key', 'sms_pricing').single();
+                const cost = settings?.value?.cost_per_sms || 1.62;
+                await supabase.from('sms_logs').insert([{
+                    type: 'sms',
+                    recipient: formattedNumber,
+                    content: body,
+                    status: 'sent',
+                    cost: cost
+                }]);
+            } catch (e) {
+                console.error("Failed to log sms communication", e);
+            }
+        });
 
         return data;
     } catch (error: any) {
         console.error('SMS Send Failed:', error);
+        Promise.resolve().then(async () => {
+            await supabase.from('sms_logs').insert([{
+                type: 'sms', recipient: to, content: body, status: 'error', cost: 0
+            }]);
+        }).catch(() => { });
         return { status: 'error', message: error.message };
     }
 };
@@ -92,12 +123,44 @@ export const sendWhatsApp = async (to: string, message: string, isTemplate = fal
         if (!response.ok) {
             const errorData = await response.json();
             console.error('Twilio WhatsApp Error:', errorData);
+
+            // Log Error
+            Promise.resolve().then(async () => {
+                await supabase.from('sms_logs').insert([{
+                    type: 'whatsapp', recipient: to, content: message, status: 'error', cost: 0
+                }]);
+            }).catch(() => { });
+
             throw new Error(errorData.message || 'Failed to send WhatsApp');
         }
 
-        return await response.json();
-    } catch (error) {
+        const responseData = await response.json();
+
+        // --- Asynchronous Logging of Communication ---
+        Promise.resolve().then(async () => {
+            try {
+                const { data: settings } = await supabase.from('system_settings').select('value').eq('key', 'sms_pricing').single();
+                const cost = settings?.value?.cost_per_whatsapp || 0.50; // default for Whatsapp if set
+                await supabase.from('sms_logs').insert([{
+                    type: 'whatsapp',
+                    recipient: to,
+                    content: message,
+                    status: 'sent',
+                    cost: cost
+                }]);
+            } catch (e) {
+                console.error("Failed to log whatsapp communication", e);
+            }
+        });
+
+        return responseData;
+    } catch (error: any) {
         console.error('WhatsApp Send Failed:', error);
+        Promise.resolve().then(async () => {
+            await supabase.from('sms_logs').insert([{
+                type: 'whatsapp', recipient: to, content: message, status: 'error', cost: 0
+            }]);
+        }).catch(() => { });
         return null;
     }
 };
