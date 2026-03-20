@@ -365,20 +365,39 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                     return;
                 }
                 if (checkoutPassword.length < 6) {
-                    setError('A senha para criar a conta deve ter pelo menos 6 caracteres.');
+                    setError(language === 'en' ? 'Password must be at least 6 characters.' : 'A senha para criar a conta deve ter pelo menos 6 caracteres.');
                     return;
                 }
                 
                 setIsCreatingAccount(true);
                 setError('');
                 try {
+                    // Pre-check if email or phone already exists
+                    let phoneFormatted = details.phone.replace(/\D/g, '');
+                    if (phoneFormatted.length >= 9 && !phoneFormatted.startsWith('258')) {
+                        phoneFormatted = '258' + phoneFormatted;
+                    }
+                    phoneFormatted = '+' + phoneFormatted;
+
+                    const { data: existing } = await supabase
+                        .from('customers')
+                        .select('id')
+                        .or(`contact_no.eq."${phoneFormatted}",email.eq."${details.email}"`)
+                        .limit(1);
+
+                    if (existing && existing.length > 0) {
+                        setIsCreatingAccount(false);
+                        setError(language === 'en' ? 'This Email or Phone is already registered! Please click "Already have an account" at the top to Log In and continue your order.' : 'Este Telemóvel ou Email já está registado! Por favor clique em "Já tenho conta" no topo para fazer Log In e prosseguir com a compra.');
+                        return;
+                    }
+
                     const { data: authData, error: authError } = await supabase.auth.signUp({
                         email: details.email,
                         password: checkoutPassword,
                         options: {
                             data: {
                                 full_name: details.name,
-                                phone: details.phone
+                                phone: phoneFormatted
                             }
                         }
                     });
@@ -386,7 +405,7 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                     if (authError) {
                         setIsCreatingAccount(false);
                         if (authError.message.includes('already registered')) {
-                            setError('Este email já está registado na plataforma. Por favor suba e clique em "Já tenho conta".');
+                            setError(language === 'en' ? 'Email already registered. Please Log In.' : 'Este email já está registado. Por favor clique em "Já tenho conta" para fazer login.');
                         } else {
                             setError('Erro ao criar conta: Ocorreu uma incompatibilidade na plataforma (' + authError.message + '). Tente no painel de Log In.');
                         }
@@ -394,11 +413,11 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                     }
                     
                     // Proceed: Account created successfully! supabase.auth will automatically sign them in shortly.
-                    setManualUserPhone(details.phone); // temporary local bypass
+                    setManualUserPhone(phoneFormatted); // temporary local bypass
                     setIsCreatingAccount(false);
                 } catch (err: any) {
                     setIsCreatingAccount(false);
-                    setError('Falha de conexão ao criar a conta.');
+                    setError('Falha de conexão ao verificar a conta.');
                     return;
                 }
             }
@@ -1192,7 +1211,11 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                         <h3 className="text-2xl font-bold text-[#3b2f2f] font-serif">Tudo Pronto!</h3>
                         <p className="text-[#3b2f2f]/80">Sua encomenda foi confirmada e já vamos começar a preparar tudo.</p>
                         <button
-                            onClick={() => setIsOpen(false)} // Or clearCart logic handled in Receipt close
+                            onClick={() => {
+                                clearCart();
+                                setIsOpen(false);
+                                setStep('cart');
+                            }}
                             title="Fechar Carrinho"
                             className="text-[#d9a65a] underline"
                         >
@@ -1282,6 +1305,7 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                         amountPaid={completedOrder.amountPaid}
                         balance={completedOrder.balance}
                         onClose={() => {
+                            clearCart();
                             setIsOpen(false);
                             setStep('cart');
                             setCompletedOrder(null);
