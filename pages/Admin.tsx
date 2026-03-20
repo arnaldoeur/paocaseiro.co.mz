@@ -765,6 +765,11 @@ export const Admin: React.FC = () => {
         }
 
         const { data } = supabase.storage.from('products').getPublicUrl(fileName);
+    if (typeof data !== 'undefined' && data && data.publicUrl && data.publicUrl.includes('/supabase-proxy')) {
+        data.publicUrl = data.publicUrl.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co');
+    } else if (typeof publicUrlData !== 'undefined' && publicUrlData && publicUrlData.publicUrl && publicUrlData.publicUrl.includes('/supabase-proxy')) {
+        publicUrlData.publicUrl = publicUrlData.publicUrl.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co');
+    }
         setDriverForm({ ...driverForm, avatar_url: data.publicUrl });
     };
 
@@ -1043,6 +1048,11 @@ export const Admin: React.FC = () => {
             alert('Erro ao enviar foto: ' + error.message);
         } else {
             const { data } = supabase.storage.from('products').getPublicUrl(fileName);
+    if (typeof data !== 'undefined' && data && data.publicUrl && data.publicUrl.includes('/supabase-proxy')) {
+        data.publicUrl = data.publicUrl.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co');
+    } else if (typeof publicUrlData !== 'undefined' && publicUrlData && publicUrlData.publicUrl && publicUrlData.publicUrl.includes('/supabase-proxy')) {
+        publicUrlData.publicUrl = publicUrlData.publicUrl.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co');
+    }
             setUserForm(prev => ({ ...prev, photo: data.publicUrl }));
         }
     };
@@ -1444,6 +1454,11 @@ export const Admin: React.FC = () => {
         }
 
         const { data } = supabase.storage.from('products').getPublicUrl(filePath);
+    if (typeof data !== 'undefined' && data && data.publicUrl && data.publicUrl.includes('/supabase-proxy')) {
+        data.publicUrl = data.publicUrl.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co');
+    } else if (typeof publicUrlData !== 'undefined' && publicUrlData && publicUrlData.publicUrl && publicUrlData.publicUrl.includes('/supabase-proxy')) {
+        publicUrlData.publicUrl = publicUrlData.publicUrl.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co');
+    }
         setPreviewImage(data.publicUrl);
     };
 
@@ -1791,6 +1806,11 @@ export const Admin: React.FC = () => {
             const filePath = `tickets/${Date.now()}_${file.name}`;
             await supabase.storage.from('support-tickets').upload(filePath, file);
             const { data } = supabase.storage.from('support-tickets').getPublicUrl(filePath);
+    if (typeof data !== 'undefined' && data && data.publicUrl && data.publicUrl.includes('/supabase-proxy')) {
+        data.publicUrl = data.publicUrl.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co');
+    } else if (typeof publicUrlData !== 'undefined' && publicUrlData && publicUrlData.publicUrl && publicUrlData.publicUrl.includes('/supabase-proxy')) {
+        publicUrlData.publicUrl = publicUrlData.publicUrl.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co');
+    }
             imageUrl = data.publicUrl;
         }
 
@@ -3282,6 +3302,11 @@ export const Admin: React.FC = () => {
                                                                 const { error } = await supabase.storage.from('products').upload(fileName, file);
                                                                 if (error) return alert('Erro: ' + error.message);
                                                                 const { data } = supabase.storage.from('products').getPublicUrl(fileName);
+    if (typeof data !== 'undefined' && data && data.publicUrl && data.publicUrl.includes('/supabase-proxy')) {
+        data.publicUrl = data.publicUrl.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co');
+    } else if (typeof publicUrlData !== 'undefined' && publicUrlData && publicUrlData.publicUrl && publicUrlData.publicUrl.includes('/supabase-proxy')) {
+        publicUrlData.publicUrl = publicUrlData.publicUrl.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co');
+    }
                                                                 setMemberAvatar(data.publicUrl);
                                                             }}
                                                         />
@@ -4937,6 +4962,11 @@ export const Admin: React.FC = () => {
                                                                         const { error } = await supabase.storage.from('products').upload(fileName, file);
                                                                         if (error) return alert('Erro: ' + error.message);
                                                                         const { data } = supabase.storage.from('products').getPublicUrl(fileName);
+    if (typeof data !== 'undefined' && data && data.publicUrl && data.publicUrl.includes('/supabase-proxy')) {
+        data.publicUrl = data.publicUrl.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co');
+    } else if (typeof publicUrlData !== 'undefined' && publicUrlData && publicUrlData.publicUrl && publicUrlData.publicUrl.includes('/supabase-proxy')) {
+        publicUrlData.publicUrl = publicUrlData.publicUrl.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co');
+    }
                                                                         setCompanyInfo(prev => ({ ...prev, logo: data.publicUrl }));
                                                                     }}
                                                                 />
@@ -6710,6 +6740,11 @@ const AdminBlogView: React.FC = () => {
                 if (error) throw error;
                 
                 const { data } = supabase.storage.from('products').getPublicUrl(fileName);
+    if (typeof data !== 'undefined' && data && data.publicUrl && data.publicUrl.includes('/supabase-proxy')) {
+        data.publicUrl = data.publicUrl.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co');
+    } else if (typeof publicUrlData !== 'undefined' && publicUrlData && publicUrlData.publicUrl && publicUrlData.publicUrl.includes('/supabase-proxy')) {
+        publicUrlData.publicUrl = publicUrlData.publicUrl.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co');
+    }
                 
                 // Fix proxy URL issue by replacing localhost with actual Supabase URL
                 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -6926,6 +6961,11 @@ const AdminBlogView: React.FC = () => {
             if (error) throw error;
             
             const { data } = supabase.storage.from('products').getPublicUrl(fileName);
+    if (typeof data !== 'undefined' && data && data.publicUrl && data.publicUrl.includes('/supabase-proxy')) {
+        data.publicUrl = data.publicUrl.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co');
+    } else if (typeof publicUrlData !== 'undefined' && publicUrlData && publicUrlData.publicUrl && publicUrlData.publicUrl.includes('/supabase-proxy')) {
+        publicUrlData.publicUrl = publicUrlData.publicUrl.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co');
+    }
             
             const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
             let finalUrl = data.publicUrl;
