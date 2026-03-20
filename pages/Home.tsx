@@ -82,7 +82,7 @@ const CLASSICS = [
     }
 ];
 
-const GALLERY_ITEMS = [
+const DEFAULT_GALLERY_ITEMS = [
     { src: '/images/products/waffle-stick.png', caption: 'Waffle Stick' },
     { src: '/images/products/croissant-folhado.png', caption: 'Croissant Folhado' },
     { src: '/images/products/queques.png', caption: 'Queques Fofinhos' },
@@ -112,6 +112,18 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
     const [isPlayingWithSound, setIsPlayingWithSound] = useState(false);
     const videoRef = React.useRef<HTMLVideoElement>(null);
     const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+    const [galleryItems, setGalleryItems] = useState<{ src: string, caption: string }[]>(DEFAULT_GALLERY_ITEMS);
+
+    useEffect(() => {
+        const fetchGallery = async () => {
+            const { data } = await supabase.from('gallery_items').select('*').order('display_order', { ascending: true });
+            if (data && data.length > 0) {
+                setGalleryItems(data);
+            }
+        };
+        fetchGallery();
+    }, []);
+
 
     const handlePlayWithSound = () => {
         setIsPlayingWithSound(true);
@@ -216,14 +228,14 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
     const handleNext = useCallback((e?: React.MouseEvent) => {
         e?.stopPropagation();
         if (selectedIndex !== null) {
-            setSelectedIndex((prev) => (prev !== null && prev < GALLERY_ITEMS.length - 1 ? prev + 1 : 0));
+            setSelectedIndex((prev) => (prev !== null && prev < galleryItems.length - 1 ? prev + 1 : 0));
         }
     }, [selectedIndex]);
 
     const handlePrev = useCallback((e?: React.MouseEvent) => {
         e?.stopPropagation();
         if (selectedIndex !== null) {
-            setSelectedIndex((prev) => (prev !== null && prev > 0 ? prev - 1 : GALLERY_ITEMS.length - 1));
+            setSelectedIndex((prev) => (prev !== null && prev > 0 ? prev - 1 : galleryItems.length - 1));
         }
     }, [selectedIndex]);
 
@@ -406,11 +418,9 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
             </section >
 
             {/* --- SERVICES SECTION --- */}
-            < section id="services" className="min-h-screen flex items-center py-20 bg-[#3b2f2f] text-[#f7f1eb] relative overflow-hidden" >
-                {/* Subtle Watermark */}
-                < div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-10 pointer-events-none w-[80vw]" >
-                    <Logo className="w-full h-auto" />
-                </div >
+            < section id="services" className="min-h-screen flex items-center py-20 bg-[#3b2f2f] text-[#f7f1eb] relative overflow-hidden bg-cover bg-center bg-no-repeat" style={{ backgroundImage: "url('/images/fundo-services.png')" }} >
+                {/* Medium-dark overlay for better text readability against the image */}
+                <div className="absolute inset-0 bg-[#1a1414]/90 mix-blend-multiply" />
 
                 <div className="container mx-auto px-6 relative z-10">
                     <div className="text-center mb-16 max-w-3xl mx-auto">
@@ -499,7 +509,7 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {GALLERY_ITEMS.map((item, idx) => (
+                        {galleryItems.map((item, idx) => (
                             <motion.div
                                 key={idx}
                                 layoutId={`gallery-item-${idx}`}
@@ -734,12 +744,12 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                                     animate={{ opacity: 1, scale: 1 }}
                                     exit={{ opacity: 0, scale: 0.9 }}
                                     transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                                    src={GALLERY_ITEMS[selectedIndex].src}
-                                    alt={GALLERY_ITEMS[selectedIndex].caption}
+                                    src={galleryItems[selectedIndex].src}
+                                    alt={galleryItems[selectedIndex].caption}
                                     className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl border-2 border-[#d9a65a]/30"
                                 />
                                 <div className="absolute bottom-[-3rem] left-0 right-0 text-center text-white/90">
-                                    <p className="text-xl font-serif tracking-wide">{GALLERY_ITEMS[selectedIndex].caption}</p>
+                                    <p className="text-xl font-serif tracking-wide">{galleryItems[selectedIndex].caption}</p>
                                 </div>
                             </div>
                         </motion.div>

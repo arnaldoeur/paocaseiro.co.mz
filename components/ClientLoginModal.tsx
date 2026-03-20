@@ -5,6 +5,7 @@ import { supabase } from '../services/supabase';
 import { useNavigate } from 'react-router-dom';
 import { sendSMS } from '../services/sms';
 import { sendOTPEmail } from '../services/email';
+import { logAudit } from '../services/audit';
 
 interface ClientLoginModalProps {
     isOpen: boolean;
@@ -186,6 +187,9 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
             // Save login state
             localStorage.setItem('pc_auth_phone', customerData.contact_no);
             localStorage.setItem('pc_user_data', JSON.stringify(customerData));
+
+            await logAudit('CUSTOMER_LOGIN', 'customer', customerData.id, { method: 'password' }, customerData.contact_no);
+
             onClose();
             navigate('/dashboard');
         } catch (err: any) {
@@ -211,6 +215,9 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
             if (existingCustomer) {
                 localStorage.setItem('pc_auth_phone', existingCustomer.contact_no);
                 localStorage.setItem('pc_user_data', JSON.stringify(existingCustomer));
+                
+                await logAudit('CUSTOMER_LOGIN', 'customer', existingCustomer.id, { method: 'otp' }, existingCustomer.contact_no);
+
                 onClose();
                 navigate('/dashboard');
             } else {
@@ -259,6 +266,7 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
             localStorage.setItem('pc_auth_phone', identifier);
             if (customerData) {
                 localStorage.setItem('pc_user_data', JSON.stringify(customerData));
+                await logAudit('CUSTOMER_REGISTER', 'customer', customerData.id, {  }, customerData.contact_no);
             }
 
             onClose();

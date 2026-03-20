@@ -248,13 +248,17 @@ export const getProducts = async () => {
     }
 };
 
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
+
 export const generateReceipt = async (orderId: string, shortId: string, customerId: string, customerName: string, items: any[], totalAmount: number, documentType: 'Receipt' | 'Invoice' = 'Receipt') => {
     try {
+        const receiptNo = documentType === 'Receipt' ? `REC-${shortId}` : `FAT-${shortId}`;
         const receiptData = {
             order_id: orderId,
             customer_id: customerId,
             customer_name: customerName,
-            receipt_no: documentType === 'Receipt' ? `REC-${shortId}` : `FAT-${shortId}`,
+            receipt_no: receiptNo,
             date: new Date().toISOString().split('T')[0],
             total_amount: totalAmount,
             currency: 'MT',
@@ -273,6 +277,78 @@ export const generateReceipt = async (orderId: string, shortId: string, customer
                 .eq('order_id', orderId)
                 .eq('document_type', 'Invoice');
         }
+
+        // --- Generate PDF & Sync to Drive ---
+        try {
+            const doc = new jsPDF();
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(22);
+            doc.text("Pão Caseiro", 14, 20);
+            
+            doc.setFontSize(14);
+            doc.setTextColor(100);
+            doc.text(`${documentType === 'Receipt' ? 'Recibo' : 'Fatura'} N.º: ${receiptNo}`, 14, 30);
+            
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(11);
+            doc.setTextColor(0);
+            doc.text(`Data: ${receiptData.date}`, 14, 40);
+            doc.text(`Cliente: ${customerName}`, 14, 46);
+            
+            const tableData = items.map(i => [
+                i.name, 
+                i.quantity.toString(), 
+                `${i.price.toLocaleString()} MT`, 
+                `${(i.price * i.quantity).toLocaleString()} MT`
+            ]);
+            
+            autoTable(doc, {
+                startY: 55,
+                head: [['Artigo', 'Qtd', 'Preço Unit', 'Subtotal']],
+                body: tableData,
+                theme: 'striped',
+                headStyles: { fillColor: [217, 166, 90] } // #d9a65a
+            });
+            
+            const finalY = (doc as any).lastAutoTable.finalY || 55;
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(14);
+            doc.text(`Total a Pagar: ${totalAmount.toLocaleString()} MT`, 14, finalY + 15);
+            
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(10);
+            doc.setTextColor(150);
+            doc.text("Obrigado pela preferência!", 14, finalY + 30);
+
+            const pdfBlob = doc.output('blob');
+            const fileName = `${documentType === 'Receipt' ? 'recibos' : 'faturas'}/${receiptNo}.pdf`;
+            
+            // Upload to products bucket
+            const { error: uploadError } = await supabase.storage.from('products').upload(fileName, pdfBlob, {
+                 contentType: 'application/pdf',
+                 upsert: true
+            });
+            
+            if (!uploadError) {
+                 // Sync to drive_files
+                 const folderName = documentType === 'Receipt' ? 'Recibos' : 'Faturas';
+                 const { data: folderInfo } = await supabase.from('drive_folders').select('id').eq('name', folderName).maybeSingle();
+                 
+                 await supabase.from('drive_files').insert({
+                     name: `${receiptNo}.pdf`,
+                     path: fileName,
+                     size: pdfBlob.size,
+                     type: 'application/pdf',
+                     folder_id: folderInfo?.id || null,
+                     uploaded_by: 'system' // System generated
+                 });
+            } else {
+                 console.error("PDF Upload Error:", uploadError);
+            }
+        } catch (pdfErr) {
+            console.error("PDF Generation/Sync Error:", pdfErr);
+        }
+        // ------------------------------------
 
         return { success: true, data };
     } catch (error) {

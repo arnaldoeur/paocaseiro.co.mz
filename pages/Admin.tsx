@@ -21,10 +21,14 @@ const mapPinIcon = new L.DivIcon({
 });
 
 const QuillBase = ReactQuill as any;
-import { Eye, EyeOff, Sparkles, MessageSquare, Trash2, Upload, Send, CheckCircle, Package, TrendingUp, User, LogOut, ShoppingBag, Clock, Menu, X, ChevronRight, Search, Plus, Calendar, MapPin, Truck, Smartphone, Users, MessageCircle, Mail, Download, ChevronLeft, Loader, ShoppingCart, Lock, Unlock, XCircle, CreditCard, Banknote, Printer, FileText, Key, Edit3, Usb, Wifi, Share2, RefreshCw, UserPlus, Bell, Award, BarChart3, ShieldCheck, MailPlus, Box, Store, Zap, LineChart, AlertTriangle, Star, Save, Bot } from 'lucide-react';
+import { Eye, EyeOff, Sparkles, MessageSquare, Trash2, Upload, Send, CheckCircle, Package, TrendingUp, User, LogOut, ShoppingBag, Clock, Menu, X, ChevronRight, Search, Plus, Calendar, MapPin, Truck, Smartphone, Users, MessageCircle, Mail, Download, ChevronLeft, Loader, ShoppingCart, Lock, Unlock, XCircle, CreditCard, Banknote, Printer, FileText, Key, Edit3, Usb, Wifi, Share2, RefreshCw, UserPlus, Bell, Award, BarChart3, ShieldCheck, MailPlus, Box, Store, Zap, LineChart, AlertTriangle, Star, Save, Bot, RotateCw } from 'lucide-react';
 import { AdminSupportAI } from '../components/AdminSupportAI';
+import { logAudit } from '../services/audit';
 import { Kitchen } from './Kitchen';
 import { AnalyticsChart } from '../components/Analytics/AnalyticsChart';
+import { AdminPerformanceView } from './admin/AdminPerformanceView';
+import { AdminAuditView } from './admin/AdminAuditView';
+import { AdminDriveView } from './admin/AdminDriveView';
 import { generateMasterReport } from '../services/reportGenerator';
 import { sendSMS, sendWhatsApp, notifyCustomer } from '../services/sms';
 import { sendEmail } from '../services/email';
@@ -295,7 +299,31 @@ export const Admin: React.FC = () => {
         };
     });
 
-    const [activeSettingsTab, setActiveSettingsTab] = useState<'notifications' | 'branding' | 'printer' | 'hardware' | 'profile' | 'team' | 'performance' | 'company'>('profile');
+    const [activeSettingsTab, setActiveSettingsTab] = useState<'notifications' | 'branding' | 'printer' | 'hardware' | 'profile' | 'team' | 'performance' | 'company' | 'audit'>('profile');
+    
+    const [auditLogs, setAuditLogs] = useState<any[]>([]);
+    const [auditLoading, setAuditLoading] = useState(false);
+
+    const fetchAuditLogs = async () => {
+        setAuditLoading(true);
+        try {
+            const { data, error } = await supabase
+                .from('audit_logs')
+                .select('*')
+                .order('created_at', { ascending: false })
+                .limit(200);
+            if (!error && data) setAuditLogs(data);
+        } catch (e) {
+            console.error(e);
+        }
+        setAuditLoading(false);
+    };
+
+    useEffect(() => {
+        if (activeSettingsTab === 'audit') {
+            fetchAuditLogs();
+        }
+    }, [activeSettingsTab]);
 
     const [teamNumbers, setTeamNumbers] = useState(() => {
         const saved = localStorage.getItem('team_numbers');
@@ -502,6 +530,14 @@ export const Admin: React.FC = () => {
             }));
             const { error: itemsError } = await supabase.from('order_items').insert(itemsToInsert);
             if (itemsError) throw itemsError;
+
+            // Audit Log
+            await logAudit('ORDER_PLACED', 'order', orderResult.id, { 
+                total: total, 
+                method: paymentMethod, 
+                source: 'pos_admin' 
+            }, posCustomer?.contact_no);
+
 
             // Open Cash Drawer automatically if payment is cash
             if (paymentMethod === 'cash' && hardwareConfig.cashDrawerEnabled) {
@@ -767,8 +803,6 @@ export const Admin: React.FC = () => {
         const { data } = supabase.storage.from('products').getPublicUrl(fileName);
     if (typeof data !== 'undefined' && data && data.publicUrl && data.publicUrl.includes('/supabase-proxy')) {
         data.publicUrl = data.publicUrl.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co');
-    } else if (typeof publicUrlData !== 'undefined' && publicUrlData && publicUrlData.publicUrl && publicUrlData.publicUrl.includes('/supabase-proxy')) {
-        publicUrlData.publicUrl = publicUrlData.publicUrl.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co');
     }
         setDriverForm({ ...driverForm, avatar_url: data.publicUrl });
     };
@@ -1050,8 +1084,6 @@ export const Admin: React.FC = () => {
             const { data } = supabase.storage.from('products').getPublicUrl(fileName);
     if (typeof data !== 'undefined' && data && data.publicUrl && data.publicUrl.includes('/supabase-proxy')) {
         data.publicUrl = data.publicUrl.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co');
-    } else if (typeof publicUrlData !== 'undefined' && publicUrlData && publicUrlData.publicUrl && publicUrlData.publicUrl.includes('/supabase-proxy')) {
-        publicUrlData.publicUrl = publicUrlData.publicUrl.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co');
     }
             setUserForm(prev => ({ ...prev, photo: data.publicUrl }));
         }
@@ -1456,9 +1488,23 @@ export const Admin: React.FC = () => {
         const { data } = supabase.storage.from('products').getPublicUrl(filePath);
     if (typeof data !== 'undefined' && data && data.publicUrl && data.publicUrl.includes('/supabase-proxy')) {
         data.publicUrl = data.publicUrl.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co');
-    } else if (typeof publicUrlData !== 'undefined' && publicUrlData && publicUrlData.publicUrl && publicUrlData.publicUrl.includes('/supabase-proxy')) {
-        publicUrlData.publicUrl = publicUrlData.publicUrl.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co');
     }
+
+        // Auto-sync with Drive module (Fotos de Produtos)
+        try {
+            const { data: folderInfo } = await supabase.from('drive_folders').select('id').eq('name', 'Fotos de Produtos').maybeSingle();
+            await supabase.from('drive_files').insert({
+                name: file.name,
+                path: filePath,
+                size: file.size,
+                type: file.type || 'image/jpeg',
+                folder_id: folderInfo?.id || null,
+                uploaded_by: 'admin'
+            });
+        } catch (syncErr) {
+            console.error("Failed to sync image with Drive:", syncErr);
+        }
+
         setPreviewImage(data.publicUrl);
     };
 
@@ -1808,8 +1854,6 @@ export const Admin: React.FC = () => {
             const { data } = supabase.storage.from('support-tickets').getPublicUrl(filePath);
     if (typeof data !== 'undefined' && data && data.publicUrl && data.publicUrl.includes('/supabase-proxy')) {
         data.publicUrl = data.publicUrl.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co');
-    } else if (typeof publicUrlData !== 'undefined' && publicUrlData && publicUrlData.publicUrl && publicUrlData.publicUrl.includes('/supabase-proxy')) {
-        publicUrlData.publicUrl = publicUrlData.publicUrl.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co');
     }
             imageUrl = data.publicUrl;
         }
@@ -3238,6 +3282,13 @@ export const Admin: React.FC = () => {
                 )
                 }
 
+                {/* Documents / Drive View */}
+                {activeView === 'documents' && (
+                    <div className="animate-fade-in bg-white rounded-3xl shadow-sm border border-[#d9a65a]/10 min-h-full h-[calc(100vh-140px)] overflow-hidden">
+                        <AdminDriveView />
+                    </div>
+                )}
+
                 {/* Team View */}
                 {
                     activeView === 'team' && (
@@ -3304,8 +3355,6 @@ export const Admin: React.FC = () => {
                                                                 const { data } = supabase.storage.from('products').getPublicUrl(fileName);
     if (typeof data !== 'undefined' && data && data.publicUrl && data.publicUrl.includes('/supabase-proxy')) {
         data.publicUrl = data.publicUrl.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co');
-    } else if (typeof publicUrlData !== 'undefined' && publicUrlData && publicUrlData.publicUrl && publicUrlData.publicUrl.includes('/supabase-proxy')) {
-        publicUrlData.publicUrl = publicUrlData.publicUrl.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co');
     }
                                                                 setMemberAvatar(data.publicUrl);
                                                             }}
@@ -4796,8 +4845,8 @@ export const Admin: React.FC = () => {
                     activeView === 'settings' && (
                         <div className="h-[calc(100vh-140px)] animate-fade-in flex flex-col gap-6 overflow-hidden">
                             {/* Tabs Navigation - Full Width Responsive */}
-                            <div className="bg-white rounded-2xl p-2 shadow-sm border border-gray-100 w-full max-w-[1400px] mx-auto overflow-x-auto no-scrollbar">
-                                <div className="flex min-w-max gap-1">
+                            <div className="bg-white rounded-2xl p-1.5 shadow-sm border border-gray-100 w-full max-w-[1400px] mx-auto overflow-hidden">
+                                <div className="flex items-center justify-between gap-0.5 md:gap-1">
                                     {[
                                         { id: 'profile', label: 'Meu Perfil', icon: <Users size={18} /> },
                                         { id: 'company', label: 'Empresa', icon: <FileText size={18} /> },
@@ -4806,15 +4855,17 @@ export const Admin: React.FC = () => {
                                         { id: 'notifications', label: 'Geral', icon: <Bell size={18} /> },
                                         { id: 'branding', label: 'Branding', icon: <Sparkles size={18} /> },
                                         { id: 'printer', label: 'Impressora', icon: <Printer size={18} /> },
-                                        { id: 'hardware', label: 'Hardware', icon: <Smartphone size={18} /> }
+                                        { id: 'hardware', label: 'Hardware', icon: <Smartphone size={18} /> },
+                                        { id: 'audit', label: 'Audit', icon: <ShieldCheck size={18} /> },
+                                        { id: 'drive', label: 'Drive', icon: <Save size={18} /> }
                                     ].map(tab => (
                                         <button
                                             key={tab.id}
                                             onClick={() => setActiveSettingsTab(tab.id as any)}
-                                            className={`flex items-center justify-center gap-2 px-6 py-3 rounded-xl transition-all font-bold text-xs uppercase tracking-wider ${activeSettingsTab === tab.id ? 'bg-[#3b2f2f] text-[#d9a65a] shadow-md' : 'text-gray-400 hover:bg-gray-50'}`}
+                                            className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl transition-all font-bold text-[10px] md:text-xs uppercase tracking-wider flex-1 whitespace-nowrap ${activeSettingsTab === tab.id ? 'bg-[#3b2f2f] text-[#d9a65a] shadow-md' : 'text-gray-400 hover:bg-gray-50'}`}
                                         >
                                             {tab.icon}
-                                            <span>{tab.label}</span>
+                                            <span className="hidden md:inline">{tab.label}</span>
                                         </button>
                                     ))}
                                 </div>
@@ -4964,8 +5015,6 @@ export const Admin: React.FC = () => {
                                                                         const { data } = supabase.storage.from('products').getPublicUrl(fileName);
     if (typeof data !== 'undefined' && data && data.publicUrl && data.publicUrl.includes('/supabase-proxy')) {
         data.publicUrl = data.publicUrl.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co');
-    } else if (typeof publicUrlData !== 'undefined' && publicUrlData && publicUrlData.publicUrl && publicUrlData.publicUrl.includes('/supabase-proxy')) {
-        publicUrlData.publicUrl = publicUrlData.publicUrl.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co');
     }
                                                                         setCompanyInfo(prev => ({ ...prev, logo: data.publicUrl }));
                                                                     }}
@@ -5254,318 +5303,8 @@ export const Admin: React.FC = () => {
                                     )}
 
                                     {activeSettingsTab === 'performance'  && (
-                                        <div className="flex flex-col gap-6 animate-fade-in w-full">
-                                            {/* Sub-Navigation */}
-                                            <div className="bg-white rounded-2xl p-2 shadow-sm border border-gray-100 flex flex-col md:flex-row items-center justify-between gap-4">
-                                                <div className="flex min-w-max gap-1 overflow-x-auto no-scrollbar pb-2 md:pb-0">
-                                                    {[
-                                                        { id: 'overview', label: 'Visão Geral', icon: <BarChart3 size={16} /> },
-                                                        { id: 'tracking', label: 'Rastreio de Funcionários', icon: <Clock size={16} /> },
-                                                        { id: 'productivity', label: 'Produtividade', icon: <TrendingUp size={16} /> },
-                                                        { id: 'analytics', label: 'Análises', icon: <Search size={16} /> },
-                                                        { id: 'insights', label: 'Insights de IA', icon: <Sparkles size={16} /> }
-                                                    ].map(tab => (
-                                                        <button
-                                                            key={tab.id}
-                                                            onClick={() => setActivePerformanceTab(tab.id as any)}
-                                                            className={`flex items-center gap-2 px-6 py-3 rounded-xl transition-all font-bold text-xs uppercase tracking-wider ${activePerformanceTab === tab.id ? 'bg-[#3b2f2f] text-[#d9a65a] shadow-md' : 'text-gray-400 hover:bg-gray-50'}`}
-                                                        >
-                                                            {tab.icon}
-                                                            <span>{tab.label}</span>
-                                                        </button>
-                                                    ))}
-                                                </div>
-
-                                                <div className="relative w-full md:w-64">
-                                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                                                    <input
-                                                        type="text"
-                                                        placeholder="Filtrar por funcionário..."
-                                                        value={performanceSearch}
-                                                        onChange={e => setPerformanceSearch(e.target.value)}
-                                                        className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-100 rounded-xl outline-none focus:border-[#d9a65a] text-xs font-bold transition-all"
-                                                    />
-                                                </div>
-                                            </div>
-
-                                            {/* Overview Metrics */}
-                                            {activePerformanceTab === 'overview' && (
-                                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 animate-fade-in">
-                                                    <div className="bg-white p-6 rounded-3xl shadow-xl border border-gray-100 flex flex-col justify-between">
-                                                        <div className="flex items-center gap-3 text-blue-600 mb-4">
-                                                            <div className="p-2 bg-blue-50 rounded-xl"><Clock size={20} /></div>
-                                                            <span className="font-bold text-xs uppercase tracking-widest text-gray-400">Total de Horas Trabalhadas</span>
-                                                        </div>
-                                                        <p className="text-4xl font-black text-[#3b2f2f]">{performanceMetrics.totalHours}h <span className="text-sm text-gray-400 font-medium">Hoje</span></p>
-                                                    </div>
-
-                                                    <div className="bg-white p-6 rounded-3xl shadow-xl border border-gray-100 flex flex-col justify-between">
-                                                        <div className="flex items-center gap-3 text-purple-600 mb-4">
-                                                            <div className="p-2 bg-purple-50 rounded-xl"><Users size={20} /></div>
-                                                            <span className="font-bold text-xs uppercase tracking-widest text-gray-400">Equipa Ativa</span>
-                                                        </div>
-                                                        <p className="text-4xl font-black text-[#3b2f2f]">{performanceMetrics.activeStaff} <span className="text-sm text-gray-400 font-medium">No Serviço</span></p>
-                                                    </div>
-
-                                                    <div className="bg-white p-6 rounded-3xl shadow-xl border border-gray-100 flex flex-col justify-between">
-                                                        <div className="flex items-center gap-3 text-green-600 mb-4">
-                                                            <div className="p-2 bg-green-50 rounded-xl"><ShoppingBag size={20} /></div>
-                                                            <span className="font-bold text-xs uppercase tracking-widest text-gray-400">Pedidos Processados</span>
-                                                        </div>
-                                                        <p className="text-4xl font-black text-[#3b2f2f]">{performanceMetrics.ordersToday} <span className="text-sm text-gray-400 font-medium">Hoje</span></p>
-                                                    </div>
-
-                                                    <div className="bg-white p-6 rounded-3xl shadow-xl border border-gray-100 flex flex-col justify-between relative overflow-hidden">
-                                                        <div className="absolute -right-4 -top-4 bg-[#d9a65a]/10 w-24 h-24 rounded-full blur-xl"></div>
-                                                        <div className="flex items-center gap-3 text-[#d9a65a] mb-4">
-                                                            <div className="p-2 bg-[#d9a65a]/10 rounded-xl"><Award size={20} /></div>
-                                                            <span className="font-bold text-xs uppercase tracking-widest text-gray-400">Score de Produtividade</span>
-                                                        </div>
-                                                        <div className="flex items-baseline gap-2">
-                                                            <p className="text-4xl font-black text-[#3b2f2f]">{performanceMetrics.productivityScore}</p>
-                                                            <span className="text-green-500 font-bold text-sm">Real-time</span>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {/* Employee Tracking */}
-                                            {activePerformanceTab === 'tracking' && (
-                                                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in">
-                                                    <div className="lg:col-span-1 bg-white p-8 rounded-3xl shadow-xl border border-gray-100 flex flex-col items-center justify-center text-center">
-                                                        <div className="w-24 h-24 bg-gray-100 rounded-full mb-6 flex items-center justify-center text-gray-400 overflow-hidden">
-                                                            {companyInfo.logo ? <img src={companyInfo.logo} className="w-full h-full object-cover" alt="Logo" /> : <User size={40} />}
-                                                        </div>
-                                                        <h3 className="text-xl font-bold text-[#3b2f2f] mb-2">{username || 'Colaborador'}</h3>
-                                                        <p className="text-sm text-gray-500 mb-8">
-                                                            {isUserCheckedIn 
-                                                                ? "Você está em serviço. Bom desempenho!" 
-                                                                : "Faça check-in para iniciar a contagem do seu tempo de trabalho."}
-                                                        </p>
-
-                                                        <div className="flex w-full gap-4">
-                                                            <button 
-                                                                onClick={handleCheckIn}
-                                                                disabled={isUserCheckedIn || isSubmitting}
-                                                                className={`flex-1 py-4 font-bold rounded-2xl transition-all flex flex-col items-center justify-center gap-2 border ${isUserCheckedIn ? 'bg-gray-50 text-gray-300 border-gray-100' : 'bg-green-50 text-green-700 hover:bg-green-100 border-green-200'}`}
-                                                            >
-                                                                <LogOut className="rotate-180" size={24} />
-                                                                <span>Iniciar Turno</span>
-                                                                <span className="text-[10px] font-normal opacity-80 uppercase tracking-widest">Check In</span>
-                                                            </button>
-                                                            <button 
-                                                                onClick={handleCheckOut}
-                                                                disabled={!isUserCheckedIn || isSubmitting}
-                                                                className={`flex-1 py-4 font-bold rounded-2xl transition-all flex flex-col items-center justify-center gap-2 border ${!isUserCheckedIn ? 'bg-gray-50 text-gray-300 border-gray-100' : 'bg-red-50 text-red-700 hover:bg-red-100 border-red-200'}`}
-                                                            >
-                                                                <LogOut size={24} />
-                                                                <span>Terminar Turno</span>
-                                                                <span className="text-[10px] font-normal opacity-80 uppercase tracking-widest">Check Out</span>
-                                                            </button>
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="lg:col-span-2 bg-white p-8 rounded-3xl shadow-xl border border-gray-100">
-                                                        <h3 className="text-xl font-bold text-[#3b2f2f] mb-6 flex items-center gap-3">
-                                                            <Users size={24} className="text-blue-500" />
-                                                            Equipa em Serviço
-                                                        </h3>
-                                                        <div className="bg-gray-50 rounded-2xl overflow-hidden border border-gray-100">
-                                                            <table className="w-full text-left text-sm">
-                                                                <thead className="text-[10px] text-gray-400 bg-gray-100 uppercase tracking-widest">
-                                                                    <tr>
-                                                                        <th className="px-6 py-4 font-bold">Funcionário</th>
-                                                                        <th className="px-6 py-4 font-bold">Hora Check-in</th>
-                                                                        <th className="px-6 py-4 font-bold text-right">Duração</th>
-                                                                    </tr>
-                                                                </thead>
-                                                                <tbody className="divide-y divide-gray-100">
-                                                                    {teamCheckins.length === 0 ? (
-                                                                        <tr>
-                                                                            <td colSpan={3} className="px-6 py-8 text-center text-gray-400 italic">Nenhum funcionário em serviço no momento.</td>
-                                                                        </tr>
-                                                                    ) : (
-                                                                        teamCheckins
-                                                                            .filter((c: any) => !performanceSearch || c.member?.name?.toLowerCase().includes(performanceSearch.toLowerCase()) || c.member?.role?.toLowerCase().includes(performanceSearch.toLowerCase()))
-                                                                            .map((c: any) => (
-                                                                            <tr key={c.id} className="hover:bg-white transition-colors">
-                                                                                <td className="px-6 py-4 font-bold text-[#3b2f2f] flex items-center gap-3">
-                                                                                    <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs">
-                                                                                        {c.member?.name?.charAt(0) || 'U'}
-                                                                                    </div>
-                                                                                    {c.member?.name || 'Utilizador'} ({c.member?.role || 'Staff'})
-                                                                                </td>
-                                                                                <td className="px-6 py-4 text-gray-500">{new Date(c.check_in_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
-                                                                                <td className="px-6 py-4 text-right font-medium text-[#d9a65a]">
-                                                                                    {Math.floor((new Date().getTime() - new Date(c.check_in_at).getTime()) / 3600000)}h {Math.floor(((new Date().getTime() - new Date(c.check_in_at).getTime()) % 3600000) / 60000)}m
-                                                                                </td>
-                                                                            </tr>
-                                                                        ))
-                                                                    )}
-                                                                </tbody>
-                                                            </table>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {/* Productivity */}
-                                            {activePerformanceTab === 'productivity' && (
-                                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-fade-in">
-                                                    <div className="bg-white rounded-3xl p-8 shadow-xl border border-gray-100">
-                                                        <h3 className="text-xl font-bold text-[#3b2f2f] mb-6 flex items-center gap-3">
-                                                            <Award size={24} className="text-[#d9a65a]" />
-                                                            Ranking de Desempenho (Visão 360º)
-                                                        </h3>
-                                                        <div className="space-y-4">
-                                                            {teamMembers.length === 0 ? (
-                                                                <p className="text-gray-400 italic text-sm">Ainda sem dados de check-in ativos hoje para gerar ranking.</p>
-                                                            ) : (
-                                                                teamMembers.map((member: any, i) => {
-                                                                    const memberOrders = orders.filter(o => o.staff_id === member.id && o.status === 'completed');
-                                                                    const itemsCount = memberOrders.reduce((acc, o) => acc + (o.items?.reduce((sum: number, it: any) => sum + it.quantity, 0) || 0), 0);
-                                                                    const income = memberOrders.reduce((acc, o) => acc + (Number(o.total_amount) || 0), 0);
-                                                                    const hasCheckedInToday = teamCheckins.some((c: any) => c.member_id === member.id);
-                                                                    
-                                                                    // Score Calculation (Orders + Items + Checkin Bonus)
-                                                                    const score = Math.min(100, Math.round((memberOrders.length * 5) + (itemsCount * 2) + (hasCheckedInToday ? 10 : 0)));
-                                                                    
-                                                                    return (
-                                                                        <div key={member.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl hover:bg-white border border-gray-100 transition-colors relative overflow-hidden group">
-                                                                            <div className={`absolute top-0 bottom-0 left-0 w-1 ${i === 0 ? 'bg-[#d9a65a]' : i === 1 ? 'bg-gray-300' : 'bg-[#cd7f32]'}`}></div>
-                                                                            <div className="flex items-center gap-4">
-                                                                                <div className="w-10 h-10 rounded-full font-bold bg-white border shadow-sm text-[#3b2f2f] flex justify-center items-center">
-                                                                                    {member.name?.charAt(0) || 'U'}
-                                                                                </div>
-                                                                                <div>
-                                                                                    <p className="font-bold text-[#3b2f2f] flex items-center gap-2">
-                                                                                        {member.name}
-                                                                                        {hasCheckedInToday && <span className="w-2 h-2 rounded-full bg-green-500 shadow-sm" title="Online Hoje"></span>}
-                                                                                    </p>
-                                                                                    <p className="text-[10px] text-gray-500 uppercase tracking-widest">{member.role}</p>
-                                                                                </div>
-                                                                            </div>
-                                                                            <div className="text-right">
-                                                                                <p className="font-black text-[#d9a65a] text-lg">{score} pts</p>
-                                                                                <p className="text-xs text-gray-400 mt-1">{memberOrders.length} ped. / {income} MT</p>
-                                                                            </div>
-                                                                        </div>
-                                                                    );
-                                                                }).sort((a, b) => {
-                                                                    // Sort visually by score (extract score from string in a real app, here just simulated UI sorting)
-                                                                    return 0;
-                                                                })
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                    
-                                                    <div className="bg-[#3b2f2f] rounded-3xl p-8 shadow-xl text-white relative overflow-hidden flex flex-col justify-center">
-                                                        <div className="absolute -right-10 -top-10 text-white/5"><TrendingUp size={200} /></div>
-                                                        <h3 className="text-2xl font-serif font-regular text-[#d9a65a] mb-2">Produtividade Global</h3>
-                                                        <p className="text-white/60 text-sm mb-8 leading-relaxed max-w-sm">Esta visão contabiliza as horas ativas globais cruzadas com a taxa de satisfação e resolução de pedidos por funcionário em tempo real.</p>
-                                                        
-                                                        <div className="grid grid-cols-2 gap-4">
-                                                            <div className="bg-white/10 p-5 rounded-2xl backdrop-blur-sm border border-white/5">
-                                                                <p className="text-white/50 text-[10px] uppercase font-bold tracking-widest mb-1">Taxa de Eficácia</p>
-                                                                <p className="text-3xl font-black text-white">{performanceMetrics.productivityScore}%</p>
-                                                            </div>
-                                                            <div className="bg-[#d9a65a]/20 p-5 rounded-2xl backdrop-blur-sm border border-[#d9a65a]/30">
-                                                                <p className="text-[#d9a65a] opacity-80 text-[10px] uppercase font-bold tracking-widest mb-1">Total Pedidos Processados</p>
-                                                                <p className="text-3xl font-black text-[#d9a65a]">{performanceMetrics.ordersToday}</p>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {/* Analytics */}
-                                            {activePerformanceTab === 'analytics' && (
-                                                <div className="animate-fade-in w-full h-full min-h-[500px]">
-                                                    <AnalyticsChart orders={orders} teamMembers={teamMembers} onExportMaster={handleExportMaster} />
-                                                </div>
-                                            )}
-
-                                            {/* AI Insights */}
-                                            {activePerformanceTab === 'insights' && (
-                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-fade-in relative">
-                                                    <div className="md:col-span-3 bg-[#3b2f2f] p-8 rounded-3xl shadow-xl border border-gray-800 text-white flex items-center justify-between overflow-hidden relative">
-                                                        <div className="absolute -right-20 -top-20 w-64 h-64 bg-[#d9a65a] opacity-10 blur-[80px] rounded-full"></div>
-                                                        <div className="z-10">
-                                                            <h3 className="text-2xl font-serif font-bold text-white mb-2 flex items-center gap-3">
-                                                                <Sparkles className="text-[#d9a65a]" size={28} />
-                                                                Assistente de Performance IA
-                                                            </h3>
-                                                            <p className="text-sm text-gray-400 max-w-xl leading-relaxed">
-                                                                Avaliamos os dados de produtividade em tempo real para otimizar sua equipa e prever o comportamento da demanda.
-                                                            </p>
-                                                        </div>
-                                                        <button onClick={generateAiReportData} disabled={isGeneratingAI} className="z-10 px-6 py-3 bg-[#d9a65a] text-[#3b2f2f] font-bold text-xs uppercase tracking-widest rounded-xl hover:bg-white transition-colors shadow-lg flex items-center gap-2">
-                                                            {isGeneratingAI ? <span className="w-4 h-4 border-2 border-[#3b2f2f] border-t-transparent rounded-full animate-spin"></span> : <Sparkles size={16} />}
-                                                            {isGeneratingAI ? 'Analisando...' : 'Gerar Relatório IA'}
-                                                        </button>
-                                                    </div>
-                                                    
-                                                    {aiReportContent && (
-                                                        <div className="md:col-span-3 bg-indigo-50/50 p-6 rounded-3xl border border-indigo-100 animate-fade-in relative">
-                                                            <div className="flex items-start gap-4">
-                                                                <div className="w-10 h-10 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center shrink-0">
-                                                                    <Bot size={20} />
-                                                                </div>
-                                                                <div className="text-sm text-indigo-900 leading-relaxed font-medium whitespace-pre-wrap">
-                                                                    {aiReportContent}
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    )}
-
-                                                    {/* Dynamic: Top Performer */}
-                                                    <div className="bg-white p-6 rounded-3xl shadow-xl border border-gray-100 flex flex-col gap-4">
-                                                        <div className="w-12 h-12 bg-green-50 rounded-2xl flex items-center justify-center text-green-600">
-                                                            <Zap size={24} />
-                                                        </div>
-                                                        <h4 className="font-bold text-[#3b2f2f]">Produtividade Elevada</h4>
-                                                        {computedAiInsights?.topPerformer ? (
-                                                            <p className="text-sm text-gray-500">
-                                                                O funcionário <b>{computedAiInsights.topPerformer.member.name}</b> liderou com <b>{computedAiInsights.topPerformer.count} pedidos</b>
-                                                                {computedAiInsights.pctAbove > 0 ? <>, <b>{computedAiInsights.pctAbove}% acima</b> da média da equipa.</> : <>. Excelente performance no caixa!</>}
-                                                            </p>
-                                                        ) : (
-                                                            <p className="text-sm text-gray-400 italic">Sem dados suficientes para análise ainda.</p>
-                                                        )}
-                                                    </div>
-
-                                                    {/* Dynamic: Peak Hour */}
-                                                    <div className="bg-white p-6 rounded-3xl shadow-xl border border-gray-100 flex flex-col gap-4">
-                                                        <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-600">
-                                                            <LineChart size={24} />
-                                                        </div>
-                                                        <h4 className="font-bold text-[#3b2f2f]">Detecção de Pico</h4>
-                                                        {computedAiInsights?.peakHour && computedAiInsights.peakHour.value > 0 ? (
-                                                            <p className="text-sm text-gray-500">
-                                                                O pico de produção foi detectado às <b>{computedAiInsights.peakHour.label}</b> com <b>{computedAiInsights.peakHour.value} pedidos</b>. Recomendada máxima alocação de equipa neste horário.
-                                                            </p>
-                                                        ) : (
-                                                            <p className="text-sm text-gray-400 italic">Sem pico identificado ainda. Aguardando mais pedidos.</p>
-                                                        )}
-                                                    </div>
-
-                                                    {/* Dynamic: Efficiency Drop */}
-                                                    <div className="bg-white p-6 rounded-3xl shadow-xl border border-red-50 flex flex-col gap-4">
-                                                        <div className="w-12 h-12 bg-red-50 rounded-2xl flex items-center justify-center text-red-600">
-                                                            <AlertTriangle size={24} />
-                                                        </div>
-                                                        <h4 className="font-bold text-[#3b2f2f] text-red-800">Análise de Carga</h4>
-                                                        {computedAiInsights?.dropHour && computedAiInsights.dropHour.value === 0 ? (
-                                                            <p className="text-sm text-red-600/80">
-                                                                Sem actividade registada às <b>{computedAiInsights.dropHour.label}</b>. Considere rever a alocação de pessoal neste período.
-                                                            </p>
-                                                        ) : (
-                                                            <p className="text-sm text-gray-500">Distribuição de carga estável durante o dia. Continue a monitorizar o fluxo de produção.
-                                                            </p>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            )}
+                                        <div className="animate-fade-in w-full h-[calc(100vh-140px)] overflow-y-auto no-scrollbar pb-10">
+                                            <AdminPerformanceView />
                                         </div>
                                     )}
 
@@ -5998,6 +5737,18 @@ export const Admin: React.FC = () => {
                                                     Guardar Modificações
                                                 </button>
                                             </div>
+                                        </div>
+                                    )}
+
+                                    {activeSettingsTab === 'drive' && (
+                                        <div className="animate-fade-in p-2 md:p-6 bg-white rounded-3xl shadow-sm border border-gray-100 min-h-full">
+                                            <AdminDriveView />
+                                        </div>
+                                    )}
+
+                                    {activeSettingsTab === 'audit' && (
+                                        <div className="animate-fade-in w-full h-[calc(100vh-140px)] overflow-y-auto no-scrollbar pb-10">
+                                            <AdminAuditView />
                                         </div>
                                     )}
                                 </div>
@@ -6698,11 +6449,13 @@ export const Admin: React.FC = () => {
     );
 };
 
+
 const AdminBlogView: React.FC = () => {
     const [posts, setPosts] = useState<any[]>([]);
     const [comments, setComments] = useState<any[]>([]);
     const [mediaFiles, setMediaFiles] = useState<any[]>([]);
-    const [activeTab, setActiveTab] = useState<'posts'|'comments'|'repository'>('posts');
+    const [galleryItems, setGalleryItems] = useState<any[]>([]);
+    const [activeTab, setActiveTab] = useState<'posts'|'comments'|'repository'|'gallery'>('posts');
     const [isEditing, setIsEditing] = useState(false);
     const [currentPost, setCurrentPost] = useState<any>(null);
     const [loading, setLoading] = useState(true);
@@ -6742,8 +6495,6 @@ const AdminBlogView: React.FC = () => {
                 const { data } = supabase.storage.from('products').getPublicUrl(fileName);
     if (typeof data !== 'undefined' && data && data.publicUrl && data.publicUrl.includes('/supabase-proxy')) {
         data.publicUrl = data.publicUrl.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co');
-    } else if (typeof publicUrlData !== 'undefined' && publicUrlData && publicUrlData.publicUrl && publicUrlData.publicUrl.includes('/supabase-proxy')) {
-        publicUrlData.publicUrl = publicUrlData.publicUrl.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co');
     }
                 
                 // Fix proxy URL issue by replacing localhost with actual Supabase URL
@@ -6785,6 +6536,7 @@ const AdminBlogView: React.FC = () => {
         loadPosts();
         loadComments();
         loadMediaFiles();
+        loadGalleryItems();
 
         // Background AI Auto-Approval Loop
         const interval = setInterval(async () => {
@@ -6880,6 +6632,13 @@ const AdminBlogView: React.FC = () => {
         }
     };
 
+    const loadGalleryItems = async () => {
+        const { data, error } = await supabase.from('gallery_items').select('*').order('display_order', { ascending: true });
+        if (!error && data) {
+            setGalleryItems(data);
+        }
+    };
+
     const handleRepoImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -6963,8 +6722,6 @@ const AdminBlogView: React.FC = () => {
             const { data } = supabase.storage.from('products').getPublicUrl(fileName);
     if (typeof data !== 'undefined' && data && data.publicUrl && data.publicUrl.includes('/supabase-proxy')) {
         data.publicUrl = data.publicUrl.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co');
-    } else if (typeof publicUrlData !== 'undefined' && publicUrlData && publicUrlData.publicUrl && publicUrlData.publicUrl.includes('/supabase-proxy')) {
-        publicUrlData.publicUrl = publicUrlData.publicUrl.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co');
     }
             
             const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -7145,6 +6902,12 @@ const AdminBlogView: React.FC = () => {
                     >
                         Repositório
                     </button>
+                    <button 
+                        onClick={() => setActiveTab('gallery')} 
+                        className={`pb-3 font-bold text-sm tracking-wide uppercase transition-colors flex items-center gap-2 ${activeTab === 'gallery' ? 'border-b-2 border-[#d9a65a] text-[#d9a65a]' : 'text-gray-400 hover:text-[#3b2f2f]'}`}
+                    >
+                        Galeria
+                    </button>
                 </div>
             )}
 
@@ -7292,6 +7055,72 @@ const AdminBlogView: React.FC = () => {
                                 <p className="text-gray-500">Repositório vazio. Adicione ficheiros para usar no Blog.</p>
                             </div>
                         )}
+                    </div>
+                </div>
+            ) : activeTab === 'gallery' ? (
+                <div>
+                    <div className="flex justify-between items-center mb-6 bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100">
+                        <div>
+                            <h3 className="font-bold text-[#3b2f2f] text-lg">Galeria da Página Inicial</h3>
+                            <p className="text-sm text-gray-500">Faça upload de novas imagens para a página principal (Home).</p>
+                        </div>
+                        <div className="relative">
+                            <input 
+                                type="file" 
+                                id="galleryUpload"
+                                accept="image/*" 
+                                onChange={async (e) => {
+                                    const file = e.target.files?.[0];
+                                    if (!file) return;
+                                    try {
+                                        const fileExt = file.name.split('.').pop();
+                                        const fileName = `gallery_${Date.now()}.${fileExt}`;
+                                        const { error: uploadError } = await supabase.storage.from('products').upload(fileName, file);
+                                        if (uploadError) throw uploadError;
+                                        
+                                        const publicUrlData = supabase.storage.from('products').getPublicUrl(fileName).data;
+                                        let url = publicUrlData.publicUrl;
+                                        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co';
+                                        if (url.includes('localhost') && url.includes('/supabase-proxy')) {
+                                            url = url.replace(/^http:\/\/(localhost|127\.0\.0\.1):\d+\/supabase-proxy/, supabaseUrl);
+                                        }
+
+                                        const caption = prompt('Introduza uma legenda para a imagem:') || 'Nova Imagem';
+                                        await supabase.from('gallery_items').insert({ src: url, caption, display_order: galleryItems.length });
+                                        loadGalleryItems();
+                                    } catch (err: any) {
+                                        alert('Erro ao carregar imagem para galeria: ' + err.message);
+                                    }
+                                }}
+                                className="hidden"
+                            />
+                            <label htmlFor="galleryUpload" className="bg-[#3b2f2f] text-[#d9a65a] px-6 py-2 rounded-xl font-bold text-sm cursor-pointer shadow-md hover:bg-black transition-colors">
+                                + Adicionar à Galeria
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                        {galleryItems.map((item) => (
+                            <div key={item.id} className="bg-white p-3 rounded-2xl border border-gray-100 shadow-sm group hover:shadow-lg transition-all flex flex-col items-center relative">
+                                <div className="w-full aspect-square bg-gray-50 rounded-xl mb-3 overflow-hidden border border-gray-100 relative">
+                                    <img src={item.src} alt={item.caption} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                                </div>
+                                <span className="text-xs text-center font-bold text-[#3b2f2f] mb-2 truncate w-full" title={item.caption}>{item.caption}</span>
+                                <button 
+                                    onClick={async () => {
+                                        if (confirm('Tem a certeza que deseja remover esta imagem da galeria?')) {
+                                            await supabase.from('gallery_items').delete().eq('id', item.id);
+                                            loadGalleryItems();
+                                        }
+                                    }}
+                                    className="absolute top-4 right-4 bg-red-500 text-white p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity shadow-md hover:bg-red-600"
+                                    title="Remover"
+                                >
+                                    <Trash2 size={16} />
+                                </button>
+                            </div>
+                        ))}
                     </div>
                 </div>
             ) : null}

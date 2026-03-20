@@ -145,7 +145,7 @@ export const generateMetricReport = async (
         const tableData = rawOrdersList.map(order => [
             new Date(order.date || order.created_at).toLocaleDateString('pt-PT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute:'2-digit' }).replace(',', ''),
             order.short_id || order.id?.substring(0, 8) || '-',
-            `#${order.customer?.id?.substring(0,5) || '-'} - ${order.customer?.name || order.customer_name || 'Balcão'}`,
+            `#${(order.customer?.id || order.customer_id || order.customer_phone || '-').toString().substring(0,5)} - ${order.customer?.name || order.customer_name || 'Balcão'}`,
             order.delivery_type === 'pickup' || order.type === 'pickup' ? 'Balcão' : 'Entrega',
             order.payment_method?.toUpperCase() || '-',
             `${Number(order.total_amount || order.total || 0).toLocaleString()} MT`,
@@ -251,7 +251,7 @@ export const generateMasterReport = async (
         body: globalData.orders.slice(0, 100).map(o => [
             new Date(o.created_at || o.date).toLocaleDateString('pt-PT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute:'2-digit' }).replace(',', ''),
             o.short_id || o.id?.substring(0,6) || '-',
-            `#${o.customer?.id?.substring(0,5) || '-'} - ${o.customer?.name || o.customer_name || 'Balcão'}`,
+            `#${(o.customer?.id || o.customer_id || o.customer_phone || '-').toString().substring(0,5)} - ${o.customer?.name || o.customer_name || 'Balcão'}`,
             o.status || '-',
             o.payment_method || '-',
             Number(o.total_amount || o.total || 0).toLocaleString()
@@ -304,6 +304,7 @@ export const generateMasterReport = async (
             { content: '-', styles: { fillColor: [59, 47, 47] } },
             { content: `${totalStockValue.toLocaleString()} MT`, styles: { fillColor: [59, 47, 47], textColor: [217, 166, 90], fontStyle: 'bold' } }
         ]],
+        showFoot: 'lastPage',
         headStyles: { fillColor: [59, 47, 47], textColor: [217, 166, 90] },
         styles: { fontSize: 8 }
     });
@@ -325,6 +326,9 @@ export const generateMasterReport = async (
                 member.name || 'Sem Nome',
                 member.role?.toUpperCase() || member.department?.toUpperCase() || '-',
                 member.status === 'active' ? 'Ativo' : 'Inativo',
+                member.hours_worked ? `${member.hours_worked}h` : '-',
+                member.presences?.toString() || '0',
+                member.system_rating ? `${member.system_rating}/5` : '-',
                 ordersHandled.length.toString(),
                 `${totalHandledSales.toLocaleString()} MT`
             ];
@@ -332,7 +336,7 @@ export const generateMasterReport = async (
 
         autoTable(pdf, {
             startY: 50,
-            head: [['Funcionário', 'Cargo/Departamento', 'Estado', 'Atendimentos/Entregas', 'Volume Operado']],
+            head: [['Funcionário', 'Cargo', 'Estado', 'Horas', 'Presenças', 'Aval.', 'Atendimentos', 'Volume Operado']],
             body: teamPerformance,
             headStyles: { fillColor: [59, 47, 47], textColor: [217, 166, 90] },
             styles: { fontSize: 8 }

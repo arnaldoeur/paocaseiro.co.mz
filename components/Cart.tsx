@@ -11,6 +11,7 @@ import { notifyTeam, notifyCustomer, sendSMS } from '../services/sms';
 import { saveOrderToSupabase, supabase } from '../services/supabase';
 import { formatProductName } from '../services/stringUtils';
 import { ClientLoginModal } from './ClientLoginModal';
+import { logAudit } from '../services/audit';
 
 
 type CheckoutStep = 'cart' | 'details' | 'payment' | 'processing' | 'receipt';
@@ -644,6 +645,8 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                 if (!res.success) {
                     console.error("Database save failed", res.error);
                 } else {
+                    logAudit('ORDER_PLACED', 'order', orderId, { total: supabaseOrder.total, method: supabaseOrder.payment_method }, details.phone);
+                    
                     const invoiceLink = `${window.location.origin}/order-receipt/${orderId}`;
                     let msg = '';
 

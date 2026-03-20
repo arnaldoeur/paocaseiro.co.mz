@@ -19,13 +19,18 @@ const envVars = Object.fromEntries(
 );
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || envVars['VITE_SUPABASE_URL'];
-const supabaseKey = process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || envVars['VITE_SUPABASE_SERVICE_ROLE_KEY'] || envVars['VITE_SUPABASE_ANON_KEY'];
+const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || envVars['VITE_SUPABASE_ANON_KEY'];
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-async function checkMessages() {
-    const { data, error } = await supabase.from('contact_messages').select('*').limit(1);
-    console.log(error ? error : data);
+async function main() {
+    const { data, error } = await supabase.from('products').select('*');
+    if (error) {
+        console.error("Error:", error);
+        return;
+    }
+    console.log("Total products:", data?.length);
+    const cats = [...new Set(data?.map(d => d.category))];
+    console.log('CATEGORIES:', cats);
 }
-
-checkMessages();
+main();
