@@ -131,23 +131,28 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                 // Check if already exists
                 const { data: existing } = await supabase
                     .from('customers')
-                    .select('id')
+                    .select('*')
                     .eq('contact_no', formattedIdentifier)
                     .limit(1);
 
-                if (existing && existing.length > 0) {
-                    throw new Error('Este número já está registado. Utilize a opção "Palavra-passe" ou "OTP".');
-                }
+                const existingCustomerData = existing?.[0];
 
                 const code = Math.floor(100000 + Math.random() * 900000).toString();
                 setGeneratedOtp(code);
                 console.log(`[AUTH] Sending OTP to Phone ${formattedIdentifier}: ${code}`);
 
-                const smsBody = `Pao Caseiro: Seu codigo de registo e ${code}.`;
+                const smsBody = `Pao Caseiro: Seu codigo de acesso e ${code}.`;
                 const res = await sendSMS(formattedIdentifier.replace('+', ''), smsBody);
                 if (res && res.status === 'error') throw new Error(res.message);
 
-                setSuccessMsg('Código enviado por SMS! Verifique o seu telemóvel.');
+                if (existingCustomerData) {
+                    setSuccessMsg(language === 'en' ? 'Number already registered! We sent a login code.' : 'Número já registado! Enviámos um código para fazer login.');
+                    setExistingCustomer(existingCustomerData);
+                } else {
+                    setSuccessMsg(language === 'en' ? 'Code sent via SMS! Check your phone.' : 'Código enviado por SMS! Verifique o seu telemóvel.');
+                    setExistingCustomer(null);
+                }
+                
                 setIdentifier(formattedIdentifier);
                 setStep('otp');
             }
