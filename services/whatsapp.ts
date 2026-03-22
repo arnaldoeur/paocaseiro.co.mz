@@ -188,8 +188,16 @@ export const notifyCustomerOrderStatusWhatsApp = async (order: any, newStatus: s
         case 'ready':
             statusText = 'Pronto';
             extra = order.delivery_type === 'delivery' 
-                ? '\nA sua encomenda será enviada muito em breve.'
+                ? '\nA sua encomenda será despachada muito em breve.'
                 : '\nA sua encomenda está pronta para ser levantada.';
+            break;
+        case 'delivering':
+            statusText = 'Em Trânsito';
+            extra = '\nO nosso motorista já está a caminho com a sua encomenda.';
+            break;
+        case 'arrived':
+            statusText = 'O Motorista Chegou';
+            extra = '\nO motorista encontra-se no local de entrega. Por favor, prepare-se para o receber com o seu Código PIN.';
             break;
         case 'completed':
             statusText = 'Concluido';

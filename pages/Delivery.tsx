@@ -584,6 +584,9 @@ export const Delivery: React.FC = () => {
                                                         const msg = `Pão Caseiro: #${order.short_id} está a caminho! Motorista: ${user?.name || ''}, contacte pelo ${user?.phone || ''}. O sabor que aquece o coração está a chegar!`.substring(0, 160);
                                                         sendSMS(customerPhone, msg).catch(console.error);
                                                     }
+                                                    
+                                                    import('../services/whatsapp').then(m => m.notifyCustomerOrderStatusWhatsApp(order, 'delivering')).catch();
+                                                    import('../services/email').then(m => m.notifyOrderStatusUpdateEmail({...order, status: 'delivering'})).catch();
 
                                                     // Start GPS tracking
                                                     startTracking(order);
@@ -616,6 +619,8 @@ export const Delivery: React.FC = () => {
                                                                 }
                                                             }
                                                             notifyCustomer({ ...order, status: 'arrived' }, 'status_update', user).catch(console.error);
+                                                            import('../services/whatsapp').then(m => m.notifyCustomerOrderStatusWhatsApp(order, 'arrived')).catch();
+                                                            import('../services/email').then(m => m.notifyOrderStatusUpdateEmail({...order, status: 'arrived'})).catch();
                                                             await fetchOrders();
                                                             alert('Cliente notificado que você chegou!');
                                                         }}
@@ -652,6 +657,8 @@ export const Delivery: React.FC = () => {
                                                             }
                                                         }
                                                         notifyCustomer({ ...order, status: 'completed' }, 'status_update').catch(console.error);
+                                                        import('../services/whatsapp').then(m => m.notifyCustomerOrderStatusWhatsApp(order, 'completed')).catch();
+                                                        import('../services/email').then(m => m.notifyOrderStatusUpdateEmail({...order, status: 'completed'})).catch();
                                                         stopTracking();
                                                         await fetchOrders();
                                                         alert('Entrega concluída com sucesso! 🎉');
@@ -673,6 +680,8 @@ export const Delivery: React.FC = () => {
                                                     const { supabase } = await import('../services/supabase');
                                                     await supabase.from('orders').update({ status: 'completed' }).eq('id', order.id);
                                                     notifyCustomer({ ...order, status: 'completed' }, 'status_update').catch(console.error);
+                                                    import('../services/whatsapp').then(m => m.notifyCustomerOrderStatusWhatsApp(order, 'completed')).catch();
+                                                    import('../services/email').then(m => m.notifyOrderStatusUpdateEmail({...order, status: 'completed'})).catch();
                                                     stopTracking();
                                                     await fetchOrders();
                                                     alert('Entrega concluída com sucesso! 🎉');

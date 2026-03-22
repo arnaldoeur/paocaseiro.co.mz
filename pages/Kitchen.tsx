@@ -323,19 +323,34 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
     const handleMarkReady = async (orderId: string) => {
         if (!confirm("Confirmar pedido pronto?")) return;
 
-        // Optimistic
+        const order = orders.find(o => o.id === orderId);
         setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'ready' } : o));
 
         const { supabase } = await import('../services/supabase');
         await supabase.from('orders').update({ status: 'ready' }).eq('id', orderId);
+
+        if (order) {
+            const updatedOrder = { ...order, status: 'ready' };
+            import('../services/sms').then(m => m.notifyCustomer(updatedOrder, 'status_update')).catch();
+            import('../services/email').then(m => m.notifyOrderStatusUpdateEmail(updatedOrder)).catch();
+            import('../services/whatsapp').then(m => m.notifyCustomerOrderStatusWhatsApp(updatedOrder, 'ready')).catch();
+        }
     };
 
     const handleArchive = async (orderId: string) => {
         if (!confirm("Confirmar entrega / arquivar?")) return;
 
+        const order = orders.find(o => o.id === orderId);
         const { supabase } = await import('../services/supabase');
         await supabase.from('orders').update({ status: 'completed' }).eq('id', orderId);
         setOrders(prev => prev.filter(o => o.id !== orderId));
+
+        if (order) {
+            const updatedOrder = { ...order, status: 'completed' };
+            import('../services/sms').then(m => m.notifyCustomer(updatedOrder, 'status_update')).catch();
+            import('../services/email').then(m => m.notifyOrderStatusUpdateEmail(updatedOrder)).catch();
+            import('../services/whatsapp').then(m => m.notifyCustomerOrderStatusWhatsApp(updatedOrder, 'completed')).catch();
+        }
     };
 
     // --- Manual Order ---

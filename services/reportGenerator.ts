@@ -184,7 +184,17 @@ export const generateMetricReport = async (
     }
 
     addFooter(pdf);
-    pdf.save(`PaoCaseiro_Metricas_${metricName}_${new Date().toISOString().split('T')[0]}.pdf`);
+    const fileName = `PaoCaseiro_Metricas_${metricName}_${new Date().toISOString().split('T')[0]}.pdf`;
+    
+    // Broadcast copy to Admin WhatsApp
+    try {
+        const pdfBase64 = pdf.output('datauristring').split(',')[1];
+        import('./whatsapp').then(mod => {
+            mod.sendWhatsAppMedia('258879146662', 'document', fileName, `Relatório Solicitado: ${metricName.toUpperCase()}`, pdfBase64).catch(e => console.error("Admin Report Delivery Error:", e));
+        });
+    } catch(e) { }
+
+    pdf.save(fileName);
 };
 
 export const generateMasterReport = async (
@@ -403,5 +413,15 @@ export const generateMasterReport = async (
     pdf.text(`• Recomenda-se aumentar as Campanhas de Marketing via Broadcast SMS para impulsionar horários passivos.`, 20, 184, { maxWidth: 170 });
 
     addFooter(pdf);
-    pdf.save(`PaoCaseiro_MasterReport_Global_${today}.pdf`);
+    const fileName = `PaoCaseiro_MasterReport_Global_${today}.pdf`;
+
+    // Broadcast copy to Admin WhatsApp
+    try {
+        const pdfBase64 = pdf.output('datauristring').split(',')[1];
+        import('./whatsapp').then(mod => {
+            mod.sendWhatsAppMedia('258879146662', 'document', fileName, `Master Report Global Gerado (${today})`, pdfBase64).catch(e => console.error("Admin Master Report Delivery Error:", e));
+        });
+    } catch(e) { }
+
+    pdf.save(fileName);
 };

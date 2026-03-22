@@ -6076,6 +6076,7 @@ export const Admin: React.FC = () => {
                                             // Multi-channel notifications
                                             notifyCustomer(updatedOrder, 'status_update').catch(e => { });
                                             notifyOrderStatusUpdateEmail(updatedOrder).catch(e => { });
+                                            import('../services/whatsapp').then(m => m.notifyCustomerOrderStatusWhatsApp(updatedOrder, updatedOrder.status)).catch(e => { });
                                         }} className={`p-3 rounded-xl text-sm font-bold border transition-all ${selectedOrder.status === 'kitchen' ? 'bg-purple-100 border-purple-300 text-purple-800' : 'bg-white hover:bg-purple-50'}`}>
                                             Enviar p/ Cozinha
                                         </button>
@@ -6092,6 +6093,7 @@ export const Admin: React.FC = () => {
                                             // Multi-channel notifications
                                             notifyCustomer(updatedOrder, 'status_update').catch(e => { });
                                             notifyOrderStatusUpdateEmail(updatedOrder).catch(e => { });
+                                            import('../services/whatsapp').then(m => m.notifyCustomerOrderStatusWhatsApp(updatedOrder, updatedOrder.status)).catch(e => { });
                                         }} className={`p-3 rounded-xl text-sm font-bold border transition-all ${selectedOrder.status === 'ready' ? 'bg-blue-100 border-blue-300 text-blue-800' : 'bg-white hover:bg-blue-50'}`}>
                                             Pronto (P/ Levantar)
                                         </button>
@@ -6121,6 +6123,7 @@ export const Admin: React.FC = () => {
                                             // Multi-channel notifications
                                             notifyCustomer(updatedOrder, 'status_update').catch(e => { });
                                             notifyOrderStatusUpdateEmail(updatedOrder).catch(e => { });
+                                            import('../services/whatsapp').then(m => m.notifyCustomerOrderStatusWhatsApp(updatedOrder, updatedOrder.status)).catch(e => { });
                                         }} className="p-3 rounded-xl text-sm font-bold bg-green-600 text-white hover:bg-green-700">
                                             Concluir Pedido
                                         </button>
@@ -6130,7 +6133,16 @@ export const Admin: React.FC = () => {
                                             const { supabase } = await import('../services/supabase');
                                             await supabase.from('orders').update({ status: 'cancelled' }).eq('short_id', selectedOrder.orderId);
                                             loadOrders();
-                                            setSelectedOrder({ ...selectedOrder, status: 'cancelled' });
+                                            const updatedOrder = { ...selectedOrder, status: 'cancelled' };
+                                            setSelectedOrder(updatedOrder);
+
+                                            // Multi-channel notifications
+                                            const { notifyCustomer } = await import('../services/sms');
+                                            const { notifyOrderStatusUpdateEmail } = await import('../services/email');
+                                            
+                                            notifyCustomer(updatedOrder, 'status_update').catch(e => { });
+                                            notifyOrderStatusUpdateEmail(updatedOrder).catch(e => { });
+                                            import('../services/whatsapp').then(m => m.notifyCustomerOrderStatusWhatsApp(updatedOrder, updatedOrder.status)).catch(e => { });
                                         }} className="w-full p-2 text-xs font-bold text-red-500 hover:bg-red-50 rounded-lg"> Cancelar Pedido </button>
                                     </div>
                                 </div>
