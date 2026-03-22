@@ -101,6 +101,33 @@ const App: React.FC = () => {
     setLanguage((prev) => (prev === 'pt' ? 'en' : 'pt'));
   };
 
+  // Dynamic SEO Tags based on Language
+  useEffect(() => {
+    if (language === 'en') {
+      document.title = "Pão Caseiro | The taste that warms the heart";
+      document.documentElement.lang = "en";
+      const metaDesc = document.querySelector('meta[name="description"]');
+      if (metaDesc) metaDesc.setAttribute('content', 'Discover Pão Caseiro, the best bakery in Lichinga, Niassa. Fresh bread every day, excellent pastry and easy online ordering. The taste that warms the heart!');
+      
+      const ogTitle = document.querySelector('meta[property="og:title"]');
+      if (ogTitle) ogTitle.setAttribute('content', 'Pão Caseiro | The taste that warms the heart');
+      
+      const ogDesc = document.querySelector('meta[property="og:description"]');
+      if (ogDesc) ogDesc.setAttribute('content', 'Discover Pão Caseiro, the best bakery in Lichinga, Niassa. Fresh bread every day, excellent pastry and easy online ordering.');
+    } else {
+      document.title = "Pão Caseiro | O sabor que aquece o coração";
+      document.documentElement.lang = "pt-PT";
+      const metaDesc = document.querySelector('meta[name="description"]');
+      if (metaDesc) metaDesc.setAttribute('content', 'Descubra a Pão Caseiro, a melhor padaria em Lichinga, no Niassa. Pão fresco todos os dias, pastelaria de excelência e facilidade em encomendas online. O sabor que aquece o coração!');
+      
+      const ogTitle = document.querySelector('meta[property="og:title"]');
+      if (ogTitle) ogTitle.setAttribute('content', 'Pão Caseiro | O sabor que aquece o coração');
+      
+      const ogDesc = document.querySelector('meta[property="og:description"]');
+      if (ogDesc) ogDesc.setAttribute('content', 'Descubra a Pão Caseiro, a melhor padaria em Lichinga, no Niassa. Pão fresco todos os dias, pastelaria de excelência e facilidade em encomendas online.');
+    }
+  }, [language]);
+
   return (
     <CartProvider>
       <Router>

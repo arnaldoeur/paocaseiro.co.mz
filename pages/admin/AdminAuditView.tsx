@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../services/supabase';
-import { 
-    ShieldCheck, 
-    Search, 
-    Filter, 
-    AlertTriangle, 
-    Info, 
-    AlertCircle, 
+import {
+    ShieldCheck,
+    Search,
+    AlertTriangle,
+    Info,
+    AlertCircle,
     XCircle,
     ChevronLeft,
     ChevronRight,
@@ -15,23 +14,55 @@ import {
     Maximize2,
     Calendar,
     User,
-    Activity
+    Activity,
+    MapPin,
+    ChevronDown,
+    CheckCircle,
+    Smartphone,
+    AlertOctagon,
+    RefreshCw,
+    Zap,
+    Server,
+    Shield,
+    Sparkles,
+    Bot
 } from 'lucide-react';
 import ReactECharts from 'echarts-for-react';
 
+// Define AuditLog type for better type safety
+interface AuditLog {
+    id: string;
+    created_at: string;
+    action: string;
+    entity_type: string;
+    entity_id: string | null;
+    user_id: string | null;
+    customer_phone: string | null;
+    details: any;
+    user?: {
+        id: string;
+        name: string;
+        email: string;
+        role: string;
+    } | null;
+    derivedSeverity?: string;
+}
+
 export const AdminAuditView: React.FC = () => {
-    const [logs, setLogs] = useState<any[]>([]);
+    const [logs, setLogs] = useState<AuditLog[]>([]);
     const [loading, setLoading] = useState(true);
-    const [search, setSearch] = useState('');
+    const [searchTerm, setSearchTerm] = useState('');
     const [severityFilter, setSeverityFilter] = useState<string>('all');
-    
+
     // Pagination
     const [page, setPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
     const PAGE_SIZE = 15;
 
     // View State
-    const [selectedLog, setSelectedLog] = useState<any | null>(null);
+    const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
+    const [isAnalyzing, setIsAnalyzing] = useState(false);
+    const [aiReport, setAiReport] = useState<string | null>(null);
 
     const [stats, setStats] = useState({
         total: 0,
@@ -39,7 +70,7 @@ export const AdminAuditView: React.FC = () => {
         warnings: 0,
         today: 0
     });
-    
+
     // Global events cache to feed the static chart
     const [allAuditEvents, setAllAuditEvents] = useState<any[]>([]);
 
@@ -53,7 +84,7 @@ export const AdminAuditView: React.FC = () => {
             fetchLogs();
         }, 500);
         return () => clearTimeout(timeoutId);
-    }, [search]);
+    }, [searchTerm]);
 
     const fetchLogs = async () => {
         setLoading(true);
@@ -65,21 +96,21 @@ export const AdminAuditView: React.FC = () => {
             // audit_logs doesn't have a native severity field, so we skip the severity query filter in DB
             // and filter locally if needed, or map entity_type to severity.
 
-            if (search.trim()) {
-                query = query.or(`action.ilike.%${search}%,entity_type.ilike.%${search}%,customer_phone.ilike.%${search}%`);
+            if (searchTerm.trim()) {
+                query = query.or(`action.ilike.%${searchTerm}%,entity_type.ilike.%${searchTerm}%,customer_phone.ilike.%${searchTerm}%`);
             }
 
             // Pagination limits
             const from = (page - 1) * PAGE_SIZE;
             const to = from + PAGE_SIZE - 1;
-            
+
             const { data: rawData, count, error } = await query
                 .order('created_at', { ascending: false })
                 .range(from, to);
 
             if (error) throw error;
 
-            let finalData = rawData || [];
+            let finalData: AuditLog[] = rawData || [];
 
             // Manually stitch users since we don't have a strict FK
             if (finalData.length > 0) {
@@ -93,6 +124,31 @@ export const AdminAuditView: React.FC = () => {
                         }));
                     }
                 }
+
+                // Fetch customer details to enrich logs where user_id is null but phone exists
+                const phones = Array.from(new Set(finalData.map(l => l.customer_phone).filter(Boolean)));
+                if (phones.length > 0) {
+                    const { data: customers } = await supabase.from('customers').select('contact_no, name, email').in('contact_no', phones as string[]);
+                    if (customers) {
+                         finalData = finalData.map(log => {
+                             if (!log.user && log.customer_phone) {
+                                 const c = customers.find(c => c.contact_no === log.customer_phone);
+                                 if (c) {
+                                     return {
+                                         ...log,
+                                         user: {
+                                            id: c.contact_no, // Mock
+                                            name: c.name,
+                                            email: c.email || 'Sem Email',
+                                            role: 'cliente'
+                                         }
+                                     };
+                                 }
+                             }
+                             return log;
+                         });
+                    }
+                }
             }
 
             setLogs(finalData);
@@ -101,9 +157,9 @@ export const AdminAuditView: React.FC = () => {
             }
 
             // Fetch overall stats on first load
-            if (page === 1 && severityFilter === 'all' && !search) {
+            if (page === 1 && severityFilter === 'all' && !searchTerm) {
                 const { data: allLogs } = await supabase.from('audit_logs').select('entity_type, action, created_at');
-                
+
                 if (allLogs) {
                     setAllAuditEvents(allLogs);
                     const today = new Date().toISOString().split('T')[0];
@@ -138,8 +194,8 @@ export const AdminAuditView: React.FC = () => {
 
     const getChartOptions = () => {
         const categories = ['08:00', '10:00', '12:00', '14:00', '16:00', '18:00', '20:00'];
-        const todayStr = new Date().toISOString().split('T')[0];
-        const todaysLogs = allAuditEvents.filter(l => l.created_at.startsWith(todayStr));
+        const todayStr = new Date().toLocaleDateString('pt-PT');
+        const todaysLogs = allAuditEvents.filter(l => new Date(l.created_at).toLocaleDateString('pt-PT') === todayStr);
 
         const getBucketCounts = (filterFn: (l: any) => boolean) => {
             const counts = [0, 0, 0, 0, 0, 0, 0];
@@ -153,14 +209,12 @@ export const AdminAuditView: React.FC = () => {
                 else if (hour < 20) counts[5]++;
                 else counts[6]++;
             });
-            // Give slight dummy volume if the app naturally produces no traffic so charts aren't completely flat 0
-            // but tie it strictly to total event volume (e.g if empty, stays empty) to remain static
             return counts;
         };
 
-        const sysViews = getBucketCounts(l => l.entity_type === 'system' || l.action.toLowerCase().includes('view'));
+        const sysViews = getBucketCounts(l => l.entity_type === 'system' || l.action.toLowerCase().includes('view') || l.action.toLowerCase().includes('delete'));
         const secEvents = getBucketCounts(l => l.action.toLowerCase().includes('auth') || l.action.toLowerCase().includes('login') || l.action.toLowerCase().includes('fail'));
-        const userEvts = getBucketCounts(l => l.entity_type === 'purchase' || l.entity_type === 'website');
+        const userEvts = getBucketCounts(l => l.entity_type === 'purchase' || l.entity_type === 'website' || l.action.toLowerCase().includes('order') || l.action.toLowerCase().includes('delivery'));
 
         return {
             animation: false,
@@ -198,6 +252,80 @@ export const AdminAuditView: React.FC = () => {
         };
     };
 
+    const generateAIReport = async () => {
+        setIsAnalyzing(true);
+        setAiReport(null);
+        try {
+            // Filter logs based on current search and severity filter for AI analysis
+            const filteredLogs = logs.filter(log => {
+                let derivedSeverity = 'INFO';
+                if(log.entity_type === 'system') derivedSeverity = 'CRITICAL';
+                if(log.entity_type === 'purchase') derivedSeverity = 'WARNING';
+                if(log.action?.toLowerCase().includes('error') || log.action?.toLowerCase().includes('fail')) derivedSeverity = 'ERROR';
+
+                return severityFilter === 'all' || derivedSeverity === severityFilter;
+            });
+
+            const logsToAnalyze = filteredLogs.slice(0, 50).map(l => ({
+                action: l.action,
+                entity: l.entity_type,
+                phone: l.customer_phone,
+                user: l.user?.role || 'visitor',
+                details: l.details
+            }));
+
+            const { data, error } = await supabase.functions.invoke('analyze-audit', {
+                body: { logs: logsToAnalyze }
+            });
+
+            if (error) throw error;
+            if (data?.report) setAiReport(data.report);
+            else setAiReport('Não foi possível gerar avaliação. Verifique a API Key.');
+        } catch (err: any) {
+            console.error('AI Error:', err);
+            setAiReport('Ocorreu um erro ao invocar a Inteligência Artificial: ' + err.message);
+        } finally {
+            setIsAnalyzing(false);
+        }
+    };
+
+    const handleExportCSV = () => {
+        const headers = ["TRACE ID", "DATA E HORA", "AÇÃO", "CATEGORIA", "UTILIZADOR", "TIPO DE CONTA", "CONTACTO"];
+        const rows = logs.map(l => {
+            const date = new Date(l.created_at).toLocaleString('pt-PT');
+            let userType = "Visitante Externo";
+            let userName = "Anônimo / Visitante";
+
+            if (l.user) {
+                userType = ['admin', 'manager', 'cashier'].includes(l.user.role?.toLowerCase())
+                    ? "Membro da Equipa" : "Cliente com Conta";
+                userName = l.user.name;
+            }
+
+            return [
+                l.id,
+                `"${date}"`,
+                `"${l.action}"`,
+                `"${l.entity_type || ''}"`,
+                `"${userName}"`,
+                `"${userType}"`,
+                `"${l.customer_phone || ''}"`
+            ];
+        });
+
+        const csvContent = "data:text/csv;charset=utf-8,\uFEFF"
+            + headers.join(",") + "\n"
+            + rows.map(r => r.join(",")).join("\n");
+
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `auditoria_paocaseiro_${new Date().toISOString().split('T')[0]}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
     return (
         <div className="flex flex-col gap-6 animate-fade-in text-[#3b2f2f]">
             {/* Header & Stats Dashboard */}
@@ -210,7 +338,7 @@ export const AdminAuditView: React.FC = () => {
                         <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-1">Total Eventos</h3>
                         <p className="text-4xl font-black">{stats.total}</p>
                     </div>
-                    
+
                     <div className="grid grid-cols-2 gap-4">
                         <div className="bg-red-50 p-6 rounded-3xl shadow-sm border border-red-100 text-red-900 leading-tight">
                             <h3 className="text-[10px] font-bold uppercase tracking-widest mb-2 opacity-70">Críticos</h3>
@@ -235,29 +363,29 @@ export const AdminAuditView: React.FC = () => {
 
             {/* Main Content Area */}
             <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden flex flex-col min-h-[500px]">
-                
+
                 {/* Toolbar */}
                 <div className="p-4 border-b border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-4 bg-gray-50/50">
                     <div className="flex items-center gap-3 w-full sm:w-auto overflow-x-auto no-scrollbar pb-2 sm:pb-0">
-                        <button 
+                        <button
                             onClick={() => {setSeverityFilter('all'); setPage(1);}}
                             className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors whitespace-nowrap ${severityFilter === 'all' ? 'bg-[#3b2f2f] text-white shadow-md' : 'bg-white border text-gray-600 hover:bg-gray-100'}`}
                         >
                             Todos
                         </button>
-                        <button 
+                        <button
                             onClick={() => {setSeverityFilter('INFO'); setPage(1);}}
                             className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors whitespace-nowrap flex items-center gap-2 ${severityFilter === 'INFO' ? 'bg-blue-600 text-white shadow-md' : 'bg-white border text-blue-600 hover:bg-blue-50'}`}
                         >
                             <Info size={14}/> Info
                         </button>
-                        <button 
+                        <button
                             onClick={() => {setSeverityFilter('WARNING'); setPage(1);}}
                             className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors whitespace-nowrap flex items-center gap-2 ${severityFilter === 'WARNING' ? 'bg-yellow-500 text-white shadow-md' : 'bg-white border text-yellow-600 hover:bg-yellow-50'}`}
                         >
                             <AlertCircle size={14}/> Warning
                         </button>
-                        <button 
+                        <button
                             onClick={() => {setSeverityFilter('CRITICAL'); setPage(1);}}
                             className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors whitespace-nowrap flex items-center gap-2 ${severityFilter === 'CRITICAL' ? 'bg-red-600 text-white shadow-md' : 'bg-white border text-red-600 hover:bg-red-50'}`}
                         >
@@ -271,12 +399,24 @@ export const AdminAuditView: React.FC = () => {
                             <input
                                 type="text"
                                 placeholder="Buscar transações, usuários, ações..."
-                                value={search}
-                                onChange={e => {setSearch(e.target.value); setPage(1);}}
+                                value={searchTerm}
+                                onChange={e => {setSearchTerm(e.target.value); setPage(1);}}
                                 className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl outline-none focus:border-[#d9a65a] transition-all text-sm font-medium shadow-inner"
                             />
                         </div>
-                        <button className="p-2.5 border border-gray-200 rounded-xl hover:bg-gray-50 text-gray-500 transition-colors" title="Exportar CSV">
+                        <button
+                            onClick={generateAIReport}
+                            disabled={isAnalyzing}
+                            className="bg-gradient-to-r from-[#3b2f2f] to-[#4a3b3b] p-2 text-[#d9a65a] hover:brightness-110 border border-[#d9a65a]/30 rounded-xl transition-all shadow-md flex items-center justify-center disabled:opacity-50"
+                            title="Gerar Análise com IA"
+                        >
+                            {isAnalyzing ? <div className="w-4 h-4 rounded-full border-2 border-[#d9a65a] border-t-transparent animate-spin" /> : <Bot size={18} />}
+                        </button>
+                        <button
+                            onClick={handleExportCSV}
+                            className="p-2.5 border border-gray-200 rounded-xl hover:bg-gray-50 text-gray-500 transition-colors"
+                            title="Exportar Filtrados para CSV"
+                        >
                             <Download size={18} />
                         </button>
                     </div>
@@ -291,7 +431,7 @@ export const AdminAuditView: React.FC = () => {
                                 <th className="px-6 py-4 font-bold">Categoria</th>
                                 <th className="px-6 py-4 font-bold">Ação</th>
                                 <th className="px-6 py-4 font-bold">Utilizador</th>
-                                <th className="px-6 py-4 font-bold">Telemóvel (Cliente)</th>
+                                <th className="p-4 hidden md:table-cell">CONTACTO (CLIENTE)</th>
                                 <th className="px-6 py-4 font-bold text-center">Inspecionar</th>
                             </tr>
                         </thead>
@@ -344,16 +484,21 @@ export const AdminAuditView: React.FC = () => {
                                         <td className="px-6 py-4">
                                             {log.user ? (
                                                 <div className="flex items-center gap-2">
-                                                    <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-[10px]">
+                                                    <div className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-[10px] ${['admin', 'manager', 'cashier'].includes(log.user.role?.toLowerCase()) ? 'bg-indigo-100 text-indigo-700' : 'bg-emerald-100 text-emerald-700'}`}>
                                                         {log.user.name?.charAt(0) || 'U'}
                                                     </div>
                                                     <div className="flex flex-col">
                                                         <span className="font-semibold text-xs text-[#3b2f2f]">{log.user.name}</span>
-                                                        <span className="text-[9px] uppercase tracking-widest text-[#d9a65a]">{log.user.role}</span>
+                                                        <span className="text-[9px] uppercase tracking-widest text-[#d9a65a]">
+                                                            {['admin', 'manager', 'cashier'].includes(log.user.role?.toLowerCase()) ? `Equipa: ${log.user.role}` : 'Cliente Registado'}
+                                                        </span>
                                                     </div>
                                                 </div>
                                             ) : (
-                                                <span className="text-xs text-gray-400 italic">Sistema / Guest</span>
+                                                <div className="flex flex-col">
+                                                    <span className="text-xs text-gray-400 font-semibold italic">Visitante Web / Checkout</span>
+                                                    <span className="text-[9px] uppercase tracking-widest text-gray-400 mt-0.5">Sem Conta Registada</span>
+                                                </div>
                                             )}
                                         </td>
                                         <td className="px-6 py-4 font-mono text-[11px] text-gray-500">
@@ -399,6 +544,49 @@ export const AdminAuditView: React.FC = () => {
                 )}
             </div>
 
+            {/* AI Report Modal */}
+            {aiReport && (
+                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[60] flex items-center justify-center p-4 sm:p-6 animate-fade-in">
+                    <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl relative border border-[#d9a65a]/20">
+                        <div className="px-8 py-6 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-[#3b2f2f] to-[#2a2222]">
+                            <div>
+                                <h2 className="text-xl font-bold text-[#d9a65a] mb-1 flex items-center gap-3">
+                                    <Sparkles size={20} /> Insight de Auditoria com IA
+                                </h2>
+                                <p className="text-xs text-gray-300 font-mono">Analisando os registos recentes via OpenRouter</p>
+                            </div>
+                            <button 
+                                onClick={() => setAiReport(null)}
+                                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 transition-colors flex items-center justify-center text-white"
+                            >
+                                <XCircle size={18} />
+                            </button>
+                        </div>
+                        <div className="p-8 overflow-y-auto custom-scrollbar flex-1 bg-gray-50">
+                            <div className="prose prose-sm max-w-none text-[#3b2f2f] font-medium leading-relaxed">
+                                {aiReport.split('\n').map((line, i) => {
+                                    // Remove markdown headers
+                                    let text = line.replace(/#{1,6}\s?/g, '');
+                                    // Map Bold
+                                    const parts = text.split(/(\*\*.*?\*\*)/g);
+                                    return (
+                                        <div key={i} className="mb-2">
+                                            {parts.map((p, j) => {
+                                                if (p.startsWith('**') && p.endsWith('**')) {
+                                                    return <strong key={j} className="font-bold text-[#d9a65a] mr-1">{p.slice(2, -2)}</strong>;
+                                                }
+                                                // Remove lingering markers like asterisks or code ticks
+                                                return <span key={j}>{p.replace(/\*/g, '').replace(/`/g, '')}</span>;
+                                            })}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Log Details Modal */}
             {selectedLog && (
                 <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 sm:p-6 animate-fade-in">
@@ -437,12 +625,15 @@ export const AdminAuditView: React.FC = () => {
                                     <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 flex flex-col gap-2 text-sm">
                                         {selectedLog.user ? (
                                             <>
-                                                <p className="flex items-center gap-2"><User size={14} className="text-blue-500"/> <span className="font-semibold text-[#3b2f2f]">{selectedLog.user.name}</span></p>
+                                                <p className="flex items-center gap-2"><User size={14} className={['admin', 'manager', 'cashier'].includes(selectedLog.user.role?.toLowerCase()) ? 'text-indigo-500' : 'text-emerald-500'}/> <span className="font-semibold text-[#3b2f2f]">{selectedLog.user.name}</span></p>
                                                 <p className="text-xs text-gray-500 pl-6">{selectedLog.user.email}</p>
-                                                <p className="text-xs text-gray-500 pl-6 uppercase tracking-wider">{selectedLog.user.role}</p>
+                                                <p className="text-xs text-gray-500 pl-6 uppercase tracking-wider">{['admin', 'manager', 'cashier'].includes(selectedLog.user.role?.toLowerCase()) ? `Equipa Pão Caseiro (${selectedLog.user.role})` : 'Cliente Registado'}</p>
                                             </>
                                         ) : (
-                                            <p className="text-gray-500 italic">Requisição Automática / Guest</p>
+                                            <div className="flex flex-col gap-1">
+                                                <p className="text-gray-500 font-semibold italic">Visitante do Website</p>
+                                                <p className="text-[10px] uppercase tracking-widest text-gray-400">Checkout / Guest API</p>
+                                            </div>
                                         )}
                                         <div className="h-px bg-gray-200 my-2"></div>
                                         <p className="font-mono text-xs text-gray-500">Telefone Cliente: {selectedLog.customer_phone || '---'}</p>
@@ -489,12 +680,18 @@ export const AdminAuditView: React.FC = () => {
                                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                                 {Object.entries(selectedLog.details).filter(([k]) => !['message', 'error'].includes(k)).map(([key, val]) => (
                                                     <div key={key} className="p-3 rounded-xl border border-gray-100 bg-gray-50 flex flex-col">
-                                                        <span className="text-[9px] uppercase tracking-widest text-gray-400 font-bold mb-1">
+                                                        <span className="text-[9px] uppercase tracking-widest text-gray-400 font-bold mb-2">
                                                             {key.replace(/_/g, ' ')}
                                                         </span>
-                                                        <span className="text-sm font-semibold text-[#3b2f2f] truncate pb-1">
-                                                            {typeof val === 'object' ? JSON.stringify(val) : String(val)}
-                                                        </span>
+                                                        {typeof val === 'object' && val !== null ? (
+                                                            <pre className="text-xs font-mono text-gray-600 bg-white p-2 border border-gray-100 rounded-lg overflow-x-auto custom-scrollbar">
+                                                                {JSON.stringify(val, null, 2)}
+                                                            </pre>
+                                                        ) : (
+                                                            <span className="text-sm font-semibold text-[#3b2f2f] break-words pb-1">
+                                                                {String(val)}
+                                                            </span>
+                                                        )}
                                                     </div>
                                                 ))}
                                             </div>

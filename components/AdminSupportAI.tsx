@@ -55,17 +55,10 @@ export const AdminSupportAI: React.FC<AdminSupportAIProps> = ({ userName, stats 
     };
 
     // Load Sessions
-    const loadSessions = async () => {
-        const { supabase } = await import('../services/supabase');
-        // Check if table exists implicitly by query, fall back if error
-        const { data, error } = await supabase
-            .from('ai_chat_sessions')
-            .select('*')
-            .eq('user_id', userName)
-            .order('created_at', { ascending: false });
-
-        if (data) {
-            setSessions(data);
+    const loadSessions = () => {
+        const localSessions = localStorage.getItem(`ai_sessions_admin`);
+        if (localSessions) {
+            setSessions(JSON.parse(localSessions));
         }
     };
 
@@ -74,22 +67,17 @@ export const AdminSupportAI: React.FC<AdminSupportAIProps> = ({ userName, stats 
     }, [userName]);
 
     // Load Messages for Session
-    const loadSessionMessages = async (sessionId: string) => {
+    const loadSessionMessages = (sessionId: string) => {
         setIsLoading(true);
         setCurrentSessionId(sessionId);
-        const { supabase } = await import('../services/supabase');
-
-        const { data } = await supabase
-            .from('ai_chat_history')
-            .select('*')
-            .eq('session_id', sessionId)
-            .order('created_at', { ascending: true });
-
-        if (data) {
-            setMessages(data);
+        
+        const localHistory = localStorage.getItem(`ai_history_${sessionId}`);
+        if (localHistory) {
+            setMessages(JSON.parse(localHistory));
         } else {
             setMessages([]);
         }
+        
         setIsLoading(false);
         if (window.innerWidth < 768) setShowSidebar(false); // Close sidebar on mobile select
     };
@@ -114,46 +102,47 @@ export const AdminSupportAI: React.FC<AdminSupportAIProps> = ({ userName, stats 
         scrollToBottom();
     }, [messages]);
 
-    const saveMessageIndex = async (msg: Message, sessionId: string) => {
-        const { supabase } = await import('../services/supabase');
-        await supabase.from('ai_chat_history').insert({
-            session_id: sessionId,
-            user_id: userName,
+    const saveMessageIndex = (msg: Message, sessionId: string) => {
+        const localHistoryStr = localStorage.getItem(`ai_history_${sessionId}`);
+        let hist = localHistoryStr ? JSON.parse(localHistoryStr) : [];
+        hist.push({
             role: msg.role === 'model' ? 'assistant' : msg.role,
-            content: msg.content
+            content: msg.content,
+            created_at: new Date().toISOString()
         });
+        localStorage.setItem(`ai_history_${sessionId}`, JSON.stringify(hist));
     };
 
-    const createSession = async (firstMessage: string): Promise<string> => {
-        const { supabase } = await import('../services/supabase');
-
-        // Generate a simple title based on first message
+    const createSession = (firstMessage: string): string => {
         const title = firstMessage.length > 30 ? firstMessage.substring(0, 30) + '...' : firstMessage;
-
-        const { data, error } = await supabase
-            .from('ai_chat_sessions')
-            .insert({
-                user_id: userName,
-                title: title
-            })
-            .select()
-            .single();
-
-        if (data) {
-            setSessions(prev => [data, ...prev]);
-            return data.id;
-        }
-        return '';
+        const newSession = {
+            id: 'sess_' + Date.now().toString(),
+            title: title,
+            created_at: new Date().toISOString()
+        };
+        
+        const localSessionsStr = localStorage.getItem(`ai_sessions_admin`);
+        let localSessions = localSessionsStr ? JSON.parse(localSessionsStr) : [];
+        localSessions.unshift(newSession);
+        
+        localStorage.setItem(`ai_sessions_admin`, JSON.stringify(localSessions));
+        setSessions(localSessions);
+        return newSession.id;
     };
 
-    const handleDeleteSession = async (e: React.MouseEvent, sessionId: string) => {
+    const handleDeleteSession = (e: React.MouseEvent, sessionId: string) => {
         e.stopPropagation();
         if (!confirm('Apagar esta conversa?')) return;
 
-        const { supabase } = await import('../services/supabase');
-        await supabase.from('ai_chat_sessions').delete().eq('id', sessionId);
-
-        setSessions(prev => prev.filter(s => s.id !== sessionId));
+        localStorage.removeItem(`ai_history_${sessionId}`);
+        
+        const localSessionsStr = localStorage.getItem(`ai_sessions_admin`);
+        let localSessions: Session[] = localSessionsStr ? JSON.parse(localSessionsStr) : [];
+        localSessions = localSessions.filter(s => s.id !== sessionId);
+        
+        localStorage.setItem(`ai_sessions_admin`, JSON.stringify(localSessions));
+        setSessions(localSessions);
+        
         if (currentSessionId === sessionId) {
             handleNewChat();
         }
@@ -232,7 +221,7 @@ export const AdminSupportAI: React.FC<AdminSupportAIProps> = ({ userName, stats 
                 signal: controller.signal,
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer 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`,
+                    'Authorization': `Bearer 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`,
                     'HTTP-Referer': window.location.origin || 'https://paocaseiro.co.mz',
                     'X-Title': 'Pão Caseiro Admin'
                 },

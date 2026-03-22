@@ -57,8 +57,8 @@ const CLASSICS = [
         image: '/images/products/pao-cereais.png'
     },
     {
-        title: 'Pão Tradicional',
-        desc: 'O nosso pão de lenha clássico, fresco a toda a hora.',
+        title: 'Pão Integral',
+        desc: 'O nosso pão integral clássico, fresco a toda a hora.',
         price: '',
         image: '/images/products/pao-caseiro-fresh.png'
     },
@@ -83,7 +83,6 @@ const CLASSICS = [
 ];
 
 const DEFAULT_GALLERY_ITEMS = [
-    { src: '/images/products/waffle-stick.png', caption: 'Waffle Stick' },
     { src: '/images/products/croissant-folhado.png', caption: 'Croissant Folhado' },
     { src: '/images/products/queques.png', caption: 'Queques Fofinhos' },
     { src: '/images/products/rissois-camarao.png', caption: 'Rissóis de Camarão' },
@@ -418,9 +417,9 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
             </section >
 
             {/* --- SERVICES SECTION --- */}
-            < section id="services" className="min-h-screen flex items-center py-20 bg-[#3b2f2f] text-[#f7f1eb] relative overflow-hidden bg-cover bg-center bg-no-repeat" style={{ backgroundImage: "url('/images/fundo-services.png')" }} >
+            < section id="services" className="min-h-screen flex items-center py-20 bg-[#4b3a2f] text-[#f7f1eb] relative overflow-hidden bg-cover bg-center bg-no-repeat" style={{ backgroundImage: "url('/images/fundo-services.png')" }} >
                 {/* Medium-dark overlay for better text readability against the image */}
-                <div className="absolute inset-0 bg-[#1a1414]/90 mix-blend-multiply" />
+                <div className="absolute inset-0 bg-[#4b3a2f]/80" />
 
                 <div className="container mx-auto px-6 relative z-10">
                     <div className="text-center mb-16 max-w-3xl mx-auto">

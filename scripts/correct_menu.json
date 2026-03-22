@@ -1,0 +1,403 @@
+[
+  {
+    "title": "Folhados e Doces",
+    "items": [
+      {
+        "name": "Palmier",
+        "price": 50,
+        "image": "/images/Palmier.png"
+      },
+      {
+        "name": "Palmier recheado",
+        "price": 100,
+        "image": "/images/Palmier Recheado.png"
+      },
+      {
+        "name": "Folhados recheados",
+        "price": 80,
+        "image": "/images/Folhados recheados.png"
+      },
+      {
+        "name": "Pastel de Nata",
+        "price": 80,
+        "image": "/images/Pastel de nata.png"
+      },
+      {
+        "name": "Pastel de coco",
+        "price": 80,
+        "image": "/images/Pastel de coco.png"
+      },
+      {
+        "name": "Folhado de salsicha",
+        "price": 70,
+        "image": "/images/folhado_salsicha.jpg"
+      },
+      {
+        "name": "Croissants folhados",
+        "price": 80,
+        "image": ""
+      },
+      {
+        "name": "Empadas recheadas",
+        "price": 100,
+        "image": ""
+      },
+      {
+        "name": "Mini folhados (kg)",
+        "price": 1000,
+        "image": "/images/Mini folhados.png"
+      }
+    ]
+  },
+  {
+    "title": "Brioches",
+    "items": [
+      {
+        "name": "Brioche recheado",
+        "price": 80,
+        "image": "/images/Brioche com fruta.png"
+      },
+      {
+        "name": "Donuts",
+        "price": 80,
+        "image": "/images/Donuts.png"
+      },
+      {
+        "name": "Bola de Berlim",
+        "price": 80,
+        "image": "/images/Bola de berlim.png"
+      },
+      {
+        "name": "Nevada",
+        "price": 80,
+        "image": "/images/Nevada.png"
+      },
+      {
+        "name": "Croissants simples",
+        "price": 60,
+        "image": ""
+      },
+      {
+        "name": "Croissant recheado",
+        "price": 80,
+        "image": "/images/Croissants recheados.png"
+      },
+      {
+        "name": "Charuto",
+        "price": 80,
+        "image": "/images/Charuto.png"
+      },
+      {
+        "name": "Croissants chocolate",
+        "price": 80,
+        "image": "/images/Croissants chocolate.png"
+      },
+      {
+        "name": "Rolo de açúcar e canela",
+        "price": 80,
+        "image": "/images/Rolo de açúcar e canela.png"
+      },
+      {
+        "name": "Pão de Deus",
+        "price": 60,
+        "image": "/images/pao_deus.jpg"
+      },
+      {
+        "name": "Laços",
+        "price": 60,
+        "image": ""
+      },
+      {
+        "name": "Arrofadas",
+        "price": 15,
+        "image": ""
+      },
+      {
+        "name": "Língua de Sogra",
+        "price": 15,
+        "image": ""
+      },
+      {
+        "name": "Biscoitos (kg)",
+        "price": 1200,
+        "image": ""
+      }
+    ]
+  },
+  {
+    "title": "Waffle",
+    "items": [
+      {
+        "name": "Waffle Stick",
+        "price": 200,
+        "image": ""
+      }
+    ]
+  },
+  {
+    "title": "Pizzas Grandes",
+    "items": [
+      {
+        "name": "Frango",
+        "price": 700,
+        "image": ""
+      },
+      {
+        "name": "Atum",
+        "price": 700,
+        "image": ""
+      },
+      {
+        "name": "Margarita",
+        "price": 700,
+        "image": ""
+      },
+      {
+        "name": "Palony/Pepperoni",
+        "price": 700,
+        "image": ""
+      },
+      {
+        "name": "4 Estações",
+        "price": 800,
+        "image": ""
+      }
+    ]
+  },
+  {
+    "title": "Pizzas Médias",
+    "items": [
+      {
+        "name": "Frango",
+        "price": 600,
+        "image": ""
+      },
+      {
+        "name": "Atum",
+        "price": 600,
+        "image": ""
+      },
+      {
+        "name": "Margarita",
+        "price": 600,
+        "image": ""
+      },
+      {
+        "name": "Palony/Pepperoni",
+        "price": 600,
+        "image": ""
+      },
+      {
+        "name": "4 Estações",
+        "price": 700,
+        "image": ""
+      }
+    ]
+  },
+  {
+    "title": "Fatias e Bolos",
+    "items": [
+      {
+        "name": "Queque",
+        "price": 65,
+        "image": "/images/queques.jpg"
+      },
+      {
+        "name": "Bolo de arroz",
+        "price": 65,
+        "image": "/images/Bolo de arroz.png"
+      },
+      {
+        "name": "Torta",
+        "price": 85,
+        "image": ""
+      },
+      {
+        "name": "Fatia xadrez",
+        "price": 150,
+        "image": "/images/Fatias Xadrez.png"
+      },
+      {
+        "name": "Fatia folhado de canela",
+        "price": 150,
+        "image": ""
+      },
+      {
+        "name": "Fatias mix",
+        "price": 150,
+        "image": ""
+      }
+    ]
+  },
+  {
+    "title": "Bolos Inteiros/Encomenda",
+    "items": [
+      {
+        "name": "Bolo de Cenoura c/ Chocolate",
+        "price": 1200,
+        "image": "",
+        "isSpecial": true
+      },
+      {
+        "name": "Bolo de Laranja",
+        "price": 1000,
+        "image": "",
+        "isSpecial": true
+      },
+      {
+        "name": "Bolo de Chocolate Húmido",
+        "price": 1500,
+        "image": "",
+        "isSpecial": true
+      },
+      {
+        "name": "Bolo Red Velvet",
+        "price": 1800,
+        "image": "",
+        "isSpecial": true
+      },
+      {
+        "name": "Cheesecake (Morango/Maracujá)",
+        "price": 1600,
+        "image": "",
+        "isSpecial": true
+      },
+      {
+        "name": "Tarte de Amêndoa",
+        "price": 1400,
+        "image": "",
+        "isSpecial": true
+      }
+    ]
+  },
+  {
+    "title": "Salgados",
+    "items": [
+      {
+        "name": "Rissóis de camarão",
+        "price": 50,
+        "image": ""
+      },
+      {
+        "name": "Samosa carne/peixe/frango/queijo",
+        "price": 50,
+        "image": ""
+      },
+      {
+        "name": "Samosa vegetais",
+        "price": 35,
+        "image": ""
+      },
+      {
+        "name": "Coxinhas",
+        "price": 50,
+        "image": ""
+      },
+      {
+        "name": "Mini pizza",
+        "price": 50,
+        "image": ""
+      },
+      {
+        "name": "Croquete",
+        "price": 50,
+        "image": ""
+      },
+      {
+        "name": "Folhados pies de batata",
+        "price": 80,
+        "image": ""
+      },
+      {
+        "name": "Folhados de frango",
+        "price": 100,
+        "image": ""
+      }
+    ]
+  },
+  {
+    "title": "Pães",
+    "items": [
+      {
+        "name": "Pão de forma (grande)",
+        "price": 60,
+        "image": ""
+      },
+      {
+        "name": "Pão de forma (pequeno)",
+        "price": 30,
+        "image": ""
+      },
+      {
+        "name": "Pão caseiro",
+        "price": 10,
+        "image": ""
+      },
+      {
+        "name": "Pão integral",
+        "price": 12,
+        "image": ""
+      },
+      {
+        "name": "Pão cassete integral",
+        "price": 15,
+        "image": ""
+      },
+      {
+        "name": "Pão hamburguer/cachorro",
+        "price": 15,
+        "image": ""
+      },
+      {
+        "name": "Pão de centeio",
+        "price": 35,
+        "image": ""
+      },
+      {
+        "name": "Pão de cereais",
+        "price": 40,
+        "image": ""
+      },
+      {
+        "name": "Pão forma integral grande",
+        "price": 80,
+        "image": ""
+      },
+      {
+        "name": "Pão forma integral pequeno",
+        "price": 40,
+        "image": ""
+      },
+      {
+        "name": "Pão de água",
+        "price": 8,
+        "image": "/images/pao_agua.jpg"
+      },
+      {
+        "name": "Pão d’água",
+        "price": 5,
+        "image": ""
+      },
+      {
+        "name": "Broa de milho",
+        "price": 60,
+        "image": "/images/Broa de milho.png"
+      },
+      {
+        "name": "Torradas",
+        "price": 20,
+        "image": ""
+      },
+      {
+        "name": "Baguete francês",
+        "price": 70,
+        "image": ""
+      },
+      {
+        "name": "Cassete",
+        "price": 16,
+        "image": ""
+      }
+    ]
+  }
+]

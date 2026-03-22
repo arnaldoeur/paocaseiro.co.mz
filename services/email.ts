@@ -425,6 +425,43 @@ export const sendWelcomeEmail = async (userEmail: string, userName: string) => {
 };
 
 /**
+ * Welcome Email for new Team Members (Staff)
+ */
+export const sendTeamWelcomeEmail = async (email: string, name: string, username: string, password?: string) => {
+    const domain = window.location.origin;
+    const html = `
+        <h2 style="color: #3b2f2f; text-align: center;">Bem-vindo(a) à Equipa Pão Caseiro!</h2>
+        <p>Olá, <strong>${name}</strong>!</p>
+        <p>A sua conta de acesso ao Gestor / Painel de Controlo da Pão Caseiro foi criada com sucesso.</p>
+        
+        <div style="background-color: #f7f1eb; padding: 20px; border-radius: 12px; margin: 25px 0; border: 1px dashed #d9a65a;">
+            <p style="margin: 0; color: #3b2f2f; font-weight: bold; font-size: 16px;">Detalhes de Acesso</p>
+            <table style="width: 100%; margin-top: 15px; border-collapse: collapse;">
+                <tr>
+                    <td style="padding: 5px 0; color: #666;">Login/Username:</td>
+                    <td style="padding: 5px 0; font-weight: bold; color: #3b2f2f;">${username}</td>
+                </tr>
+                ${password ? `
+                <tr>
+                    <td style="padding: 5px 0; color: #666;">Palavra-passe provisória:</td>
+                    <td style="padding: 5px 0; font-weight: bold; color: #3b2f2f;">${password}</td>
+                </tr>` : ''}
+            </table>
+        </div>
+
+        <div style="text-align: center; margin: 30px 0;">
+            <a href="${domain}/admin" style="background-color: #3b2f2f; color: #d9a65a; padding: 15px 30px; text-decoration: none; border-radius: 30px; font-weight: bold; display: inline-block;">ENTRAR NO SISTEMA</a>
+        </div>
+
+        <p style="font-size: 14px; color: #666; text-align: center;">
+            Aconselhamos a alterar a palavra-passe após o primeiro login, se desejar. Bom trabalho!
+        </p>
+    `;
+
+    return sendEmail([email], `Bem-vindo(a) à Equipa Pão Caseiro! 🥖`, html);
+};
+
+/**
  * New User Registration Notification for Admin
  */
 export const sendAdminNewUserNotification = async (userEmail: string, userName: string) => {
@@ -465,4 +502,48 @@ export const sendAdminNewUserNotification = async (userEmail: string, userName: 
     `;
 
     return sendEmail([adminEmail], `[NOVO CLIENTE] ${userName || userEmail}`, html);
+};
+
+/**
+ * Newsletter Subscription Email
+ */
+export const sendNewsletterEmail = async (name: string, userEmail: string) => {
+    const domain = window.location.origin;
+    const html = `
+        <h2 style="color: #3b2f2f; text-align: center;">Obrigado por se inscrever!</h2>
+        <p>Olá, <strong>${name}</strong>!</p>
+        <p>A sua subscrição na nossa newsletter foi efetuada com sucesso. Fique atento ao seu email para receber novidades, ofertas exclusivas, atualizações e campanhas especiais da Pão Caseiro.</p>
+        
+        <div style="text-align: center; margin: 30px 0;">
+            <a href="${domain}/blog" style="background-color: #d9a65a; color: #3b2f2f; padding: 15px 30px; text-decoration: none; border-radius: 30px; font-weight: bold; display: inline-block;">LER AS ÚLTIMAS NOTÍCIAS</a>
+        </div>
+        <p style="text-align: center; margin-top: 10px;">Ou <a href="${domain}/menu" style="color: #d9a65a; font-weight: bold;">veja o nosso menu</a> para encomendar.</p>
+
+        <p style="margin-top: 30px; text-align: center;">Obrigado por preferir a Pão Caseiro! <br/><i>O sabor que aquece o coração</i></p>
+    `;
+
+    return sendEmail([userEmail], 'Subscrição Confirmada! 🎉', html);
+};
+
+/**
+ * Newsletter Presentation Email (Triggered by n8n or external scheduler 30-min later)
+ */
+export const sendPresentationEmail = async (name: string, userEmail: string) => {
+    const domain = window.location.origin;
+    const html = `
+        <h2 style="color: #3b2f2f; text-align: center;">Conheça a Pão Caseiro</h2>
+        <p>Olá, <strong>${name}</strong>!</p>
+        <p>Gostariamos de lhe dar a conhecer um pouco mais sobre o que faz a Pão Caseiro tão especial. Somos mais do que uma padaria; somos tradição e sabor que contam histórias.</p>
+        <ul style="list-style: none; padding-left: 0;">
+            <li>🥖 <strong>Pão Fresco Diário:</strong> Fermentação natural e assados lentos.</li>
+            <li>🥐 <strong>Bolos e Folhados:</strong> Para os seus momentos mais doces.</li>
+            <li>🚚 <strong>Entregas Rápidas:</strong> O pão à sua porta com um toque.</li>
+        </ul>
+        <div style="text-align: center; margin: 30px 0;">
+            <a href="${domain}/menu" style="background-color: #d9a65a; color: #3b2f2f; padding: 15px 30px; text-decoration: none; border-radius: 30px; font-weight: bold; display: inline-block;">FAZER UMA ENCOMENDA ONLINE</a>
+        </div>
+        <p style="margin-top: 30px; text-align: center;">Estamos à sua espera. <br/><i>Pão Caseiro</i></p>
+    `;
+
+    return sendEmail([userEmail], 'Descubra a Tradição da Pão Caseiro', html);
 };

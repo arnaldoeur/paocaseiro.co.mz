@@ -23,8 +23,22 @@ const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const [cart, setCart] = useState<CartItem[]>(() => {
-        const saved = localStorage.getItem('cart');
-        return saved ? JSON.parse(saved) : [];
+        try {
+            const saved = localStorage.getItem('cart');
+            if (!saved) return [];
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed)) {
+                // Ensure prices are valid numbers
+                return parsed.map(item => ({
+                    ...item,
+                    price: Number(item.price) || 0,
+                    quantity: Number(item.quantity) || 1
+                }));
+            }
+            return [];
+        } catch(e) {
+            return [];
+        }
     });
 
     useEffect(() => {
@@ -62,7 +76,7 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const clearCart = () => setCart([]);
 
-    const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    const total = cart.reduce((sum, item) => sum + (Number(item.price) || 0) * (Number(item.quantity) || 1), 0);
 
     return (
         <CartContext.Provider value={{ cart, addToCart, removeFromCart, clearCart, total }}>

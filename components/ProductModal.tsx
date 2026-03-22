@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Minus, Plus, ShoppingBag, ChevronRight } from 'lucide-react';
 import { Language } from '../translations';
-import { formatProductName } from '../services/stringUtils';
+import { formatProductName, getEnglishProductName, getEnglishProductDesc } from '../services/stringUtils';
 
 interface Variation {
     name: string;
@@ -117,7 +117,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                                         animate={{ scale: 1, opacity: 1 }}
                                         transition={{ duration: 0.4 }}
                                         src={`${product.image}?v=3`}
-                                        alt={formatProductName(product.name)}
+                                        alt={language === 'en' ? formatProductName(product.name_en || getEnglishProductName(product.name)) : formatProductName(product.name)}
                                         className="w-full h-full object-contain max-h-[300px] md:max-h-[400px] drop-shadow-xl"
                                         onError={(e) => {
                                             e.currentTarget.onerror = null;
@@ -143,7 +143,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                                 <div className="flex-1 overflow-y-auto p-6 md:p-10 pb-32">
                                     <div className="flex justify-between items-start mb-4">
                                         <h2 className="text-3xl md:text-4xl font-serif font-bold text-[#3b2f2f] leading-tight pr-8">
-                                            {formatProductName(product.name)}
+                                            {language === 'en' ? formatProductName(product.name_en || getEnglishProductName(product.name)) : formatProductName(product.name)}
                                         </h2>
                                         <button
                                             onClick={onClose}
@@ -155,7 +155,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
 
                                     <div className="mb-6">
                                         <p className="text-gray-500 text-lg leading-relaxed mb-6">
-                                            {product.desc || product.description || 'Delicioso e fresco.'}
+                                            {language === 'en' ? (product.description_en || getEnglishProductDesc(product.name) || product.desc || product.description || 'Delicious and fresh.') : (product.desc || product.description || 'Delicioso e fresco.')}
                                         </p>
 
                                         {/* Price Display */}

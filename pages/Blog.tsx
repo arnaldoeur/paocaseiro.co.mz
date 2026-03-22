@@ -4,6 +4,7 @@ import { supabase } from '../services/supabase';
 import { Language, translations } from '../translations';
 import { Calendar, User, ChevronRight, BookOpen, Clock, MapPin } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { sendNewsletterEmail } from '../services/email';
 
 interface BlogPost {
     id: string;
@@ -21,7 +22,36 @@ export const Blog: React.FC<{ language: Language }> = ({ language }) => {
     const [posts, setPosts] = useState<BlogPost[]>([]);
     const [loading, setLoading] = useState(true);
     const [categories, setCategories] = useState<string[]>([]);
+    const [newsletterName, setNewsletterName] = useState('');
+    const [newsletterEmail, setNewsletterEmail] = useState('');
+    const [subscribing, setSubscribing] = useState(false);
+    const [subscribedMsg, setSubscribedMsg] = useState('');
     const navigate = useNavigate();
+
+    const handleSubscribe = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!newsletterEmail || !newsletterName) return;
+        setSubscribing(true);
+        setSubscribedMsg('');
+        try {
+            const { error } = await supabase.from('newsletter_subscribers').insert([
+                { name: newsletterName, email: newsletterEmail }
+            ]);
+
+            if (error && error.code !== '23505') { 
+                throw error;
+            }
+
+            await sendNewsletterEmail(newsletterName, newsletterEmail);
+            setSubscribedMsg('Subscrição efetuada com sucesso!');
+            setNewsletterEmail('');
+            setNewsletterName('');
+        } catch (err) {
+            setSubscribedMsg('Erro ao subscrever. Tente novamente.');
+        } finally {
+            setSubscribing(false);
+        }
+    };
 
     useEffect(() => {
         const fetchPosts = async () => {
@@ -93,7 +123,7 @@ export const Blog: React.FC<{ language: Language }> = ({ language }) => {
                     <div className="w-full md:w-1/2">
                         <div className="w-full aspect-video rounded-[2rem] overflow-hidden shadow-2xl relative bg-[#3b2f2f] group">
                             <video 
-                                src="https://backup.aegraphics.in/wp-content/uploads/2025/12/ANICOR-FINAL.mp4" 
+                                src="https://bqiegszufcqimlvucrpm.supabase.co/storage/v1/object/public/products/PAO%20CASEIRO%20VIDEO.mp4" 
                                 className="w-full h-full object-cover"
                                 autoPlay 
                                 muted 
@@ -224,13 +254,35 @@ export const Blog: React.FC<{ language: Language }> = ({ language }) => {
                                 <div className="relative z-10">
                                     <img src="/logo_on_dark.png" alt="Pão Caseiro" className="h-12 mx-auto mb-6 opacity-90" />
                                     <p className="text-[#f7f1eb]/80 text-sm leading-relaxed mb-6">
-                                        Subscreva a nossa newsletter para receber receitas, novidades e ofertas exclusivas diretamente no seu email.
+                                        Subscreva a nossa newsletter para receber novidades, ofertas exclusivas e atualizações diretamente no seu email.
                                     </p>
-                                    <form className="flex flex-col gap-3" onSubmit={(e) => e.preventDefault()}>
-                                        <input type="email" placeholder="O seu melhor email" className="px-4 py-3 rounded-xl bg-white/10 border border-white/20 text-white placeholder-white/50 focus:outline-none focus:border-[#d9a65a] transition-colors text-sm" />
-                                        <button className="bg-[#d9a65a] text-[#3b2f2f] px-4 py-3 rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-white transition-colors">
-                                            Subscrever
+                                    <form className="flex flex-col gap-3" onSubmit={handleSubscribe}>
+                                        <input 
+                                            type="text" 
+                                            placeholder="O seu Nome" 
+                                            value={newsletterName}
+                                            onChange={(e) => setNewsletterName(e.target.value)}
+                                            required
+                                            className="px-4 py-3 rounded-xl bg-white/10 border border-white/20 text-white placeholder-white/50 focus:outline-none focus:border-[#d9a65a] transition-colors text-sm" 
+                                        />
+                                        <input 
+                                            type="email" 
+                                            placeholder="O seu melhor email" 
+                                            value={newsletterEmail}
+                                            onChange={(e) => setNewsletterEmail(e.target.value)}
+                                            required
+                                            className="px-4 py-3 rounded-xl bg-white/10 border border-white/20 text-white placeholder-white/50 focus:outline-none focus:border-[#d9a65a] transition-colors text-sm" 
+                                        />
+                                        <button 
+                                            type="submit"
+                                            disabled={subscribing}
+                                            className="bg-[#d9a65a] text-[#3b2f2f] px-4 py-3 rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-white transition-colors disabled:opacity-50"
+                                        >
+                                            {subscribing ? 'A enviar...' : 'Subscrever'}
                                         </button>
+                                        {subscribedMsg && (
+                                            <p className="text-sm mt-2 font-bold text-[#d9a65a]">{subscribedMsg}</p>
+                                        )}
                                     </form>
                                 </div>
                             </motion.div>

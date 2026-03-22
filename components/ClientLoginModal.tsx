@@ -159,6 +159,7 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
             }
         } catch (err: any) {
             setError(err.message || 'Erro ao processar pedido.');
+            await logAudit({ action: 'CUSTOMER_AUTH_ERROR', entity_type: 'auth', details: { step: mode, identifier, error: err.message }, customer_phone: identifier.includes('@') ? null : identifier });
         } finally {
             setLoading(false);
         }
@@ -185,16 +186,18 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
             }
 
             // Save login state
-            localStorage.setItem('pc_auth_phone', customerData.contact_no);
+            const phoneToSave = customerData.contact_no && !customerData.contact_no.includes('@') ? customerData.contact_no : (!identifier.includes('@') ? identifier : '');
+            if (phoneToSave) localStorage.setItem('pc_auth_phone', phoneToSave);
             localStorage.setItem('pc_user_data', JSON.stringify(customerData));
 
-            await logAudit('CUSTOMER_LOGIN', 'customer', customerData.id, { method: 'password' }, customerData.contact_no);
+            await logAudit({ action: 'CUSTOMER_LOGIN', entity_type: 'customer', entity_id: customerData.id, details: { method: 'password' }, customer_phone: customerData.contact_no });
 
             onClose();
             navigate('/dashboard');
         } catch (err: any) {
             console.error('Password Login Error:', err);
             setError(err.message || 'Erro ao entrar.');
+            await logAudit({ action: 'CUSTOMER_LOGIN_FAILED', entity_type: 'auth', details: { method: 'password', identifier, error: err.message }, customer_phone: identifier.includes('@') ? null : identifier });
         } finally {
             setLoading(false);
         }
@@ -213,10 +216,11 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
             }
 
             if (existingCustomer) {
-                localStorage.setItem('pc_auth_phone', existingCustomer.contact_no);
+                const phoneToSave = existingCustomer.contact_no && !existingCustomer.contact_no.includes('@') ? existingCustomer.contact_no : (!identifier.includes('@') ? identifier : '');
+                if (phoneToSave) localStorage.setItem('pc_auth_phone', phoneToSave);
                 localStorage.setItem('pc_user_data', JSON.stringify(existingCustomer));
                 
-                await logAudit('CUSTOMER_LOGIN', 'customer', existingCustomer.id, { method: 'otp' }, existingCustomer.contact_no);
+                await logAudit({ action: 'CUSTOMER_LOGIN', entity_type: 'customer', entity_id: existingCustomer.id, details: { method: 'otp' }, customer_phone: existingCustomer.contact_no });
 
                 onClose();
                 navigate('/dashboard');
@@ -226,6 +230,7 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
         } catch (err: any) {
             console.error('OTP Verify Error:', err);
             setError(err.message || 'Código inválido.');
+            await logAudit({ action: 'CUSTOMER_LOGIN_FAILED', entity_type: 'auth', details: { method: 'otp', identifier, error: err.message }, customer_phone: identifier.includes('@') ? null : identifier });
         } finally {
             setLoading(false);
         }
@@ -240,7 +245,7 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
             const { error: upsertError } = await supabase
                 .from('customers')
                 .upsert({
-                    contact_no: identifier,
+                    contact_no: identifier.includes('@') ? (whatsapp || identifier) : identifier,
                     name: name,
                     email: email || null,
                     date_of_birth: dob || null,
@@ -263,10 +268,11 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
 
             await sendSMS(identifier.replace('+', ''), `Olá ${name.split(' ')[0]}, o seu registo na Pão Caseiro foi concluído com sucesso!`);
 
-            localStorage.setItem('pc_auth_phone', identifier);
+            const phoneToSave = customerData?.contact_no && !customerData?.contact_no?.includes('@') ? customerData.contact_no : (!identifier.includes('@') ? identifier : whatsapp || '');
+            if (phoneToSave) localStorage.setItem('pc_auth_phone', phoneToSave);
             if (customerData) {
                 localStorage.setItem('pc_user_data', JSON.stringify(customerData));
-                await logAudit('CUSTOMER_REGISTER', 'customer', customerData.id, {  }, customerData.contact_no);
+                await logAudit({ action: 'CUSTOMER_REGISTER', entity_type: 'customer', entity_id: customerData.id, details: { }, customer_phone: customerData.contact_no });
             }
 
             onClose();
@@ -274,6 +280,7 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
         } catch (err: any) {
             console.error('Registration Error:', err);
             setError('Erro ao criar conta.');
+            await logAudit({ action: 'CUSTOMER_REGISTER_FAILED', entity_type: 'auth', details: { error: err.message || 'Erro ao criar conta', identifier }, customer_phone: identifier.includes('@') ? null : identifier });
         } finally {
             setLoading(false);
         }

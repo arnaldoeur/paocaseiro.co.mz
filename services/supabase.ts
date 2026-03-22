@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { sendOrderConfirmationEmail, sendAdminNewOrderNotification } from './email';
 import { notifyCustomer, notifyTeam } from './sms';
+import { notifyKitchenNewOrderWhatsApp, notifyAdminNewOrderWhatsApp, notifyCustomerNewOrderWhatsApp } from './whatsapp';
 
 // Connection Mode management
 export type ConnectionMode = 'proxy' | 'direct';
@@ -204,6 +205,13 @@ export const saveOrderToSupabase = async (orderData: any, items: any[]) => {
             // Detailed Email Notification to Admin
             sendAdminNewOrderNotification(fullOrder, items).catch(e => console.error("Admin notification failed", e));
 
+            // WhatsApp Notification to Kitchen and Admin
+            notifyKitchenNewOrderWhatsApp(fullOrder, items).catch(e => console.error("Kitchen WhatsApp notification failed", e));
+            notifyAdminNewOrderWhatsApp(fullOrder, items).catch(e => console.error("Admin WhatsApp notification failed", e));
+
+            // WhatsApp Notification / Receipt to Customer
+            notifyCustomerNewOrderWhatsApp(fullOrder, items).catch(e => console.error("Customer WhatsApp notification failed", e));
+
             // SMS Confirmation
             const smsOrder = {
                 short_id: orderData.short_id,
@@ -251,7 +259,7 @@ export const getProducts = async () => {
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-export const generateReceipt = async (orderId: string, shortId: string, customerId: string, customerName: string, items: any[], totalAmount: number, documentType: 'Receipt' | 'Invoice' = 'Receipt') => {
+export const generateReceipt = async (orderId: string, shortId: string, customerId: string, customerName: string, items: any[], totalAmount: number, documentType: 'Receipt' | 'Invoice' = 'Receipt', generatePdfFile: boolean = true) => {
     try {
         const receiptNo = documentType === 'Receipt' ? `REC-${shortId}` : `FAT-${shortId}`;
         const receiptData = {
@@ -279,8 +287,9 @@ export const generateReceipt = async (orderId: string, shortId: string, customer
         }
 
         // --- Generate PDF & Sync to Drive ---
-        try {
-            const doc = new jsPDF();
+        if (generatePdfFile) {
+            try {
+                const doc = new jsPDF();
             doc.setFont('helvetica', 'bold');
             doc.setFontSize(22);
             doc.text("Pão Caseiro", 14, 20);
@@ -348,11 +357,46 @@ export const generateReceipt = async (orderId: string, shortId: string, customer
         } catch (pdfErr) {
             console.error("PDF Generation/Sync Error:", pdfErr);
         }
+        }
         // ------------------------------------
 
         return { success: true, data };
     } catch (error) {
         console.error('Receipt generation error:', error);
         return { success: false, error };
+    }
+};
+
+export const uploadReceiptToDrive = async (pdfBlob: Blob, orderId: string, documentType: 'Receipt' | 'Invoice') => {
+    try {
+        const orderShortId = orderId.split('-')[0].toUpperCase(); 
+        const receiptNo = documentType === 'Receipt' ? `REC-${orderShortId}` : `FAT-${orderShortId}`;
+        const fileName = `${documentType === 'Receipt' ? 'recibos' : 'faturas'}/${receiptNo}.pdf`;
+
+        const { error: uploadError } = await supabase.storage.from('products').upload(fileName, pdfBlob, {
+             contentType: 'application/pdf',
+             upsert: true
+        });
+
+        if (!uploadError) {
+             const folderName = documentType === 'Receipt' ? 'Recibos' : 'Faturas';
+             const { data: folderInfo } = await supabase.from('drive_folders').select('id').eq('name', folderName).maybeSingle();
+             
+             await supabase.from('drive_files').insert({
+                 name: `${receiptNo}.pdf`,
+                 path: fileName,
+                 size: pdfBlob.size,
+                 type: 'application/pdf',
+                 folder_id: folderInfo?.id || null,
+                 uploaded_by: 'system' 
+             });
+             return { success: true };
+        } else {
+             console.error("PDF Auto-Save Upload Error:", uploadError);
+             return { success: false, error: uploadError };
+        }
+    } catch (err) {
+        console.error("Auto-save sync error:", err);
+        return { success: false, error: err };
     }
 };

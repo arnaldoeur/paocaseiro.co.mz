@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../services/supabase';
+import { logAudit } from '../../services/audit';
 import { 
     Folder, 
     File, 
@@ -16,7 +17,9 @@ import {
     AlertCircle,
     Info,
     MoreVertical,
-    Download
+    Download,
+    Edit3,
+    ImagePlus
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -33,6 +36,10 @@ export const AdminDriveView: React.FC = () => {
     
     // Preview Modal
     const [selectedFile, setSelectedFile] = useState<any>(null);
+
+    // Bulk Actions
+    const [isSelectMode, setIsSelectMode] = useState(false);
+    const [selectedFileIds, setSelectedFileIds] = useState<string[]>([]);
 
     const currentFolderId = currentPath.length > 0 ? currentPath[currentPath.length - 1].id : null;
 
@@ -104,6 +111,7 @@ export const AdminDriveView: React.FC = () => {
             setNewFolderName('');
             setIsCreateFolderModalOpen(false);
             loadDriveContents();
+            await logAudit({ action: 'CREATE_FOLDER', entity_type: 'file', details: { folder_name: newFolderName.trim() } });
         } catch (error: any) {
             alert('Erro ao criar pasta: ' + error.message);
         }
@@ -141,6 +149,7 @@ export const AdminDriveView: React.FC = () => {
                     folder_id: currentFolderId,
                     uploaded_by: 'admin'
                 });
+                await logAudit({ action: 'UPLOAD_FILE', entity_type: 'file', details: { file_name: file.name, size: file.size } });
             }
             
             loadDriveContents();
@@ -157,14 +166,59 @@ export const AdminDriveView: React.FC = () => {
         
         try {
             // First DB Record
-            await supabase.from('drive_files').delete().eq('id', fileId);
-            // Then Storage
-            await supabase.storage.from('products').remove([storagePath]);
+            const { error: dbError } = await supabase.from('drive_files').delete().eq('id', fileId);
+            if (dbError) throw dbError;
             
+            // Then Storage
+            if (storagePath) {
+                const { error: storageError } = await supabase.storage.from('products').remove([storagePath]);
+                if (storageError) console.error("Storage delete error:", storageError);
+            }
+            
+            // If the selected file in preview is the one being deleted, close it
+            if (selectedFile?.id === fileId) {
+                setSelectedFile(null);
+            }
+            
+            await logAudit({ action: 'DELETE_FILE', entity_type: 'file', entity_id: fileId, details: { path: storagePath } });
             loadDriveContents();
         } catch (error: any) {
-            alert('Erro ao eliminar aze ficheiro.');
+            alert('Erro ao eliminar este ficheiro: ' + error.message);
         }
+    };
+
+    const handleBulkDelete = async () => {
+        if (selectedFileIds.length === 0) return;
+        if (!confirm(`Deseja eliminar permanentemente os ${selectedFileIds.length} ficheiros selecionados?`)) return;
+        
+        try {
+            const filesToDelete = files.filter(f => selectedFileIds.includes(f.id));
+            const storagePaths = filesToDelete.map(f => f.path).filter(Boolean);
+
+            // DB Records
+            const { error: dbError } = await supabase.from('drive_files').delete().in('id', selectedFileIds);
+            if (dbError) throw dbError;
+
+            // Storage
+            if (storagePaths.length > 0) {
+                const { error: storageError } = await supabase.storage.from('products').remove(storagePaths);
+                if (storageError) console.error("Bulk storage delete error:", storageError);
+            }
+
+            setSelectedFileIds([]);
+            setIsSelectMode(false);
+            await logAudit({ action: 'BULK_DELETE_FILES', entity_type: 'file', details: { count: selectedFileIds.length } });
+            loadDriveContents();
+        } catch (error: any) {
+            alert('Erro ao eliminar ficheiros: ' + error.message);
+        }
+    };
+
+    const toggleFileSelection = (fileId: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        setSelectedFileIds(prev => 
+            prev.includes(fileId) ? prev.filter(id => id !== fileId) : [...prev, fileId]
+        );
     };
 
     const handleDeleteFolder = async (folderId: string, e: React.MouseEvent) => {
@@ -193,6 +247,58 @@ export const AdminDriveView: React.FC = () => {
             loadDriveContents();
         } catch (error: any) {
             alert('Erro ao renomear pasta: ' + error.message);
+        }
+    };
+
+    const handleRenameFile = async (fileId, currentName, e) => {
+        if (e) e.stopPropagation();
+        const newName = prompt('Introduza o novo nome para este ficheiro (não esqueça da extensão, ex: .png):', currentName);
+        if (!newName || newName.trim() === currentName) return;
+        try {
+            const { error } = await supabase.from('drive_files').update({ name: newName.trim() }).eq('id', fileId);
+            if (error) throw error;
+            if (selectedFile?.id === fileId) setSelectedFile({...selectedFile, name: newName.trim()});
+            loadDriveContents();
+            await logAudit({ action: 'RENAME_FILE', entity_type: 'file', entity_id: fileId, details: { new_name: newName } });
+        } catch (error) {
+            alert('Erro ao renomear ficheiro: ' + error.message);
+        }
+    };
+
+    const handleDownload = async (url, filename) => {
+        try {
+            const response = await fetch(url);
+            const blob = await response.blob();
+            const blobUrl = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = blobUrl;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(blobUrl);
+            await logAudit({ action: 'DOWNLOAD_FILE', entity_type: 'file', details: { file_name: filename } });
+        } catch(e) {
+            window.open(url, '_blank');
+        }
+    };
+
+    const handleAddGallery = async (fileUrl, fileName) => {
+        try {
+            const defaultTitle = fileName.split('.')[0].replace(/_/g, ' ');
+            const title = prompt('Introduza um título para exibir na Galeria do site:', defaultTitle);
+            if (!title) return;
+            const { error } = await supabase.from('gallery_items').insert({
+                title: title,
+                image_url: fileUrl,
+                category: 'Geral',
+                active: true
+            });
+            if (error) throw error;
+            alert('Imagem adicionada à Galeria com sucesso!');
+            await logAudit({ action: 'ADD_TO_GALLERY', entity_type: 'file', details: { title } });
+        } catch (e) {
+            alert('Erro ao adicionar à Galeria: ' + e.message);
         }
     };
 
@@ -280,6 +386,25 @@ export const AdminDriveView: React.FC = () => {
                     >
                         <FolderPlus size={18} /> <span className="hidden sm:inline text-xs">Nova Pasta</span>
                     </button>
+                    <button 
+                        onClick={() => {
+                            setIsSelectMode(!isSelectMode);
+                            setSelectedFileIds([]);
+                        }}
+                        className={`p-2.5 rounded-xl font-bold transition-colors flex items-center gap-2 ${isSelectMode ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-700 hover:bg-amber-100 hover:text-amber-700'}`}
+                        title="Selecionar Vários"
+                    >
+                        <span className="hidden sm:inline text-xs">{isSelectMode ? 'Cancelar Seleção' : 'Selecionar'}</span>
+                    </button>
+                    {isSelectMode && selectedFileIds.length > 0 && (
+                        <button 
+                            onClick={handleBulkDelete}
+                            className="p-2.5 bg-red-100 text-red-700 hover:bg-red-200 rounded-xl font-bold transition-colors flex items-center gap-2"
+                            title="Eliminar Selecionados"
+                        >
+                            <Trash2 size={18} /> <span className="hidden sm:inline text-xs">Eliminar ({selectedFileIds.length})</span>
+                        </button>
+                    )}
                     <div className="relative">
                         <input 
                             type="file" 
@@ -346,25 +471,55 @@ export const AdminDriveView: React.FC = () => {
                                     {filteredFiles.map(file => {
                                         const isImage = file.type?.startsWith('image/');
                                         // Build public URL from path since the column 'url' doesn't exist.
-                                        const { data: { publicUrl } } = supabase.storage.from('products').getPublicUrl(file.path || file.name);
-                                        let displayUrl = publicUrl;
+                                        let displayUrl = '';
+                                        const pathToCheck = file.path || file.name;
+                                        if (pathToCheck.startsWith('http')) {
+                                            displayUrl = pathToCheck;
+                                        } else if (pathToCheck.startsWith('/')) {
+                                            displayUrl = pathToCheck;
+                                        } else {
+                                            const { data: { publicUrl } } = supabase.storage.from('products').getPublicUrl(pathToCheck);
+                                            displayUrl = publicUrl;
+                                        }
 
                                         return (
                                             <div 
                                                 key={file.id} 
-                                                className="bg-white border border-gray-100 p-2 rounded-2xl flex flex-col group hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer relative"
-                                                onDoubleClick={() => setSelectedFile({...file, displayUrl})}
+                                                className={`bg-white border p-2 rounded-2xl flex flex-col group hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer relative ${selectedFileIds.includes(file.id) ? 'border-amber-500 shadow-md ring-2 ring-amber-500/20' : 'border-gray-100'}`}
+                                                onClick={() => {
+                                                    if (isSelectMode) {
+                                                        setSelectedFileIds(prev => prev.includes(file.id) ? prev.filter(id => id !== file.id) : [...prev, file.id]);
+                                                    } else {
+                                                        setSelectedFile({...file, displayUrl});
+                                                    }
+                                                }}
                                             >
                                                 {/* Actions */}
-                                                <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity z-10 flex gap-1">
-                                                    <button onClick={(e) => { e.stopPropagation(); handleDeleteFile(file.id, file.path); }} className="p-1.5 bg-white/90 backdrop-blur text-red-500 rounded-lg hover:bg-red-500 hover:text-white shadow-sm transition-colors border">
-                                                        <Trash2 size={14} />
-                                                    </button>
+                                                {!isSelectMode && (
+                                                    <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity z-10 flex gap-1">
+                                                        <button onClick={(e) => { e.stopPropagation(); handleDeleteFile(file.id, file.path); }} className="p-1.5 bg-white/90 backdrop-blur text-red-500 rounded-lg hover:bg-red-500 hover:text-white shadow-sm transition-colors border">
+                                                            <Trash2 size={14} />
+                                                        </button>
+                                                    </div>
+                                                )}
+                                                
+                                                <div className={`absolute top-3 left-3 z-10 transition-opacity ${isSelectMode || selectedFileIds.includes(file.id) || selectedFileIds.length > 0 ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`} onClick={(e) => e.stopPropagation()}>
+                                                    <div className="bg-white/80 backdrop-blur rounded p-1 shadow-sm border border-gray-200 hover:bg-white flex items-center justify-center">
+                                                        <input 
+                                                            type="checkbox" 
+                                                            checked={selectedFileIds.includes(file.id)} 
+                                                            onChange={(e) => {
+                                                                if(!isSelectMode && e.target.checked) setIsSelectMode(true);
+                                                                toggleFileSelection(file.id, e);
+                                                            }} 
+                                                            className="w-4 h-4 cursor-pointer accent-amber-500 rounded border-gray-300" 
+                                                        />
+                                                    </div>
                                                 </div>
 
                                                 <div className="w-full aspect-square bg-gray-50 rounded-xl mb-3 overflow-hidden border border-gray-100 flex items-center justify-center relative">
                                                     {isImage && displayUrl ? (
-                                                        <img src={displayUrl} alt={file.name} loading="lazy" className="w-full h-full object-cover" />
+                                                        <img src={displayUrl} alt={file.name} loading="lazy" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="%239ca3af" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>'; }} />
                                                     ) : (
                                                         getFileIcon(file.type)
                                                     )}

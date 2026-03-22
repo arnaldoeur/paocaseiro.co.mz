@@ -6,7 +6,8 @@ import { Language, translations } from '../translations';
 import { ProductModal } from '../components/ProductModal';
 import { ScheduleOrderModal } from '../components/ScheduleOrderModal';
 import { UpsellModal } from '../components/UpsellModal';
-import { formatProductName } from '../services/stringUtils';
+import { formatProductName, getEnglishProductName, getEnglishProductDesc } from '../services/stringUtils';
+
 
 interface MenuProps {
     language: Language;
@@ -49,23 +50,26 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
         'Doces & Pastelaria': 'Sweets & Pastry',
         'Croissants': 'Croissants',
         'Bolos & Sobremesas': 'Cakes & Desserts',
-        'Pizzas': 'Pizzas'
+        'Pizzas': 'Pizzas',
+        'Pizzaria': 'Pizzas',
+        'Lanches': 'Snacks & Bites',
+        'Cafés': 'Coffee',
+        'Chás': 'Tea',
+        'Bebidas Quentes': 'Hot Drinks',
+        'Bebidas Frias': 'Cold Drinks',
+        'Refrescos': 'Soft Drinks',
+        'Sucos': 'Juices'
     };
 
-    // Helper for English product descriptions
-    const getEnglishProductDesc = (name: string) => {
-        for (const section of translations.en.menu.sections) {
-            const item = section.items.find((i: any) => i.name === name);
-            if (item) return item.desc;
-        }
-        return null;
-    };
 
     useEffect(() => {
         const fetchMenu = async () => {
             setLoading(true);
             try {
-                const { success, data, error } = await import('../services/supabase').then(m => m.getProducts());
+                // Fetch dynamically from db so Admin updates reflect immediately on client side
+                const { supabase } = await import('../services/supabase');
+                const { data, error } = await supabase.from('products').select('*');
+                const success = !error;
 
                 if (success && data && data.length > 0) {
                     console.log("Menu loaded from DB: ", data.length, " items.");
@@ -85,7 +89,7 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
                                 ? (product.image.startsWith('http') || product.image.startsWith('/')) 
                                     ? product.image 
                                     : `/images/${product.image}`
-                                : '/images/pao_caseiro.png',
+                                : '',
                             desc: product.description,
                             description_en: product.description_en,
                             name_en: product.name_en,
@@ -116,7 +120,8 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
                         'Lanches',
                         'Cafés',
                         'Chás',
-                        'Bebidas'
+                        'Bebidas',
+                        'Extras'
                     ];
 
                     newSections.sort((a, b) => {
@@ -151,7 +156,8 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
                         'Lanches',
                         'Cafés',
                         'Chás',
-                        'Bebidas'
+                        'Bebidas',
+                        'Extras'
                     ];
                     fallback = [...fallback].sort((a, b) => {
                         const posA = categoryOrder.indexOf(a.title);
@@ -480,14 +486,14 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
                                             >
                                                 <img
                                                     src={item.image}
-                                                    alt={(language === 'en' && item.name_en) ? formatProductName(item.name_en) : formatProductName(item.name)}
+                                                    alt={(language === 'en') ? formatProductName(item.name_en || getEnglishProductName(item.name)) : formatProductName(item.name)}
                                                     className="w-full h-full object-contain object-center group-hover:scale-105 transition-transform duration-500"
                                                 />
                                             </div>
                                             <div className="flex-1 flex flex-col justify-between py-1 min-h-0">
                                                 <div>
                                                     <h3 className="font-bold text-[#3b2f2f] text-base leading-tight mb-1 group-hover:text-[#d9a65a] transition-colors line-clamp-1">
-                                                        {(language === 'en' && item.name_en) ? formatProductName(item.name_en) : formatProductName(item.name)}
+                                                        {(language === 'en') ? formatProductName(item.name_en || getEnglishProductName(item.name)) : formatProductName(item.name)}
                                                     </h3>
                                                     <p className="text-xs text-gray-500 line-clamp-2 leading-tight mb-2">
                                                         {language === 'en'

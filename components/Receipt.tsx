@@ -22,14 +22,27 @@ interface ReceiptProps {
     total: number;
     amountPaid: number;
     balance: number;
+    autoSaveToDrive?: boolean;
+    documentType?: 'Receipt' | 'Invoice';
     onClose: () => void;
 }
 
 export const Receipt: React.FC<ReceiptProps> = ({
-    orderId, paymentRef, transactionId, date, details, cart, subtotal, deliveryFee, total, amountPaid, balance, onClose
+    orderId, paymentRef, transactionId, date, details, cart, subtotal, deliveryFee, total, amountPaid, balance, autoSaveToDrive, documentType = 'Receipt', onClose
 }) => {
     const receiptRef = useRef<HTMLDivElement>(null);
+    const hasAutoSaved = useRef<boolean>(false);
     const [settings, setSettings] = useState<any>(null);
+
+    const [prefixes] = useState(() => {
+        if (typeof window !== 'undefined') {
+            const saved = localStorage.getItem('company_prefixes');
+            return saved ? JSON.parse(saved) : { doc: 'FAT' };
+        }
+        return { doc: 'FAT' };
+    });
+
+    const displayOrderId = `${prefixes.doc}-${orderId}`;
 
     useEffect(() => {
         const saved = localStorage.getItem('message_settings');
@@ -113,25 +126,47 @@ export const Receipt: React.FC<ReceiptProps> = ({
 
             // Standard thermal width 80mm
             const pdfWidth = 80;
-            const pdfHeight = pdfWidth / imgProps;
+                const pdfHeight = pdfWidth / imgProps;
 
-            const pdf = new jsPDF({
-                orientation: 'p',
-                unit: 'mm',
-                format: [pdfWidth, pdfHeight]
-            });
+                const pdf = new jsPDF({
+                    orientation: 'p',
+                    unit: 'mm',
+                    format: [pdfWidth, pdfHeight]
+                });
 
-            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-            return pdf;
-        } finally {
-            document.body.removeChild(container);
-        }
-    };
+                pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+                return pdf;
+            } finally {
+                document.body.removeChild(container);
+            }
+        };
 
-    const handleDownloadPDF = async () => {
-        const pdf = await generatePDF();
-        if (pdf) pdf.save(`Recibo_${settings?.senderId || 'PaoCaseiro'}_${orderId}.pdf`);
-    };
+        const handleDownloadPDF = async () => {
+            const pdf = await generatePDF();
+            if (pdf) pdf.save(`${documentType === 'Invoice' ? 'Fatura' : 'Recibo'}_${settings?.senderId || 'PaoCaseiro'}_${displayOrderId}.pdf`);
+        };
+
+        useEffect(() => {
+            if (autoSaveToDrive && !hasAutoSaved.current) {
+                hasAutoSaved.current = true;
+                const saveToBackend = async () => {
+                    try {
+                        const pdf = await generatePDF();
+                        if (pdf) {
+                            const blob = pdf.output('blob');
+                            const { uploadReceiptToDrive } = await import('../services/supabase');
+                            await uploadReceiptToDrive(blob, orderId, documentType as 'Receipt' | 'Invoice');
+                        }
+                    } catch (e) {
+                        console.error('Failed to auto-save receipt to drive:', e);
+                    }
+                };
+                
+                // Add a small delay so layout finishes painting robustly before generating the auto-save canvas
+                setTimeout(saveToBackend, 800);
+            }
+        }, [autoSaveToDrive, orderId, documentType]);
+
 
     const handlePrint = () => {
         if (!receiptRef.current) return;
@@ -189,22 +224,22 @@ export const Receipt: React.FC<ReceiptProps> = ({
                 const pdf = await generatePDF();
                 if (pdf) {
                     const blob = pdf.output('blob');
-                    const file = new File([blob], `Recibo_${orderId}.pdf`, { type: 'application/pdf' });
+                    const file = new File([blob], `Recibo_${displayOrderId}.pdf`, { type: 'application/pdf' });
                     if (navigator.canShare && navigator.canShare({ files: [file] })) {
                         await navigator.share({
                             files: [file],
                             title: `Recibo ${settings?.senderId || 'Pão Caseiro'}`,
-                            text: `Pedido #${orderId}`
+                            text: `Pedido ${displayOrderId}`
                         });
                         return;
                     }
                 }
             }
-            const text = `Recibo ${settings?.senderId || 'Pão Caseiro'} - Pedido #${orderId}\nTotal: ${total} MT`;
+            const text = `Recibo ${settings?.senderId || 'Pão Caseiro'} - Pedido ${displayOrderId}\nTotal: ${total} MT`;
             window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
         } catch (error) {
             console.error('Share error:', error);
-            const text = `Recibo ${settings?.senderId || 'Pão Caseiro'} - Pedido #${orderId}\nTotal: ${total} MT`;
+            const text = `Recibo ${settings?.senderId || 'Pão Caseiro'} - Pedido ${displayOrderId}\nTotal: ${total} MT`;
             window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
         }
     };
@@ -239,7 +274,7 @@ export const Receipt: React.FC<ReceiptProps> = ({
                         </div>
                         <div className="space-y-1 text-right">
                             <p className="text-gray-500">PEDIDO</p>
-                            <p className="font-bold text-[#3b2f2f] text-lg">#{orderId}</p>
+                            <p className="font-bold text-[#3b2f2f] text-lg">{displayOrderId}</p>
 
                             {paymentRef && (
                                 <div className="text-xs text-gray-500 mt-1">

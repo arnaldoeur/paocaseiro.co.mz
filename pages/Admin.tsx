@@ -21,7 +21,7 @@ const mapPinIcon = new L.DivIcon({
 });
 
 const QuillBase = ReactQuill as any;
-import { Eye, EyeOff, Sparkles, MessageSquare, Trash2, Upload, Send, CheckCircle, Package, TrendingUp, User, LogOut, ShoppingBag, Clock, Menu, X, ChevronRight, Search, Plus, Calendar, MapPin, Truck, Smartphone, Users, MessageCircle, Mail, Download, ChevronLeft, Loader, ShoppingCart, Lock, Unlock, XCircle, CreditCard, Banknote, Printer, FileText, Key, Edit3, Usb, Wifi, Share2, RefreshCw, UserPlus, Bell, Award, BarChart3, ShieldCheck, MailPlus, Box, Store, Zap, LineChart, AlertTriangle, Star, Save, Bot, RotateCw } from 'lucide-react';
+import { Eye, EyeOff, Sparkles, MessageSquare, Trash2, Upload, Send, CheckCircle, Package, TrendingUp, User, LogOut, ShoppingBag, Clock, Menu, X, ChevronRight, Search, Plus, Calendar, MapPin, Truck, Smartphone, Users, MessageCircle, Mail, Download, ChevronLeft, Loader, ShoppingCart, Lock, Unlock, XCircle, CreditCard, Banknote, Printer, FileText, Key, Edit3, Usb, Wifi, Share2, RefreshCw, UserPlus, Bell, Award, BarChart3, ShieldCheck, MailPlus, Box, Store, Zap, LineChart, AlertTriangle, Star, Save, Bot, RotateCw, Image as ImageIcon, Paperclip } from 'lucide-react';
 import { AdminSupportAI } from '../components/AdminSupportAI';
 import { logAudit } from '../services/audit';
 import { Kitchen } from './Kitchen';
@@ -29,9 +29,11 @@ import { AnalyticsChart } from '../components/Analytics/AnalyticsChart';
 import { AdminPerformanceView } from './admin/AdminPerformanceView';
 import { AdminAuditView } from './admin/AdminAuditView';
 import { AdminDriveView } from './admin/AdminDriveView';
+import { AdminNewsletterView } from '../components/admin/AdminNewsletterView';
+import { AdminEmailPipelineView } from '../components/admin/AdminEmailPipelineView';
 import { generateMasterReport } from '../services/reportGenerator';
 import { sendSMS, sendWhatsApp, notifyCustomer } from '../services/sms';
-import { sendEmail } from '../services/email';
+import { sendEmail, sendTeamWelcomeEmail } from '../services/email';
 import { supabase, getConnectionMode, setConnectionMode, refreshSupabaseClient, type ConnectionMode } from '../services/supabase';
 import { printerService } from '../services/printer';
 import { jsPDF } from 'jspdf';
@@ -136,7 +138,7 @@ export const Admin: React.FC = () => {
     const [showPassword, setShowPassword] = useState(false);
 
     // Sidebar/View State
-    const [activeView, setActiveView] = useState<'dashboard' | 'orders' | 'kitchen' | 'stock' | 'pos' | 'delivery' | 'settings' | 'customers' | 'team' | 'logistics' | 'support' | 'support_ai' | 'documents' | 'messages' | 'blog'>('dashboard');
+    const [activeView, setActiveView] = useState<'dashboard' | 'orders' | 'kitchen' | 'stock' | 'pos' | 'delivery' | 'settings' | 'customers' | 'team' | 'logistics' | 'support' | 'support_ai' | 'documents' | 'messages' | 'blog' | 'newsletter'>('dashboard');
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(window.innerWidth < 768);
     
     // Auto-close sidebar on mobile after navigation
@@ -212,6 +214,7 @@ export const Admin: React.FC = () => {
     const [messages, setMessages] = useState<any[]>([]);
     const [messageFolder, setMessageFolder] = useState<'inbox' | 'sent' | 'trash'>('inbox');
     const [selectedMessage, setSelectedMessage] = useState<any | null>(null);
+    const [isComposingEmail, setIsComposingEmail] = useState(false);
     const [memberAvatar, setMemberAvatar] = useState<string | null>(null);
 
     // POS State
@@ -285,7 +288,10 @@ export const Admin: React.FC = () => {
         motto: 'Qualidade em cada fornada',
         currency: 'MT',
         language: 'pt',
-        prefix: 'PC-'
+        prefix: 'CLI',
+        staffPrefix: 'FUNC',
+        productPrefix: 'PROD',
+        docPrefix: 'DOC'
     });
 
     const [emailSettings, setEmailSettings] = useState(() => {
@@ -532,11 +538,13 @@ export const Admin: React.FC = () => {
             if (itemsError) throw itemsError;
 
             // Audit Log
-            await logAudit('ORDER_PLACED', 'order', orderResult.id, { 
-                total: total, 
-                method: paymentMethod, 
-                source: 'pos_admin' 
-            }, posCustomer?.contact_no);
+            await logAudit({
+                action: 'ORDER_PLACED',
+                entity_type: 'order',
+                entity_id: orderResult.id,
+                details: { total: total, method: paymentMethod, source: 'pos_admin' },
+                customer_phone: posCustomer?.contact_no
+            });
 
 
             // Open Cash Drawer automatically if payment is cash
@@ -1325,6 +1333,12 @@ export const Admin: React.FC = () => {
                 localStorage.setItem('admin_user', data.name);
                 if (data.avatar_url) localStorage.setItem('admin_photo', data.avatar_url);
 
+                await logAudit({
+                    action: 'ADMIN_LOGIN',
+                    entity_type: 'auth',
+                    entity_id: data.id,
+                    details: { method: 'password', admin_name: data.name }
+                });
                 refreshAllData();
             } else {
                 // Try local fallback if Supabase returned no match
@@ -1343,12 +1357,22 @@ export const Admin: React.FC = () => {
                     localStorage.setItem('admin_id', localMatch.id);
                     localStorage.setItem('admin_user', localMatch.name);
                     localStorage.setItem('admin_photo', '');
+                    await logAudit({
+                        action: 'ADMIN_LOGIN',
+                        entity_type: 'auth',
+                        entity_id: localMatch.id,
+                        details: { method: 'fallback_password', admin_name: localMatch.name }
+                    });
                     refreshAllData();
-                } else {
                     setError('Credenciais incorretas');
+                    await logAudit({
+                        action: 'ADMIN_LOGIN_FAILED',
+                        entity_type: 'auth',
+                        details: { method: 'password', username, reason: 'Invalid credentials' }
+                    });
                 }
             }
-        } catch (err) {
+        } catch (err: any) {
             console.error(err);
             // Network error - try local fallback
             const localMatch = localCredentials.find(
@@ -1366,11 +1390,26 @@ export const Admin: React.FC = () => {
                 refreshAllData();
             } else {
                 setError('Erro ao conectar. Verifique as credenciais.');
+                await logAudit({
+                    action: 'ADMIN_LOGIN_FAILED',
+                    entity_type: 'auth',
+                    details: { method: 'password', username, reason: 'Network/Supabase error: ' + (err?.message || 'Unknown') }
+                });
             }
         }
     };
 
-    const handleLogout = () => {
+    const handleLogout = async () => {
+        const id = localStorage.getItem('admin_id');
+        const name = localStorage.getItem('admin_user');
+        
+        await logAudit({
+            action: 'ADMIN_LOGOUT',
+            entity_type: 'auth',
+            entity_id: id || userId,
+            details: { admin_name: name || username }
+        });
+
         setIsAuthenticated(false);
         localStorage.removeItem('admin_auth');
         localStorage.removeItem('admin_role');
@@ -1535,6 +1574,17 @@ export const Admin: React.FC = () => {
                 memberData.created_at = new Date().toISOString();
                 const { error } = await supabase.from('team_members').insert([memberData]);
                 if (error) throw error;
+                
+                // Send Welcome Email
+                if (memberData.email) {
+                    await sendTeamWelcomeEmail(
+                        memberData.email, 
+                        memberData.name, 
+                        memberData.username, 
+                        memberData.password || 'Contacte o Administrador'
+                    );
+                }
+                
                 alert('Novo membro criado com sucesso!');
             }
 
@@ -1578,11 +1628,15 @@ export const Admin: React.FC = () => {
                 // UPDATE existing product
                 const { error } = await supabase.from('products').update(productData).eq('id', currentProduct.id);
                 if (error) throw error;
+                await logAudit({ action: 'UPDATE_PRODUCT', entity_type: 'product', entity_id: currentProduct.id, details: { name: productData.name } });
             } else {
                 // INSERT new product
                 const { data, error } = await supabase.from('products').insert(productData).select().single();
                 if (error) throw error;
-                if (data) productId = data.id;
+                if (data) {
+                    productId = data.id;
+                    await logAudit({ action: 'CREATE_PRODUCT', entity_type: 'product', entity_id: productId, details: { name: productData.name } });
+                }
             }
 
             // Handle Variations
@@ -1618,6 +1672,7 @@ export const Admin: React.FC = () => {
                 await supabase.from('product_variations').delete().eq('product_id', id);
                 const { error } = await supabase.from('products').delete().eq('id', id);
                 if (error) throw error;
+                await logAudit({ action: 'DELETE_PRODUCT', entity_type: 'product', entity_id: id });
                 loadProducts();
             } catch (e: any) {
                 console.error("Delete Error:", e);
@@ -1675,7 +1730,10 @@ export const Admin: React.FC = () => {
                     motto: settingsMap['company_motto'] || prev.motto,
                     currency: settingsMap['company_currency'] || prev.currency,
                     language: settingsMap['company_language'] || prev.language,
-                    prefix: settingsMap['company_customer_prefix'] || prev.prefix
+                    prefix: settingsMap['company_customer_prefix'] || prev.prefix,
+                    staffPrefix: settingsMap['company_staff_prefix'] || prev.staffPrefix,
+                    productPrefix: settingsMap['company_product_prefix'] || prev.productPrefix,
+                    docPrefix: settingsMap['company_doc_prefix'] || prev.docPrefix
                 }));
             }
         } catch (e) {
@@ -2248,7 +2306,7 @@ export const Admin: React.FC = () => {
     const downloadStockCSV = () => {
         const headers = ["ID", "Produto", "Categoria", "Preço", "Stock", "Unidade", "Status"];
         const rows = products.map((p, index) => [
-            `PC-${index + 10}`,
+            `${companyInfo.productPrefix || 'PROD'}-${index + 10}`,
             p.name,
             p.category,
             p.price,
@@ -2914,7 +2972,7 @@ export const Admin: React.FC = () => {
                                         {filteredProducts.map((p, index) => (
                                             <tr key={p.id} className="hover:bg-blue-50/30 transition-colors">
                                                 <td className="p-4 text-[10px] font-mono text-gray-400 max-w-[50px] truncate" title={p.id}>
-                                                    PC-{index + 10}
+                                                    {companyInfo.productPrefix || 'PROD'}-{index + 10}
                                                 </td>
                                                 <td className="p-4 flex items-center gap-3">
                                                     {p.image ? <img src={p.image} alt={p.name} className="w-10 h-10 rounded-lg object-cover border border-gray-200" /> : <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400"><Package size={16} /></div>}
@@ -3020,7 +3078,7 @@ export const Admin: React.FC = () => {
                                                             {p.image ? <img src={p.image} alt={p.name} className="w-10 h-10 rounded-lg object-cover border border-gray-200" /> : <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400"><Package size={16} /></div>}
                                                             <div>
                                                                 <span className="font-bold text-[#3b2f2f] block">{p.name.charAt(0).toUpperCase() + p.name.slice(1).toLowerCase()}</span>
-                                                                <span className="text-[10px] text-gray-400">ID Ref: {p.id.split('-')[0]}</span>
+                                                                <span className="text-[10px] text-gray-400 font-mono">ID Ref: {companyInfo.productPrefix}-{p.id.substring(0,6).toUpperCase()}</span>
                                                             </div>
                                                         </div>
                                                     </td>
@@ -3029,7 +3087,7 @@ export const Admin: React.FC = () => {
                                                             type="text" 
                                                             value={currentSku}
                                                             onChange={(e) => updateProduct('sku', e.target.value)}
-                                                            placeholder="Ex: PC-001"
+                                                            placeholder={`Ex: ${companyInfo.productPrefix || 'PROD'}-001`}
                                                             className={`w-24 p-2 text-sm border rounded-lg text-center font-bold focus:outline-none focus:ring-2 focus:ring-[#d9a65a]/50 ${isEdited && editedState.sku !== p.sku ? 'border-[#d9a65a] bg-yellow-50' : 'border-gray-200 uppercase'}`}
                                                         />
                                                     </td>
@@ -3124,7 +3182,7 @@ export const Admin: React.FC = () => {
                                             <td className="p-4 font-bold text-[#3b2f2f]">{c.name}</td>
                                             <td className="p-4 text-sm text-gray-500">
                                                 {c.contact_no}
-                                                {c.internal_id && <div className="text-[10px] font-bold text-[#d9a65a] mt-1">ID: {c.internal_id}</div>}
+                                                <div className="text-[10px] font-bold text-[#d9a65a] mt-1 font-mono">ID: {companyInfo.prefix}-{c.internal_id || c.id.substring(0,6).toUpperCase()}</div>
                                             </td>
                                             <td className="p-4 text-sm text-gray-500">
                                                 {c.email ? <div>{c.email}</div> : <span className="text-gray-300 italic">Sem email</span>}
@@ -3369,7 +3427,7 @@ export const Admin: React.FC = () => {
                                             </div>
                                             <div>
                                                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Nome de Utilizador (Login)</label>
-                                                <input required name="username" title="Nome de Utilizador" defaultValue={currentMember?.username} type="text" className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:border-[#d9a65a] outline-none" />
+                                                <input required name="username" title="Nome de Utilizador" defaultValue={currentMember?.username || companyInfo.staffPrefix} type="text" className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:border-[#d9a65a] outline-none" />
                                             </div>
                                             <div>
                                                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Email (Para Recuperação)</label>
@@ -3402,19 +3460,21 @@ export const Admin: React.FC = () => {
                     )
                 }
 
-                {/* Messages View */}
-                {
-                    activeView === 'messages' && (
+                {/* --- Messages View --- */}
+                {activeView === 'messages' && (
                         <div className="h-[calc(100vh-140px)] animate-fade-in flex border border-[#3b2f2f]/10 rounded-2xl overflow-hidden bg-white/50 backdrop-blur-sm shadow-2xl">
                             {/* Mail Sidebar */}
                             <div className="w-16 md:w-48 bg-[#3b2f2f] text-white flex flex-col p-2 md:p-4 gap-2 border-r border-white/10 shrink-0">
-                                <button onClick={() => setMessageFolder('inbox')} className={`flex items-center gap-3 p-3 rounded-xl transition-all ${messageFolder === 'inbox' ? 'bg-[#d9a65a] text-[#3b2f2f] font-bold shadow-lg' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}>
+                                <button onClick={() => { setIsComposingEmail(true); setSelectedMessage(null); }} className={`flex items-center justify-center md:justify-start gap-3 p-3 mb-2 rounded-xl transition-all ${isComposingEmail ? 'bg-[#d9a65a] text-[#3b2f2f] font-bold shadow-lg' : 'bg-white/10 text-white hover:bg-[#d9a65a] hover:text-[#3b2f2f] hover:shadow-lg'}`}>
+                                    <Plus size={18} /> <span className="hidden md:inline">Compor Email</span>
+                                </button>
+                                <button onClick={() => { setMessageFolder('inbox'); setIsComposingEmail(false); }} className={`flex items-center gap-3 p-3 rounded-xl transition-all ${messageFolder === 'inbox' && !isComposingEmail ? 'bg-[#d9a65a] text-[#3b2f2f] font-bold shadow-lg' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}>
                                     <Mail size={18} /> <span className="hidden md:inline">Entrada</span>
                                 </button>
-                                <button onClick={() => setMessageFolder('sent')} className={`flex items-center gap-3 p-3 rounded-xl transition-all ${messageFolder === 'sent' ? 'bg-[#d9a65a] text-[#3b2f2f] font-bold shadow-lg' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}>
+                                <button onClick={() => { setMessageFolder('sent'); setIsComposingEmail(false); }} className={`flex items-center gap-3 p-3 rounded-xl transition-all ${messageFolder === 'sent' && !isComposingEmail ? 'bg-[#d9a65a] text-[#3b2f2f] font-bold shadow-lg' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}>
                                     <Send size={18} /> <span className="hidden md:inline">Enviados</span>
                                 </button>
-                                <button onClick={() => setMessageFolder('trash')} className={`flex items-center gap-3 p-3 rounded-xl transition-all ${messageFolder === 'trash' ? 'bg-[#d9a65a] text-[#3b2f2f] font-bold shadow-lg' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}>
+                                <button onClick={() => { setMessageFolder('trash'); setIsComposingEmail(false); }} className={`flex items-center gap-3 p-3 rounded-xl transition-all ${messageFolder === 'trash' && !isComposingEmail ? 'bg-[#d9a65a] text-[#3b2f2f] font-bold shadow-lg' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}>
                                     <Trash2 size={18} /> <span className="hidden md:inline">Lixo</span>
                                 </button>
                                 <button onClick={() => setActiveView('settings')} className={`flex items-center gap-3 p-3 rounded-xl transition-all ${activeView === 'settings' ? 'bg-[#d9a65a] text-[#3b2f2f] font-bold shadow-lg' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}>
@@ -3450,6 +3510,7 @@ export const Admin: React.FC = () => {
                                                     key={msg.id}
                                                     onClick={async () => {
                                                         setSelectedMessage(msg);
+                                                        setIsComposingEmail(false);
                                                         if (msg.status === 'unread') {
                                                             await supabase.from('contact_messages').update({ status: 'read' }).eq('id', msg.id);
                                                             // Update local state instead of full reload for smoother UX
@@ -3476,8 +3537,106 @@ export const Admin: React.FC = () => {
                             </div>
 
                             {/* Message Detail View */}
-                            <div className={`flex-[2] bg-white h-full flex flex-col ${selectedMessage ? 'flex' : 'hidden lg:flex'}`}>
-                                {selectedMessage ? (
+                            <div className={`flex-[2] bg-white h-full flex flex-col ${(selectedMessage || isComposingEmail) ? 'flex' : 'hidden lg:flex'}`}>
+                                {isComposingEmail ? (
+                                    <div className="flex flex-col h-full animate-fade-in bg-[#fcfbf9]">
+                                        {/* Header */}
+                                        <div className="p-6 border-b border-gray-100 bg-white flex flex-wrap gap-4 justify-between items-center">
+                                            <div className="flex items-center gap-4">
+                                                <button onClick={() => setIsComposingEmail(false)} aria-label="Cancelar" className="lg:hidden p-2 text-gray-400 hover:text-[#3b2f2f] hover:bg-gray-100 rounded-full transition-all"><ChevronLeft size={20} /></button>
+                                                <h2 className="text-2xl font-serif font-bold text-[#3b2f2f]">Compor Nova Mensagem</h2>
+                                            </div>
+                                            <button onClick={() => setIsComposingEmail(false)} className="hidden lg:flex p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-all"><X size={20} /></button>
+                                        </div>
+                                        <div className="flex-[1] p-8 overflow-y-auto custom-scrollbar">
+                                            <div className="max-w-3xl mx-auto bg-white p-8 md:p-10 rounded-[2.5rem] border border-gray-100 shadow-[0_10px_40px_rgba(217,166,90,0.05)] text-[#3b2f2f]">
+                                                <form onSubmit={async (e: any) => {
+                                                    e.preventDefault();
+                                                    const to = (e.target as any).to.value;
+                                                    const subject = (e.target as any).subject.value;
+                                                    const body = (e.target as any).body.value;
+                                                    if (!to || !subject || !body) return;
+
+                                                    const fileInput = (e.target as any).attachments as HTMLInputElement;
+                                                    const files = fileInput.files;
+                                                    const parsedAttachments: any[] = [];
+                                                    
+                                                    if (files && files.length > 0) {
+                                                        for(let i=0; i<files.length; i++) {
+                                                            const file = files[i];
+                                                            const base64 = await new Promise<string>((resolve) => {
+                                                                const reader = new FileReader();
+                                                                reader.onload = () => resolve((reader.result as string).split(',')[1]);
+                                                                reader.readAsDataURL(file);
+                                                            });
+                                                            parsedAttachments.push({ filename: file.name, content: base64 });
+                                                        }
+                                                    }
+
+                                                    setIsSubmitting(true);
+                                                    try {
+                                                        const { sendEmail } = await import('../services/email');
+                                                        const emailHtml = `
+                                                            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #d9a65a; padding: 20px; border-radius: 10px;">
+                                                                <h2 style="color: #3b2f2f; margin-top: 0;">${subject}</h2>
+                                                                <p style="white-space: pre-wrap; font-size: 16px; line-height: 1.5; color: #444;">${body}</p>
+                                                                <hr style="border-top: 1px solid #eee; margin: 30px 0 20px;">
+                                                                <p style="font-size: 12px; color: #999; text-align: center;">Pão Caseiro - O Sabor que Aquece o Coração</p>
+                                                            </div>
+                                                        `;
+                                                        
+                                                        const result = await sendEmail(
+                                                            [to], 
+                                                            subject, 
+                                                            emailHtml, 
+                                                            undefined, 
+                                                            undefined, 
+                                                            [], 
+                                                            parsedAttachments
+                                                        );
+                                                        
+                                                        if (result.success) {
+                                                            alert('Email enviado com sucesso!');
+                                                            setIsComposingEmail(false);
+                                                        } else {
+                                                            alert('Erro ao enviar email: ' + result.error);
+                                                        }
+                                                    } catch (err: any) {
+                                                        alert('Erro interno: ' + err.message);
+                                                    } finally {
+                                                        setIsSubmitting(false);
+                                                    }
+                                                }} className="flex flex-col gap-6">
+                                                    <div>
+                                                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest pl-4 mb-2 block">Para (Email de Destino)</label>
+                                                        <input name="to" type="email" required placeholder="cliente@exemplo.com" className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:border-[#d9a65a] transition-all font-medium text-sm" />
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest pl-4 mb-2 block">Assunto</label>
+                                                        <input name="subject" type="text" required placeholder="Exemplo: Resposta à sua Sugestão" className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:border-[#d9a65a] transition-all font-medium text-sm" />
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest pl-4 mb-2 block">Mensagem</label>
+                                                        <textarea name="body" rows={12} required placeholder="Escreva a mensagem aqui..." className="w-full p-6 bg-gray-50 border border-gray-100 rounded-[2rem] outline-none focus:border-[#d9a65a] transition-all resize-none text-sm leading-relaxed custom-scrollbar shadow-inner"></textarea>
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest pl-4 mb-2 block flex items-center gap-2"><Paperclip size={12}/> Anexos <span className="text-gray-300 normal-case tracking-normal">(Opcional)</span></label>
+                                                        <input name="attachments" type="file" multiple className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:border-[#d9a65a] transition-all text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-[#d9a65a]/10 file:text-[#3b2f2f] hover:file:bg-[#d9a65a]/20 cursor-pointer" />
+                                                    </div>
+                                                    <div className="flex justify-end pt-4">
+                                                        <button
+                                                            type="submit"
+                                                            disabled={isSubmitting}
+                                                            className="bg-[#3b2f2f] text-[#d9a65a] px-10 py-4 rounded-2xl font-black uppercase tracking-[0.2em] text-[10px] hover:bg-[#d9a65a] hover:text-[#3b2f2f] hover:scale-105 active:scale-100 transition-all flex items-center gap-3 shadow-[0_10px_20px_rgba(59,47,47,0.2)] disabled:opacity-50 disabled:scale-100"
+                                                        >
+                                                            {isSubmitting ? <span className="w-4 h-4 border-2 border-[#d9a65a] border-t-transparent rounded-full animate-spin"></span> : <><Send size={14} /> Enviar Confirmação</>}
+                                                        </button>
+                                                    </div>
+                                                </form>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ) : selectedMessage ? (
                                     <div className="flex flex-col h-full animate-fade-in">
                                         {/* Header */}
                                         <div className="p-6 border-b border-gray-100 bg-[#fcfbf9] flex flex-wrap gap-4 justify-between items-start">
@@ -5141,9 +5300,23 @@ export const Admin: React.FC = () => {
                                                                 <option value="en">English</option>
                                                             </select>
                                                         </div>
-                                                        <div className="md:col-span-2">
-                                                            <label className="block text-xs font-bold text-gray-400 uppercase mb-2 tracking-widest">Prefixo p/ ID de Clientes</label>
-                                                            <input type="text" value={companyInfo.prefix} title="Prefixo de Cliente" onChange={e => setCompanyInfo({ ...companyInfo, prefix: e.target.value })} className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl focus:border-[#d9a65a] outline-none font-bold font-mono" placeholder="Ex: PC-" />
+                                                    </div>
+                                                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
+                                                        <div>
+                                                            <label className="block text-xs font-bold text-gray-400 uppercase mb-2 tracking-widest">Prefixo ID Clientes</label>
+                                                            <input type="text" value={companyInfo.prefix} title="Prefixo de Cliente" onChange={e => setCompanyInfo({ ...companyInfo, prefix: e.target.value })} className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl focus:border-[#d9a65a] outline-none font-bold font-mono" placeholder="Ex: CLI" />
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-xs font-bold text-gray-400 uppercase mb-2 tracking-widest">Prefixo ID Staff</label>
+                                                            <input type="text" value={companyInfo.staffPrefix} title="Prefixo de Staff" onChange={e => setCompanyInfo({ ...companyInfo, staffPrefix: e.target.value })} className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl focus:border-[#d9a65a] outline-none font-bold font-mono" placeholder="Ex: FUNC" />
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-xs font-bold text-gray-400 uppercase mb-2 tracking-widest">Prefixo ID Produto</label>
+                                                            <input type="text" value={companyInfo.productPrefix} title="Prefixo de Produto" onChange={e => setCompanyInfo({ ...companyInfo, productPrefix: e.target.value })} className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl focus:border-[#d9a65a] outline-none font-bold font-mono" placeholder="Ex: PROD" />
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-xs font-bold text-gray-400 uppercase mb-2 tracking-widest">Prefixo ID Faturas</label>
+                                                            <input type="text" value={companyInfo.docPrefix} title="Prefixo de Faturas" onChange={e => setCompanyInfo({ ...companyInfo, docPrefix: e.target.value })} className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl focus:border-[#d9a65a] outline-none font-bold font-mono" placeholder="Ex: FAT" />
                                                         </div>
                                                     </div>
 
@@ -5170,6 +5343,9 @@ export const Admin: React.FC = () => {
                                                                     { key: 'company_currency', value: companyInfo.currency },
                                                                     { key: 'company_language', value: companyInfo.language },
                                                                     { key: 'company_customer_prefix', value: companyInfo.prefix },
+                                                                    { key: 'company_staff_prefix', value: companyInfo.staffPrefix },
+                                                                    { key: 'company_product_prefix', value: companyInfo.productPrefix },
+                                                                    { key: 'company_doc_prefix', value: companyInfo.docPrefix },
                                                                     // Sync with branding for compatibility
                                                                     { key: 'branding_name', value: companyInfo.name },
                                                                     { key: 'branding_logo', value: companyInfo.logo },
@@ -5177,6 +5353,14 @@ export const Admin: React.FC = () => {
                                                                     { key: 'branding_phone', value: companyInfo.phone },
                                                                     { key: 'branding_email_user', value: companyInfo.email }
                                                                 ];
+                                                                
+                                                                localStorage.setItem('company_prefixes', JSON.stringify({
+                                                                    customer: companyInfo.prefix,
+                                                                    staff: companyInfo.staffPrefix,
+                                                                    product: companyInfo.productPrefix,
+                                                                    doc: companyInfo.docPrefix
+                                                                }));
+
                                                                     const { error } = await supabase.from('settings').upsert(settingsToSave);
                                                                     if (error) throw error;
 
@@ -5238,6 +5422,7 @@ export const Admin: React.FC = () => {
                                                                 <div>
                                                                     <p className="font-bold text-[#3b2f2f]">{member.name}</p>
                                                                     <p className="text-[10px] font-black text-[#d9a65a] uppercase tracking-widest">{member.role}</p>
+                                                                    <p className="text-[10px] font-black text-gray-500 font-mono mt-0.5">{companyInfo.staffPrefix}-{member.id.substring(0,6).toUpperCase()}</p>
                                                                 </div>
                                                             </div>
                                                             <div className="flex gap-2">
@@ -5773,9 +5958,9 @@ export const Admin: React.FC = () => {
                                     <h3 className="font-bold text-gray-400 text-xs uppercase mb-4">Cliente</h3>
                                     <p className="font-bold text-lg text-[#3b2f2f]">{selectedOrder.customer.name}</p>
                                     <p className="text-sm text-gray-600 mb-1">{selectedOrder.customer.phone}</p>
-                                    {selectedOrder.customer.internal_id && (
-                                        <p className="text-sm font-bold text-[#d9a65a] mb-2 uppercase tracking-wide">ID: {selectedOrder.customer.internal_id}</p>
-                                    )}
+                                    {selectedOrder.customer.id || selectedOrder.customer.internal_id ? (
+                                        <p className="text-sm font-bold text-[#d9a65a] mb-2 uppercase tracking-wide font-mono">ID: {companyInfo.prefix}-{(selectedOrder.customer.internal_id || (selectedOrder.customer.id ? selectedOrder.customer.id.substring(0,6).toUpperCase() : 'LOCAL'))}</p>
+                                    ) : null}
                                     {selectedOrder.customer.type === 'delivery' && (
                                         <p className="text-sm bg-blue-50 text-blue-800 p-2 rounded mt-2 flex gap-2 items-start"><MapPin size={16} className="shrink-0 mt-0.5" /> {selectedOrder.customer.address}</p>
                                     )}
@@ -6022,27 +6207,7 @@ export const Admin: React.FC = () => {
                         </div>
                     )}
 
-                    {isEditingMember && (
-                        <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-                            <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
-                                <h3 className="font-bold text-lg mb-4 text-[#3b2f2f]">{currentMember ? 'Editar' : 'Novo'} Membro</h3>
-                                <form onSubmit={handleSaveMember} className="space-y-3">
-                                    <input name="memberName" defaultValue={currentMember?.name} placeholder="Nome Completo" className="w-full p-2 border rounded-lg" required />
-                                    <input name="memberUsername" defaultValue={currentMember?.username} placeholder="Username (Login)" className="w-full p-2 border rounded-lg" required />
-                                    <input name="memberPassword" defaultValue={currentMember?.password} title="Senha" placeholder="Senha" className="w-full p-2 border rounded-lg" required />
-                                    <select name="memberRole" title="Papel do Membro" defaultValue={currentMember?.role || 'staff'} className="w-full p-2 border rounded-lg bg-white">
-                                        <option value="staff">Staff (Acesso Básico)</option>
-                                        <option value="admin">Admin (Acesso Total)</option>
-                                        <option value="it">IT Support</option>
-                                    </select>
-                                    <div className="flex gap-2 pt-2">
-                                        <button type="button" onClick={() => setIsEditingMember(false)} className="flex-1 bg-gray-100 py-2 rounded-lg font-bold text-gray-500 hover:bg-gray-200">Cancelar</button>
-                                        <button type="submit" className="flex-1 bg-[#3b2f2f] text-[#d9a65a] py-2 rounded-lg font-bold hover:brightness-110">Salvar</button>
-                                    </div>
-                                </form>
-                            </div>
-                        </div>
-                    )}
+
                     {/* Driver Modal */}
                     {isAddingDriver && (
                         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 backdrop-blur-sm">
@@ -6455,7 +6620,7 @@ const AdminBlogView: React.FC = () => {
     const [comments, setComments] = useState<any[]>([]);
     const [mediaFiles, setMediaFiles] = useState<any[]>([]);
     const [galleryItems, setGalleryItems] = useState<any[]>([]);
-    const [activeTab, setActiveTab] = useState<'posts'|'comments'|'repository'|'gallery'>('posts');
+    const [activeTab, setActiveTab] = useState<'posts'|'comments'|'repository'|'gallery'|'subscribers'|'newsletter'>('posts');
     const [isEditing, setIsEditing] = useState(false);
     const [currentPost, setCurrentPost] = useState<any>(null);
     const [loading, setLoading] = useState(true);
@@ -6468,6 +6633,9 @@ const AdminBlogView: React.FC = () => {
     const [category, setCategory] = useState('');
     const [tags, setTags] = useState('');
     const [author, setAuthor] = useState('Admin');
+    const [seoTitle, setSeoTitle] = useState('');
+    const [seoDescription, setSeoDescription] = useState('');
+    const [teamMembers, setTeamMembers] = useState<any[]>([]);
     const [status, setStatus] = useState<'draft'|'published'>('draft');
     const [isUploadingImage, setIsUploadingImage] = useState(false);
     const [uploadingRepoMedia, setUploadingRepoMedia] = useState(false);
@@ -6537,6 +6705,12 @@ const AdminBlogView: React.FC = () => {
         loadComments();
         loadMediaFiles();
         loadGalleryItems();
+
+        const loadTeam = async () => {
+            const { data } = await supabase.from('team_members').select('id, name, role').in('role', ['admin', 'staff', 'it']);
+            if (data) setTeamMembers(data);
+        };
+        loadTeam();
 
         // Background AI Auto-Approval Loop
         const interval = setInterval(async () => {
@@ -6683,6 +6857,8 @@ const AdminBlogView: React.FC = () => {
         setCategory(post.category || '');
         setTags(post.tags ? post.tags.join(', ') : '');
         setAuthor(post.author || 'Admin');
+        setSeoTitle(post.seo_title || '');
+        setSeoDescription(post.seo_description || '');
         setStatus(post.status);
         setIsEditing(true);
     };
@@ -6696,6 +6872,8 @@ const AdminBlogView: React.FC = () => {
         setCategory('');
         setTags('');
         setAuthor('Admin');
+        setSeoTitle('');
+        setSeoDescription('');
         setStatus('draft');
         setIsEditing(true);
     };
@@ -6754,7 +6932,9 @@ const AdminBlogView: React.FC = () => {
             category,
             tags: tagArray,
             status,
-            author: author.trim() || 'Admin'
+            author: author.trim() || 'Admin',
+            seo_title: seoTitle.trim(),
+            seo_description: seoDescription.trim()
         };
 
         let err;
@@ -6838,8 +7018,21 @@ const AdminBlogView: React.FC = () => {
                             </div>
                         </div>
                         <div>
-                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Autor</label>
-                            <input title="Autor da publicação" placeholder="Nome do autor" value={author} onChange={e=>setAuthor(e.target.value)} className="w-full p-3 border rounded-xl" />
+                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Autor (Interno ou Externo)</label>
+                            <input 
+                                list="team-authors" 
+                                title="Autor da publicação" 
+                                placeholder="Selecione ou escreva o nome do autor" 
+                                value={author} 
+                                onChange={e=>setAuthor(e.target.value)} 
+                                className="w-full p-3 border rounded-xl appearance-none bg-white" 
+                            />
+                            <datalist id="team-authors">
+                                <option value="Admin">Admin (Pão Caseiro)</option>
+                                {teamMembers.map(m => (
+                                    <option key={m.id} value={m.name}>{m.name} ({m.role})</option>
+                                ))}
+                            </datalist>
                         </div>
                         <div>
                             <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Categoria</label>
@@ -6855,6 +7048,37 @@ const AdminBlogView: React.FC = () => {
                                 <option value="draft">Rascunho (Draft)</option>
                                 <option value="published">Publicado</option>
                             </select>
+                        </div>
+                        
+                        <div className="col-span-2 mt-6 pt-6 border-t border-gray-200">
+                            <h3 className="font-serif font-bold text-xl text-[#3b2f2f] mb-4">Otimização SEO e Redes Sociais</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Título SEO (Para partilhas)</label>
+                                        <input placeholder={title || "Título SEO"} value={seoTitle} onChange={e=>setSeoTitle(e.target.value)} className="w-full p-3 border rounded-xl" />
+                                        <p className="text-[10px] text-gray-400 mt-1">Se vazio, usa o título do artigo.</p>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Descrição SEO (Para Google e WhatsApp)</label>
+                                        <textarea rows={3} placeholder={excerpt || "Breve resumo atrativo..."} value={seoDescription} onChange={e=>setSeoDescription(e.target.value)} className="w-full p-3 border rounded-xl placeholder-gray-300" />
+                                        <p className="text-[10px] text-gray-400 mt-1">Recomendado: 150-160 caracteres.</p>
+                                    </div>
+                                </div>
+                                <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 flex flex-col justify-center">
+                                    <span className="block text-xs font-bold text-gray-400 uppercase mb-3">Pré-visualização (Ex: WhatsApp)</span>
+                                    <div className="bg-[#e1f5fe]/50 border border-blue-100 rounded-lg overflow-hidden shadow-sm max-w-[300px] w-full mx-auto pb-2">
+                                        <div className="w-full h-32 bg-gray-200 relative">
+                                            {imageUrl ? <img src={imageUrl} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-gray-400"><ImageIcon size={24} /></div>}
+                                        </div>
+                                        <div className="p-3 bg-gray-100/50">
+                                            <p className="text-[10px] text-gray-500 mb-0.5">paocaseiro.co.mz</p>
+                                            <h4 className="text-sm font-bold text-gray-800 leading-tight mb-1 truncate">{seoTitle || title || "Título da Publicação"}</h4>
+                                            <p className="text-[11px] text-gray-500 leading-tight line-clamp-2">{seoDescription || excerpt || "Descrição atrativa que aparece quando o link é partilhado."}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <button type="submit" className="mt-6 bg-[#3b2f2f] text-[#d9a65a] px-8 py-3 rounded-xl font-bold">Gravar Post</button>
@@ -6907,6 +7131,18 @@ const AdminBlogView: React.FC = () => {
                         className={`pb-3 font-bold text-sm tracking-wide uppercase transition-colors flex items-center gap-2 ${activeTab === 'gallery' ? 'border-b-2 border-[#d9a65a] text-[#d9a65a]' : 'text-gray-400 hover:text-[#3b2f2f]'}`}
                     >
                         Galeria
+                    </button>
+                    <button 
+                        onClick={() => setActiveTab('subscribers')} 
+                        className={`pb-3 font-bold text-sm tracking-wide uppercase transition-colors flex items-center gap-2 ${activeTab === 'subscribers' ? 'border-b-2 border-[#d9a65a] text-[#d9a65a]' : 'text-gray-400 hover:text-[#3b2f2f]'}`}
+                    >
+                        Subscritores
+                    </button>
+                    <button 
+                        onClick={() => setActiveTab('newsletter')} 
+                        className={`pb-3 font-bold text-sm tracking-wide uppercase transition-colors flex items-center gap-2 ${activeTab === 'newsletter' ? 'border-b-2 border-[#d9a65a] text-[#d9a65a]' : 'text-gray-400 hover:text-[#3b2f2f]'}`}
+                    >
+                        Campanhas Email
                     </button>
                 </div>
             )}
@@ -7122,6 +7358,14 @@ const AdminBlogView: React.FC = () => {
                             </div>
                         ))}
                     </div>
+                </div>
+            ) : activeTab === 'subscribers' ? (
+                <div>
+                    <AdminNewsletterView />
+                </div>
+            ) : activeTab === 'newsletter' ? (
+                <div>
+                    <AdminEmailPipelineView />
                 </div>
             ) : null}
         </div>

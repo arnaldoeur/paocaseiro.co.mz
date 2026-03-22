@@ -1,14 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../services/supabase';
-import { Language } from '../translations';
+import { Language, translations } from '../translations';
 import { useNavigate } from 'react-router-dom';
 import { ShoppingBag, LogOut, Clock, CheckCircle, XCircle, ChevronRight, MessageSquare, Loader, PenBox, User, RotateCcw, HelpCircle } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { motion } from 'framer-motion';
 import { sendEmail } from '../services/email';
 import { sendSMS } from '../services/sms';
-
+import { logAudit } from '../services/audit';
+import { getEnglishProductName } from '../services/stringUtils';
 export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) => {
+    const t = translations[language].clientDashboard;
     const [user, setUser] = useState<any>(null);
     const [orders, setOrders] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
@@ -162,6 +164,23 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
     };
 
     const handleLogout = async () => {
+        const phone = localStorage.getItem('pc_auth_phone');
+        const userData = localStorage.getItem('pc_user_data');
+        let customerId = null;
+        if (userData) {
+            try {
+                customerId = JSON.parse(userData).id;
+            } catch(e) {}
+        }
+        
+        await logAudit({
+            action: 'CUSTOMER_LOGOUT',
+            entity_type: 'customer',
+            entity_id: customerId,
+            details: {},
+            customer_phone: phone
+        });
+
         await supabase.auth.signOut();
         localStorage.removeItem('pc_auth_phone');
         localStorage.removeItem('pc_user_data');
@@ -232,12 +251,14 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
             });
         });
 
-        alert('Items adicionados ao carrinho!');
+        alert(language === 'en' ? 'Items added to cart!' : 'Itens adicionados ao carrinho!');
     };
 
     const handleSupportOrder = (orderId: string) => {
         const shortId = orderId.slice(-6).toUpperCase();
-        setSupportMsg(`Olá Equipa Pão Caseiro,\nPreciso de suporte com a minha encomenda #${shortId} do dia ${new Date().toLocaleDateString('pt-PT')}.\n\n[Descreva aqui o problema...]`);
+        setSupportMsg(language === 'en' 
+            ? `Hello Pão Caseiro Team,\nI need support with my order #${shortId} from ${new Date().toLocaleDateString('en-US')}.\n\n[Describe the problem here...]`
+            : `Olá Equipa Pão Caseiro,\nPreciso de suporte com a minha encomenda #${shortId} do dia ${new Date().toLocaleDateString('pt-PT')}.\n\n[Descreva aqui o problema...]`);
 
         const supportSection = document.getElementById('support-section');
         if (supportSection) {
@@ -264,7 +285,7 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                 name: customerData?.name || user?.phone || 'Cliente Registado',
                 phone: user?.phone || '',
                 email: customerData?.email || 'N/A',
-                message: `[SUPORTE CLIENTE] ${supportMsg}`,
+                message: (language === 'en' ? `[CUSTOMER SUPPORT] ${supportMsg}` : `[SUPORTE CLIENTE] ${supportMsg}`),
                 status: 'unread'
             }]);
 
@@ -335,20 +356,20 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                                 </div>
                             )}
                             <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
-                                <span className="text-white text-[10px] font-bold uppercase">Mudar</span>
+                                <span className="text-white text-[10px] font-bold uppercase">{language === 'en' ? 'Change' : 'Mudar'}</span>
                             </div>
                         </div>
                         <div className="flex-1">
-                            <h1 className="font-serif text-3xl md:text-4xl text-[#3b2f2f] mb-1">{customerData?.name || 'A Minha Conta'}</h1>
+                            <h1 className="font-serif text-3xl md:text-4xl text-[#3b2f2f] mb-1">{customerData?.name || t.myAccount}</h1>
                             <div className="flex flex-wrap items-center gap-4 text-gray-500 font-medium text-sm">
-                                <p>Telemóvel: {user?.phone}</p>
+                                <p>{t.phone}: {user?.phone}</p>
                                 {customerData?.nuit && <p>NUIT: {customerData.nuit}</p>}
                                 <button
                                     onClick={() => setIsEditModalOpen(true)}
                                     className="text-[#d9a65a] hover:underline flex items-center gap-1 font-bold"
                                 >
                                     <PenBox className="w-4 h-4" />
-                                    Editar Perfil
+                                    {t.editProfile}
                                 </button>
                             </div>
                         </div>
@@ -358,7 +379,7 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                         className="flex items-center gap-2 text-red-500 hover:bg-red-50 px-4 py-2 rounded-xl transition-colors font-bold w-fit"
                     >
                         <LogOut className="w-5 h-5" />
-                        Terminar Sessão
+                        {t.logout}
                     </button>
                 </div>
 
@@ -371,26 +392,26 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                             animate={{ opacity: 1, scale: 1 }}
                             className="bg-white rounded-3xl p-8 max-w-xl w-full relative z-10 shadow-2xl border border-[#d9a65a]/20 max-h-[90vh] overflow-y-auto"
                         >
-                            <button onClick={() => setIsEditModalOpen(false)} className="absolute top-6 right-6 text-gray-400 hover:text-gray-600" title="Fechar">
+                            <button onClick={() => setIsEditModalOpen(false)} className="absolute top-6 right-6 text-gray-400 hover:text-gray-600" title={t.cancel}>
                                 <XCircle className="w-6 h-6" />
                             </button>
 
                             <h3 className="font-serif text-2xl text-[#3b2f2f] mb-6 flex items-center gap-3">
                                 <User className="w-6 h-6 text-[#d9a65a]" />
-                                Editar Perfil
+                                {t.editProfile}
                             </h3>
 
                             <form onSubmit={handleUpdateProfile} className="space-y-4">
                                 <div>
-                                    <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Nome Completo</label>
+                                    <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">{t.fullName}</label>
                                     <input
                                         type="text"
                                         required
                                         value={editData.name}
                                         onChange={e => setEditData({ ...editData, name: e.target.value })}
                                         className="w-full p-3 rounded-xl border border-gray-100 focus:border-[#d9a65a] outline-none"
-                                        placeholder="Seu nome completo"
-                                        title="Nome Completo"
+                                        placeholder={t.fullName}
+                                        title={t.fullName}
                                     />
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -417,37 +438,37 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                                     </div>
                                 </div>
                                 <div>
-                                    <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Bairro (Morada Geral)</label>
+                                    <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">{t.addressTitle}</label>
                                     <input
                                         type="text"
                                         value={editData.address}
                                         onChange={e => setEditData({ ...editData, address: e.target.value })}
                                         className="w-full p-3 rounded-xl border border-gray-100 focus:border-[#d9a65a] outline-none"
-                                        placeholder="Ex: Sommerschield, Malhangalene..."
-                                        title="Bairro"
+                                        placeholder={language === 'en' ? "Ex: Sommerschield, Malhangalene..." : "Ex: Sommerschield, Malhangalene..."}
+                                        title={t.addressTitle}
                                     />
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div>
-                                        <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Rua</label>
+                                        <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">{t.street}</label>
                                         <input
                                             type="text"
                                             value={editData.street}
                                             onChange={e => setEditData({ ...editData, street: e.target.value })}
                                             className="w-full p-3 rounded-xl border border-gray-100 focus:border-[#d9a65a] outline-none"
-                                            placeholder="Ex: Av. Eduardo Mondlane..."
-                                            title="Rua"
+                                            placeholder={language === 'en' ? "Ex: Av. Eduardo Mondlane..." : "Ex: Av. Eduardo Mondlane..."}
+                                            title={t.street}
                                         />
                                     </div>
                                     <div>
-                                        <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Ponto de Referência</label>
+                                        <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">{t.reference}</label>
                                         <input
                                             type="text"
                                             value={editData.reference_point}
                                             onChange={e => setEditData({ ...editData, reference_point: e.target.value })}
                                             className="w-full p-3 rounded-xl border border-gray-100 focus:border-[#d9a65a] outline-none"
-                                            placeholder="Ex: Próximo à Escola X..."
-                                            title="Ponto de Referência"
+                                            placeholder={language === 'en' ? "Ex: Near School X..." : "Ex: Próximo à Escola X..."}
+                                            title={t.reference}
                                         />
                                     </div>
                                 </div>
@@ -482,14 +503,14 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                                         onClick={() => setIsEditModalOpen(false)}
                                         className="flex-1 py-3 bg-gray-100 text-gray-600 rounded-xl font-bold hover:bg-gray-200 transition-colors uppercase tracking-widest text-sm"
                                     >
-                                        Cancelar
+                                        {t.cancel}
                                     </button>
                                     <button
                                         type="submit"
                                         disabled={loading}
                                         className="flex-1 py-3 bg-[#3b2f2f] text-[#d9a65a] rounded-xl font-bold hover:bg-[#d9a65a] hover:text-[#3b2f2f] transition-all uppercase tracking-widest text-sm disabled:opacity-50"
                                     >
-                                        {loading ? 'A Gravar...' : 'Gravar Alterações'}
+                                        {loading ? t.saving : t.save}
                                     </button>
                                 </div>
                             </form>
@@ -502,7 +523,7 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                     <div className="fixed inset-0 z-[100] flex items-center justify-center px-4">
                         <div className="absolute inset-0 bg-[#3b2f2f]/60 backdrop-blur-sm" onClick={() => setIsAvatarModalOpen(false)} />
                         <div className="bg-white rounded-3xl p-8 max-w-md w-full relative z-10 shadow-2xl border border-[#d9a65a]/20">
-                            <h3 className="font-serif text-2xl text-[#3b2f2f] mb-6 text-center">Escolher Avatar</h3>
+                            <h3 className="font-serif text-2xl text-[#3b2f2f] mb-6 text-center">{t.chooseAvatar}</h3>
                             <div className="grid grid-cols-3 gap-4 mb-8">
                                 {AVATARS.map((url, idx) => (
                                     <button
@@ -518,7 +539,7 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                                 onClick={() => setIsAvatarModalOpen(false)}
                                 className="w-full py-3 bg-gray-100 text-gray-600 rounded-xl font-bold hover:bg-gray-200 transition-colors"
                             >
-                                Cancelar
+                                {t.cancel}
                             </button>
                         </div>
                     </div>
@@ -529,16 +550,16 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                     <div className="lg:col-span-2 space-y-6">
                         <h2 className="font-serif text-2xl text-[#3b2f2f] flex items-center gap-3">
                             <ShoppingBag className="w-6 h-6 text-[#d9a65a]" />
-                            Histórico de Pedidos
+                            {t.orderHistory}
                         </h2>
 
                         {orders.length === 0 ? (
                             <div className="bg-white p-12 rounded-3xl text-center border border-dashed border-gray-300">
                                 <ShoppingBag className="w-16 h-16 mx-auto text-gray-300 mb-4" />
-                                <h3 className="text-lg font-bold text-gray-500">Sem pedidos anteriores</h3>
-                                <p className="text-gray-400">Quando fizer a sua primeira encomenda, ela aparecerá aqui.</p>
+                                <h3 className="text-lg font-bold text-gray-500">{t.noOrders}</h3>
+                                <p className="text-gray-400">{t.noOrdersDesc}</p>
                                 <button onClick={() => navigate('/menu')} className="mt-6 bg-[#d9a65a] text-[#3b2f2f] px-6 py-2 rounded-full font-bold">
-                                    Explorar Menu
+                                    {t.exploreMenu}
                                 </button>
                             </div>
                         ) : (
@@ -549,25 +570,25 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                                             <div className="flex items-center gap-3">
                                                 {getStatusIcon(order.status)}
                                                 <div>
-                                                    <p className="font-bold text-[#3b2f2f]">Pedido {order.short_id || `#${order.id.slice(0, 6)}`}</p>
+                                                    <p className="font-bold text-[#3b2f2f]">{t.order} {order.short_id || `#${order.id.slice(0, 6)}`}</p>
                                                     <p className="text-sm text-gray-500">
-                                                        {new Date(order.created_at).toLocaleDateString('pt-PT', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                                        {new Date(order.created_at).toLocaleDateString(language === 'en' ? 'en-US' : 'pt-PT', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                                                     </p>
                                                 </div>
                                             </div>
                                             <div className="text-right">
                                                 <p className="font-bold text-lg text-[#3b2f2f]">{Number(order.total_amount).toFixed(2)} MT</p>
                                                 <span className="text-xs uppercase tracking-wider font-bold bg-gray-100 px-2 py-1 rounded-full text-gray-600">
-                                                    {order.delivery_type === 'delivery' ? 'Entrega' : order.delivery_type === 'pickup' ? 'Levantamento' : 'Mesa'}
+                                                    {order.delivery_type === 'delivery' ? t.delivery : order.delivery_type === 'pickup' ? t.pickup : t.dineIn}
                                                 </span>
                                             </div>
                                         </div>
 
                                         <div className="space-y-2">
-                                            <p className="text-sm font-bold text-gray-500 mb-2">Itens:</p>
+                                            <p className="text-sm font-bold text-gray-500 mb-2">{t.items}:</p>
                                             {order.order_items?.map((item: any) => (
                                                 <div key={item.id} className="flex justify-between text-sm">
-                                                    <span className="text-gray-700">{item.quantity}x {item.product_name}</span>
+                                                    <span className="text-gray-700">{item.quantity}x {language === 'en' ? (item.product_name_en || getEnglishProductName(item.product_name)) : item.product_name}</span>
                                                     <span className="text-gray-500">{(item.subtotal || (item.quantity * item.price)).toFixed(2)} MT</span>
                                                 </div>
                                             ))}
@@ -579,14 +600,14 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                                                 className="flex-1 min-w-[140px] flex items-center justify-center gap-2 bg-[#d9a65a]/10 text-[#d9a65a] py-3 rounded-xl font-bold hover:bg-[#d9a65a] hover:text-[#3b2f2f] transition-all text-xs uppercase tracking-widest"
                                             >
                                                 <RotateCcw className="w-4 h-4" />
-                                                Pedir Novamente
+                                                {t.reorder}
                                             </button>
                                             <button
                                                 onClick={() => handleSupportOrder(order.short_id || order.id)}
                                                 className="flex-1 min-w-[140px] flex items-center justify-center gap-2 bg-gray-50 text-gray-500 py-3 rounded-xl font-bold hover:bg-gray-100 transition-all text-xs uppercase tracking-widest border border-gray-100"
                                             >
                                                 <HelpCircle className="w-4 h-4" />
-                                                Suporte
+                                                {t.support}
                                             </button>
                                         </div>
                                     </div>
@@ -602,21 +623,21 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
 
                             <h2 className="font-serif text-2xl text-[#d9a65a] mb-2 flex items-center gap-3">
                                 <MessageSquare className="w-6 h-6" />
-                                Suporte Direto
+                                {t.directSupport}
                             </h2>
                             <p className="text-gray-300 text-sm mb-6 leading-relaxed">
-                                Tem alguma questão sobre a sua encomenda? Precisa de ajuda? Fale com a equipa de suporte aqui.
+                                {t.supportDesc}
                             </p>
 
                             {supportStatus === 'success' && (
                                 <div className="bg-green-500/20 text-green-300 p-4 rounded-xl text-sm font-bold mb-6">
-                                    Mensagem enviada com sucesso! Responderemos o mais breve possível.
+                                    {t.supportSuccess}
                                 </div>
                             )}
 
                             {supportStatus === 'error' && (
                                 <div className="bg-red-500/20 text-red-300 p-4 rounded-xl text-sm font-bold mb-6 animate-shake">
-                                    Erro ao enviar. Tente novamente ou use o nosso WhatsApp.
+                                    {t.supportError}
                                 </div>
                             )}
 
@@ -625,7 +646,7 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                                     required
                                     value={supportMsg}
                                     onChange={(e) => setSupportMsg(e.target.value)}
-                                    placeholder="Escreva a sua mensagem detalhada aqui..."
+                                    placeholder={t.supportPlaceholder}
                                     className="w-full h-32 p-4 rounded-xl bg-white/10 border border-white/20 focus:border-[#d9a65a] focus:bg-white/15 outline-none resize-none placeholder:text-gray-400 transition-all text-sm"
                                 ></textarea>
 
@@ -634,7 +655,7 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                                     disabled={isSubmittingSupport || supportMsg.trim().length === 0}
                                     className="w-full bg-[#d9a65a] text-[#3b2f2f] py-3 rounded-xl font-bold uppercase tracking-widest hover:bg-white transition-all disabled:opacity-50"
                                 >
-                                    {isSubmittingSupport ? 'A Enviar...' : 'Enviar Mensagem'}
+                                    {isSubmittingSupport ? t.supportSending : t.supportSend}
                                 </button>
                             </form>
                         </div>

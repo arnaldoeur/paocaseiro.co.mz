@@ -34,12 +34,10 @@ const STATIC_GALLERY = [
     { src: '/images/about-bread.jpeg', caption: 'Ambiente Acolhedor' },
     { src: '/images/broa_milho.png', caption: 'Pães Frescos Todas as Manhãs' },
     { src: '/images/pao_caseiro.png', caption: 'Processo 100% Artesanal' },
-    { src: '/images/services/confeitaria.png', caption: 'Variedade de Doces' },
     { src: '/images/bola_berlim.png', caption: 'Qualidade em Cada Detalhe' },
     { src: '/images/arrofadas.png', caption: 'Ingredientes de Primeira' },
     { src: '/images/coxinhas.png', caption: 'Sortido de Doces & Salgados' },
-    { src: '/images/pao_portugues.png', caption: 'Receitas com Tradição' },
-    { src: '/images/logo-official.png', caption: 'Pão Caseiro em Lichinga' },
+    { src: '/images/pao_portugues.png', caption: 'Receitas com Tradição' }
 ];
 
 interface GalleryItem {

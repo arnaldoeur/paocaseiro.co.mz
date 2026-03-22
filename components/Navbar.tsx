@@ -150,26 +150,30 @@ export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
 
           {/* Center: Nav Items (Centered) */}
           <div className="hidden lg:flex items-center justify-center gap-5 xl:gap-8 text-sm font-bold tracking-wide uppercase text-[#4b3a2f]">
-            {NAV_ITEMS.map((item) => (
+            {NAV_ITEMS.map((item) => {
+              const isActive = (item.id === 'hero' && location.pathname === '/') || 
+                               (item.id === 'blog' && location.pathname.startsWith('/blog'));
+              return (
               <button
                 key={item.id}
                 onClick={() => handleNavigation(item.id)}
                 title={t.nav[item.labelKey]}
-                className="hover:text-[#d9a65a] transition-colors relative group"
+                className={`hover:text-[#d9a65a] transition-colors relative group ${isActive ? 'text-[#d9a65a]' : ''}`}
                 aria-label={t.nav[item.labelKey]}
               >
                 {t.nav[item.labelKey]}
-                <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-[#d9a65a] transition-all group-hover:w-full" />
+                <span className={`absolute -bottom-1 left-0 h-0.5 bg-[#d9a65a] transition-all group-hover:w-full ${isActive ? 'w-full' : 'w-0'}`} />
               </button>
-            ))}
+              );
+            })}
             <button
               onClick={() => navigate('/menu')}
               title="Menu"
-              className="hover:text-[#d9a65a] transition-colors relative group text-[#d9a65a]"
+              className={`hover:text-[#d9a65a] transition-colors relative group ${location.pathname === '/menu' ? 'text-[#d9a65a]' : ''}`}
               aria-label="Menu"
             >
               Menu
-              <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-[#d9a65a] transition-all group-hover:w-full" />
+              <span className={`absolute -bottom-1 left-0 h-0.5 bg-[#d9a65a] transition-all group-hover:w-full ${location.pathname === '/menu' ? 'w-full' : 'w-0'}`} />
             </button>
           </div>
 
@@ -259,22 +263,26 @@ export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
 
             <Logo className="h-24 mb-8" variant="dark" />
 
-            {NAV_ITEMS.map((item) => (
+            {NAV_ITEMS.map((item) => {
+              const isActive = (item.id === 'hero' && location.pathname === '/') || 
+                               (item.id === 'blog' && location.pathname.startsWith('/blog'));
+              return (
               <button
                 key={item.id}
                 id={`mobile-nav-${item.id}`}
                 onClick={() => handleNavigation(item.id)}
-                className="text-3xl font-serif hover:text-[#d9a65a] transition-colors"
+                className={`text-3xl font-serif hover:text-[#d9a65a] transition-colors ${isActive ? 'text-[#d9a65a]' : ''}`}
                 title={t.nav[item.labelKey]}
                 aria-label={t.nav[item.labelKey]}
               >
                 {t.nav[item.labelKey]}
               </button>
-            ))}
+              );
+            })}
             <button
               id="mobile-nav-menu"
               onClick={() => { navigate('/menu'); setMobileMenuOpen(false); }}
-              className="text-3xl font-serif hover:text-[#d9a65a] transition-colors text-[#d9a65a]"
+              className={`text-3xl font-serif hover:text-[#d9a65a] transition-colors ${location.pathname === '/menu' ? 'text-[#d9a65a]' : ''}`}
               title="Ver Menu"
               aria-label="Ver Menu"
             >
