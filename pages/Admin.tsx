@@ -260,7 +260,7 @@ export const Admin: React.FC = () => {
 
     useEffect(() => {
         const total = posCart.reduce((acc, curr) => acc + (curr.price * curr.quantity), 0);
-        const received = Object.values(splitPayments).reduce((acc, val) => acc + (Number(val) || 0), 0);
+        const received = Object.values(splitPayments).reduce((acc: number, val: any) => acc + (Number(val) || 0), 0) as number;
         if (received > total) {
             setChangeDue(Math.max(0, received - total));
         } else {
@@ -493,7 +493,7 @@ export const Admin: React.FC = () => {
 
     const handleProcessPayment = async () => {
         const total = posCart.reduce((acc, curr) => acc + (curr.price * curr.quantity), 0);
-        let finalAmountReceived = Object.values(splitPayments).reduce((acc, val) => acc + (Number(val) || 0), 0);
+        let finalAmountReceived = Object.values(splitPayments).reduce((acc: number, val: any) => acc + (Number(val) || 0), 0);
         let finalMethodStr = paymentMethod;
 
         if (Object.keys(splitPayments).filter(k => Number(splitPayments[k]) > 0).length > 0) {
@@ -3006,6 +3006,14 @@ export const Admin: React.FC = () => {
                                                 <td className="p-4 text-sm text-gray-500">{p.unit}</td>
                                                 <td className="p-4"><span className={`w-2 h-2 rounded-full inline-block mr-2 ${p.inStock ? 'bg-green-500' : 'bg-red-500'}`}></span><span className="text-xs text-gray-500">{p.inStock ? 'Disponível' : 'Indisponível'}</span></td>
                                                 <td className="p-4 text-right space-x-2">
+                                                    <button onClick={() => { setCurrentProduct(p); setProductVariations(p.variations || []); setPreviewImage(p.image || ''); setIsEditingProduct(true); }} className="text-blue-500 font-bold text-xs hover:underline">Editar</button>
+                                                    <button onClick={async () => {
+                                                        try {
+                                                            await supabase.from('products').update({ is_available: !p.inStock }).eq('id', p.id);
+                                                            loadProducts();
+                                                        } catch(e) {}
+                                                    }} className={`${p.inStock ? 'text-orange-500' : 'text-green-500'} font-bold text-xs hover:underline`}>{p.inStock ? 'Esgotar' : 'Disponibilizar'}</button>
+                                                    <button onClick={() => { setCurrentProduct({ ...p, id: undefined, name: p.name + ' (Cópia)' }); setProductVariations(p.variations || []); setPreviewImage(p.image || ''); setIsEditingProduct(true); }} className="text-purple-500 font-bold text-xs hover:underline">Duplicar</button>
                                                     <button onClick={() => handleDeleteProduct(p.id)} className="text-red-500 font-bold text-xs hover:underline">Remover</button>
                                                 </td>
                                             </tr>
@@ -4710,7 +4718,6 @@ export const Admin: React.FC = () => {
                                         <button
                                             disabled={posCart.length === 0}
                                             onClick={() => {
-                                                setCashReceived('');
                                                 setChangeDue(0);
                                                 setShowPaymentModal(true);
                                             }}
@@ -4846,7 +4853,7 @@ export const Admin: React.FC = () => {
                                         </div>
                                         <div className="mt-3 pt-3 border-t border-gray-100 flex justify-between font-black text-[#d9a65a]">
                                             <span>SOMA RECEBIDA</span>
-                                            <span>{Object.values(splitPayments).reduce((a,b) => a + (Number(b)||0), 0).toLocaleString()} MT</span>
+                                            <span>{Object.values(splitPayments).reduce((a: number, b: any) => a + (Number(b)||0), 0).toLocaleString()} MT</span>
                                         </div>
                                     </div>
                                 )}
@@ -4869,7 +4876,7 @@ export const Admin: React.FC = () => {
                                             Cancelar
                                         </button>
                                         <button
-                                            disabled={isSubmitting || (Object.keys(splitPayments).filter(k => Number(splitPayments[k]) > 0).length > 0 && Object.values(splitPayments).reduce((acc, val) => acc + (Number(val) || 0), 0) < posCart.reduce((acc, curr) => acc + (curr.price * curr.quantity), 0))}
+                                            disabled={isSubmitting || (Object.keys(splitPayments).filter(k => Number(splitPayments[k]) > 0).length > 0 && Object.values(splitPayments).reduce((acc: number, val: any) => acc + (Number(val) || 0), 0) < posCart.reduce((acc, curr) => acc + (curr.price * curr.quantity), 0))}
                                             onClick={handleProcessPayment}
                                             className="flex-[2] py-4 bg-[#3b2f2f] text-[#d9a65a] font-bold rounded-2xl shadow-xl hover:brightness-110 active:scale-95 transition-all text-sm uppercase tracking-widest flex items-center justify-center gap-3 disabled:opacity-50 disabled:grayscale"
                                         >
