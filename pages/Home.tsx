@@ -9,6 +9,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { createClient } from '@supabase/supabase-js';
 import { sendEmail } from '../services/email';
 import { sendSMS } from '../services/sms';
+import { notifyAdminSystemsAlert } from '../services/whatsapp';
 
 const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY);
 
@@ -185,6 +186,9 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
 
             await sendSMS(adminPhone, smsMessage)
                 .catch(e => console.error("Contact SMS failed:", e));
+                
+            await notifyAdminSystemsAlert(`Nova Mensagem de Contacto: ${formData.name}`, `Nome: ${formData.name}\nEmail: ${formData.email}\nTelefone: ${formData.phone}\n\nMensagem:\n${formData.message}`)
+                .catch(e => console.error("Contact WhatsApp Alert failed:", e));
 
             setSubmitStatus('success');
             setFormData({ name: '', phone: '', email: '', message: '' });

@@ -680,7 +680,10 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                     if (!error) {
                         // Refresh local storage
                         supabase.from('customers').select('*').eq('id', user.id).single().then(({ data }) => {
-                            if (data) localStorage.setItem('pc_user_data', JSON.stringify(data));
+                            if (data) {
+                                localStorage.setItem('pc_user_data', JSON.stringify(data));
+                                window.dispatchEvent(new Event('pc_user_update'));
+                            }
                         });
                     }
                 });

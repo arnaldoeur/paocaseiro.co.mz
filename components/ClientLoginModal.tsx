@@ -189,6 +189,7 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
             const phoneToSave = customerData.contact_no && !customerData.contact_no.includes('@') ? customerData.contact_no : (!identifier.includes('@') ? identifier : '');
             if (phoneToSave) localStorage.setItem('pc_auth_phone', phoneToSave);
             localStorage.setItem('pc_user_data', JSON.stringify(customerData));
+            window.dispatchEvent(new Event('pc_user_update'));
 
             await logAudit({ action: 'CUSTOMER_LOGIN', entity_type: 'customer', entity_id: customerData.id, details: { method: 'password' }, customer_phone: customerData.contact_no });
 
@@ -219,6 +220,7 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                 const phoneToSave = existingCustomer.contact_no && !existingCustomer.contact_no.includes('@') ? existingCustomer.contact_no : (!identifier.includes('@') ? identifier : '');
                 if (phoneToSave) localStorage.setItem('pc_auth_phone', phoneToSave);
                 localStorage.setItem('pc_user_data', JSON.stringify(existingCustomer));
+                window.dispatchEvent(new Event('pc_user_update'));
                 
                 await logAudit({ action: 'CUSTOMER_LOGIN', entity_type: 'customer', entity_id: existingCustomer.id, details: { method: 'otp' }, customer_phone: existingCustomer.contact_no });
 
@@ -272,6 +274,7 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
             if (phoneToSave) localStorage.setItem('pc_auth_phone', phoneToSave);
             if (customerData) {
                 localStorage.setItem('pc_user_data', JSON.stringify(customerData));
+                window.dispatchEvent(new Event('pc_user_update'));
                 await logAudit({ action: 'CUSTOMER_REGISTER', entity_type: 'customer', entity_id: customerData.id, details: { }, customer_phone: customerData.contact_no });
             }
 

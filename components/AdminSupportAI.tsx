@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, MessageCircle, Sparkles, Loader, Trash2, Clock, Plus, ChevronRight, Menu, X, ChevronLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { supabase } from '../services/supabase';
 
 // Gemini API Key provided by user
 const GEMINI_API_KEY = (import.meta as any).env.VITE_GEMINI_API_KEY;
@@ -213,36 +214,24 @@ export const AdminSupportAI: React.FC<AdminSupportAIProps> = ({ userName, stats 
                     content: m.content
                 }));
 
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout
-
-            const response = await fetch(`https://openrouter.ai/api/v1/chat/completions`, {
-                method: 'POST',
-                signal: controller.signal,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer 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`,
-                    'HTTP-Referer': window.location.origin || 'https://paocaseiro.co.mz',
-                    'X-Title': 'Pão Caseiro Admin'
-                },
-                body: JSON.stringify({
-                    model: 'nvidia/nemotron-3-super-120b-a12b:free',
+            // Call the Supabase Edge Function to protect the OpenRouter API Key
+            const { data, error } = await supabase.functions.invoke('chat-ai', {
+                body: {
+                    systemContext: systemContext,
                     messages: [
-                        { role: 'system', content: systemContext },
                         ...history,
                         { role: 'user', content: text }
                     ]
-                })
+                }
             });
 
-            clearTimeout(timeoutId);
-
-            if (!response.ok) {
-                let errorText = await response.text().catch(() => response.statusText);
-                throw new Error(`OpenRouter Error: ${response.status} ${errorText}`);
+            if (error) {
+                throw new Error(`Edge Function Error: ${error.message} \n(Verifique se a Edge Function 'chat-ai' foi publicada)`);
             }
 
-            const data = await response.json();
+            if (data?.error) {
+                throw new Error(`OpenRouter/Edge Error: ${data.error}`);
+            }
 
             if (data.choices && data.choices.length > 0) {
                 const content = data.choices[0].message.content;

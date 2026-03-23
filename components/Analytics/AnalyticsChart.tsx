@@ -32,6 +32,7 @@ import { ReportTemplate } from './ReportTemplate';
 import { Loader2, LayoutGrid, Activity, BarChart3, Maximize2, TrendingUp, Users, Sparkles, Bot } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { generateMetricReport } from '../../services/reportGenerator';
+import { supabase } from '../../services/supabase';
 
 interface Order {
     id: string;
@@ -83,29 +84,23 @@ export const AnalyticsChart: React.FC<AnalyticsChartProps> = ({ orders = [], tea
 
             const prompt = `Analise os seguintes dados de ${metricLabel} correspondentes a ${summaryData.length} dias da padaria 'Pão Caseiro' e forneça 3 insights diretos, curtos e muito relevantes para o negócio. Formatação: use markdown simples com bullet points. Foque em apontar tendências de crescimento/queda, ou anomalias notáveis. Evite formalidades exageradas, vá direto ao ponto.\n\nDados: ${JSON.stringify(summaryData)}`;
 
-            const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-                method: 'POST',
-                signal: controller.signal,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': 'Bearer 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',
-                    'HTTP-Referer': window.location.origin || 'https://paocaseiro.co.mz',
-                    'X-Title': 'Pão Caseiro Admin'
-                },
-                body: JSON.stringify({
-                    model: 'nvidia/nemotron-3-super-120b-a12b:free',
+            const systemContext = 'Você é a Zyph AI, a IA analítica de negócios do painel Pão Caseiro. Seja extremamente técnica, direta e assertiva. Responda em Português.';
+
+            const { data, error } = await supabase.functions.invoke('chat-ai', {
+                body: {
+                    systemContext: systemContext,
                     messages: [
-                        { role: 'system', content: 'Você é a Zyph AI, a IA analítica de negócios do painel Pão Caseiro. Seja extremamente técnica, direta e assertiva. Responda em Português.' },
                         { role: 'user', content: prompt }
                     ]
-                })
+                }
             });
             
             clearTimeout(timeoutId);
 
-            if (!response.ok) throw new Error('Falha ao gerar insights');
-            const data = await response.json();
-            if (data.choices && data.choices.length > 0) {
+            if (error) throw new Error(`Edge Error: ${error.message}`);
+            if (data?.error) throw new Error(`OpenRouter/Edge Error: ${data.error}`);
+
+            if (data?.choices && data.choices.length > 0) {
                 setAiInsights(data.choices[0].message.content);
             } else {
                 throw new Error('Sem resposta válida');

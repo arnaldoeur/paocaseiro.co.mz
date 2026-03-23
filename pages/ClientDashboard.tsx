@@ -9,6 +9,7 @@ import { sendEmail } from '../services/email';
 import { sendSMS } from '../services/sms';
 import { logAudit } from '../services/audit';
 import { getEnglishProductName } from '../services/stringUtils';
+import { notifyAdminSystemsAlert } from '../services/whatsapp';
 export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) => {
     const t = translations[language].clientDashboard;
     const [user, setUser] = useState<any>(null);
@@ -86,6 +87,7 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                     });
                     localStorage.setItem('pc_auth_phone', finalIdentifier);
                     localStorage.setItem('pc_user_data', JSON.stringify(customerRecord));
+                    window.dispatchEvent(new Event('pc_user_update'));
                 }
             } else {
                 // Check for manual login
@@ -184,6 +186,7 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
         await supabase.auth.signOut();
         localStorage.removeItem('pc_auth_phone');
         localStorage.removeItem('pc_user_data');
+        window.dispatchEvent(new Event('pc_user_update'));
         navigate('/');
     };
 
@@ -231,6 +234,7 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
             const updatedData = { ...customerData, ...editData };
             setCustomerData(updatedData);
             localStorage.setItem('pc_user_data', JSON.stringify(updatedData));
+            window.dispatchEvent(new Event('pc_user_update'));
             setIsEditModalOpen(false);
         } catch (err) {
             console.error('Error updating profile:', err);
@@ -307,6 +311,9 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
             const smsMessage = `PAO CASEIRO SUPORTE: Recebeu mensagem de ${user?.phone || 'Cliente'}. Verifique o painel ou email.`;
             await sendSMS(adminPhone, smsMessage)
                 .catch(e => console.error("Support SMS failed:", e));
+                
+            await notifyAdminSystemsAlert(`Pedido de Suporte`, `Cliente: ${customerData?.name || 'Desconhecido'}\nTelefone: ${user?.phone || 'N/A'}\n\nMensagem:\n${supportMsg}`)
+                .catch(e => console.error("Support WhatsApp Alert failed:", e));
 
             setSupportStatus('success');
             setSupportMsg('');

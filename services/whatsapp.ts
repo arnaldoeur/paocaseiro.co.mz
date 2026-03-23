@@ -3,7 +3,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 const EVOLUTION_API_URL = 'https://wa.zyphtech.com';
-const INSTANCE_NAME = 'PAOCASEIRO';
+const INSTANCE_NAME = 'Zyph Tech, Lda';
 const API_KEY = '429683C4C977415CAAFCCE10F7D57E11';
 
 /**
@@ -39,7 +39,7 @@ export const sendWhatsAppMessage = async (to: string, text: string) => {
             text: text
         };
 
-        const response = await fetch(`${EVOLUTION_API_URL}/message/sendText/${INSTANCE_NAME}`, {
+        const response = await fetch(`${EVOLUTION_API_URL}/message/sendText/${encodeURIComponent(INSTANCE_NAME)}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -94,7 +94,7 @@ export const sendWhatsAppMessage = async (to: string, text: string) => {
  * @param mediatype eg. "document", "image", "video", "audio"
  * @param fileName fileName of the media
  */
-export const sendWhatsAppMedia = async (to: string, media: string, mediatype: string, fileName: string, caption: string = '') => {
+export const sendWhatsAppMedia = async (to: string, mediatype: string, fileName: string, caption: string, media: string) => {
     if (!to) return { success: false, error: 'No phone number provided' };
     
     const formattedNumber = formatPhone(to);
@@ -112,7 +112,7 @@ export const sendWhatsAppMedia = async (to: string, media: string, mediatype: st
             media: media
         };
 
-        const response = await fetch(`${EVOLUTION_API_URL}/message/sendMedia/${INSTANCE_NAME}`, {
+        const response = await fetch(`${EVOLUTION_API_URL}/message/sendMedia/${encodeURIComponent(INSTANCE_NAME)}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -152,6 +152,12 @@ export const sendWhatsAppMedia = async (to: string, media: string, mediatype: st
  * High-Level Notification Wrappers
  */
 
+const getFirstName = (order: any) => {
+    const fullName = order.customer_name || order.customer?.name || 'Cliente';
+    if (fullName.toLowerCase() === 'cliente') return 'Cliente';
+    return fullName.trim().split(' ')[0];
+};
+
 export const notifyKitchenNewOrderWhatsApp = async (order: any, items: any[]) => {
     const kitchenPhone = '258879146662'; // Configured admin/kitchen number
     const itemsText = items.map(i => `${i.quantity}x ${i.name || i.product_name}`).join('\n');
@@ -161,6 +167,12 @@ export const notifyKitchenNewOrderWhatsApp = async (order: any, items: any[]) =>
     const message = `NOVO PEDIDO (COZINHA)\n\nPedido N. ${order.short_id || order.id.slice(-6).toUpperCase()}\nTipo: ${typeText}\n\nArtigos a Preparar:\n${itemsText}\n\nNotas: ${order.notes || 'Nenhuma'}`;
 
     return await sendWhatsAppMessage(kitchenPhone, message);
+};
+
+export const notifyAdminSystemsAlert = async (title: string, details: string) => {
+    const adminPhone = '258879146662'; // Configured admin number
+    const message = `🚨 *ALERTA DE SISTEMA*\n\n*${title}*\n\nDetalhes:\n${details}\n\nVerifique o Painel de Administração para mais informações.`;
+    return await sendWhatsAppMessage(adminPhone, message);
 };
 
 export const notifyAdminNewOrderWhatsApp = async (order: any, items: any[]) => {
@@ -207,7 +219,8 @@ export const notifyCustomerOrderStatusWhatsApp = async (order: any, newStatus: s
             statusText = newStatus;
     }
 
-    const message = `Olá ${order.customer_name || 'Cliente'},\n\nO estado do seu pedido da Pao Caseiro acaba de ser atualizado:\n\nPedido N. ${order.short_id || order.id.slice(-6).toUpperCase()}\nNovo Estado: ${statusText}${extra}\n\nObrigado por preferir a Pao Caseiro.`;
+    const firstName = getFirstName(order);
+    const message = `Olá ${firstName},\n\nO estado do seu pedido da Pao Caseiro acaba de ser atualizado:\n\nPedido N. ${order.short_id || order.id.slice(-6).toUpperCase()}\nNovo Estado: ${statusText}${extra}\n\nObrigado por preferir a Pao Caseiro.`;
 
     return await sendWhatsAppMessage(customerPhone, message);
 };
@@ -218,51 +231,20 @@ export const notifyCustomerNewOrderWhatsApp = async (order: any, items: any[]) =
 
     const itemsText = items.map(i => `${i.quantity}x ${i.name || i.product_name} - ${i.price} MT`).join('\n');
     const total = order.total_amount || order.total || 0;
-    const url = typeof window !== 'undefined' ? `${window.location.origin}/order-receipt/${order.short_id || order.id}` : `https://paocaseiro.co.mz/order-receipt/${order.short_id || order.id}`;
+    
+    // Ensure the URL is always a public domain so WhatsApp makes it clickable (blue link).
+    let baseUrl = 'https://paocaseiro.co.mz';
+    if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1' && !window.location.hostname.startsWith('192.168.')) {
+        baseUrl = window.location.origin;
+    }
+    const url = `${baseUrl}/order-receipt/${order.short_id || order.id}`;
 
-    const message = `Olá ${order.customer_name || 'Cliente'},\n\nMuito obrigado.\nA sua encomenda foi confirmada com sucesso.\n\nDetalhes do Pedido N. ${order.short_id || order.id.slice(-6).toUpperCase()}\n\nArtigos:\n${itemsText}\n\nTotal da fatura: ${total} MT\n\nCaso não consiga baixar o recibo em anexo, verifique a fatura web no link abaixo:\n${url}`;
+    const firstName = getFirstName(order);
+    const message = `Olá ${firstName},\n\nMuito obrigado.\nA sua encomenda foi confirmada com sucesso.\n\nDetalhes do Pedido N. ${order.short_id || order.id.slice(-6).toUpperCase()}\n\nArtigos:\n${itemsText}\n\nTotal da fatura: ${total} MT\n\nCaso não consiga baixar o recibo em anexo, verifique a fatura web no link abaixo:\n\n${url}`;
 
     try {
-        const doc = new jsPDF();
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(22);
-        doc.text("Pao Caseiro", 14, 20);
-        
-        doc.setFontSize(14);
-        doc.setTextColor(100);
-        doc.text(`Fatura N.: FAT-${order.short_id || order.id.slice(-6).toUpperCase()}`, 14, 30);
-        
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(11);
-        doc.setTextColor(0);
-        doc.text(`Data: ${new Date().toLocaleDateString('pt-PT')}`, 14, 40);
-        doc.text(`Cliente: ${order.customer_name || 'Cliente'}`, 14, 46);
-        
-        const tableData = items.map(i => [
-            i.name || i.product_name, 
-            i.quantity.toString(), 
-            `${i.price} MT`, 
-            `${(i.price * i.quantity)} MT`
-        ]);
-        
-        autoTable(doc, {
-            startY: 55,
-            head: [['Artigo', 'Qtd', 'Preco Unit', 'Subtotal']],
-            body: tableData,
-            theme: 'striped',
-            headStyles: { fillColor: [59, 47, 47] }
-        });
-        
-        const finalY = (doc as any).lastAutoTable.finalY || 55;
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(14);
-        doc.text(`Total a Pagar: ${total} MT`, 14, finalY + 15);
-        
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(10);
-        doc.setTextColor(150);
-        doc.text("Obrigado pela sua preferencia.", 14, finalY + 30);
-
+        const { generateCustomerReceiptPDF } = await import('./pdfGenerator');
+        const doc = await generateCustomerReceiptPDF(order, items, 'Fatura');
         const pdfBase64 = doc.output('datauristring').split(',')[1];
         
         return await sendWhatsAppMedia(

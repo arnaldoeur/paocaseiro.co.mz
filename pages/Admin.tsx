@@ -227,10 +227,10 @@ export const Admin: React.FC = () => {
     // POS Extensions State
     const [barcodeBuffer, setBarcodeBuffer] = useState('');
     const [lastBarcodeCharTime, setLastBarcodeCharTime] = useState(0);
-    const [cashReceived, setCashReceived] = useState<number | string>('');
     const [changeDue, setChangeDue] = useState(0);
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'mpesa' | 'ecash' | 'emola'>('cash');
+    const [splitPayments, setSplitPayments] = useState<Record<string, number | string>>({});
     const [currentSession, setCurrentSession] = useState<any>(null);
     const [printerConfig, setPrinterConfig] = useState(() => {
         const saved = localStorage.getItem('pos_printer_config');
@@ -260,13 +260,21 @@ export const Admin: React.FC = () => {
 
     useEffect(() => {
         const total = posCart.reduce((acc, curr) => acc + (curr.price * curr.quantity), 0);
-        const received = Number(cashReceived) || 0;
-        if (received > 0) {
+        const received = Object.values(splitPayments).reduce((acc, val) => acc + (Number(val) || 0), 0);
+        if (received > total) {
             setChangeDue(Math.max(0, received - total));
         } else {
             setChangeDue(0);
         }
-    }, [cashReceived, posCart]);
+    }, [splitPayments, posCart]);
+
+    useEffect(() => {
+        if (showPaymentModal) {
+            setSplitPayments({});
+            setPaymentMethod('cash');
+            setChangeDue(0);
+        }
+    }, [showPaymentModal]);
 
     // Message & System Settings State
     const [companyInfo, setCompanyInfo] = useState({
@@ -435,12 +443,6 @@ export const Admin: React.FC = () => {
     };
 
     const handleOpenCashDrawer = async () => {
-        // PIN only for opening the cash register
-        const pin = prompt('Introduza o PIN de abertura de caixa (ex: 1234):');
-        if (pin !== '1234') { // Default admin PIN or from a setting
-            alert('PIN Incorrecto');
-            return;
-        }
         try {
             await printerService.openCashDrawer();
             setIsPrinterConnected(true);
@@ -451,15 +453,12 @@ export const Admin: React.FC = () => {
     };
 
     const handleOpenSession = async () => {
-        const pin = prompt('Introduza o PIN de abertura de caixa (ex: 1234):');
-        if (!pin) return;
-
         const { data: { user } } = await supabase.auth.getUser();
         const { data, error } = await supabase.from('cash_sessions').insert([{
             opened_by: user?.id,
             status: 'open',
             opening_balance: 0,
-            pin_code: pin
+            pin_code: '0000'
         }]).select().single();
 
         if (error) return alert('Erro ao abrir sessão: ' + error.message);
@@ -494,10 +493,22 @@ export const Admin: React.FC = () => {
 
     const handleProcessPayment = async () => {
         const total = posCart.reduce((acc, curr) => acc + (curr.price * curr.quantity), 0);
-        const received = Number(cashReceived);
-        if (paymentMethod === 'cash' && received < total) {
-            alert('Valor recebido insuficiente!');
-            return;
+        let finalAmountReceived = Object.values(splitPayments).reduce((acc, val) => acc + (Number(val) || 0), 0);
+        let finalMethodStr = paymentMethod;
+
+        if (Object.keys(splitPayments).filter(k => Number(splitPayments[k]) > 0).length > 0) {
+            if (finalAmountReceived < total) {
+                alert('Valor recebido insuficiente nos métodos parciais!');
+                return;
+            }
+            const methods = Object.entries(splitPayments).filter(([k,v]) => Number(v) > 0).map(([k,v]) => `${k.toUpperCase()} (${v}MT)`);
+            finalMethodStr = methods.join(' | ');
+        } else {
+            if (paymentMethod === 'cash') {
+                alert('Introduza o valor recebido em dinheiro!');
+                return;
+            }
+            finalAmountReceived = total; // Assume full amount for single non-cash method
         }
 
         setIsSubmitting(true);
@@ -511,12 +522,12 @@ export const Admin: React.FC = () => {
                 total_amount: total,
                 status: 'completed',
                 payment_status: 'paid',
-                payment_method: paymentMethod,
+                payment_method: finalMethodStr,
                 delivery_address: posOrderType.toUpperCase(),
                 delivery_type: posOrderType === 'takeaway' ? 'pickup' : 'dine_in',
                 amount_paid: total,
-                amount_received: paymentMethod === 'cash' ? received : total,
-                change_given: paymentMethod === 'cash' ? changeDue : 0,
+                amount_received: finalAmountReceived,
+                change_given: changeDue,
                 balance: 0,
                 cash_session_id: currentSession?.id,
                 staff_id: userId || null
@@ -547,8 +558,8 @@ export const Admin: React.FC = () => {
             });
 
 
-            // Open Cash Drawer automatically if payment is cash
-            if (paymentMethod === 'cash' && hardwareConfig.cashDrawerEnabled) {
+            // Open Cash Drawer automatically if payment includes cash
+            if ((paymentMethod === 'cash' || finalMethodStr.includes('CASH')) && hardwareConfig.cashDrawerEnabled) {
                 try {
                     await printerService.openCashDrawer();
                 } catch (de) {
@@ -560,6 +571,15 @@ export const Admin: React.FC = () => {
             if (posCustomer?.contact_no && posCustomer.contact_no !== 'N/A') {
                 const { notifyPaymentConfirmed } = await import('../services/sms');
                 await notifyPaymentConfirmed(orderResult.id, posCustomer.contact_no, shortId);
+
+                try {
+                    const { notifyCustomerNewOrderWhatsApp } = await import('../services/whatsapp');
+                    const fullOrderForWA = {
+                        ...orderData,
+                        id: orderResult.id
+                    };
+                    notifyCustomerNewOrderWhatsApp(fullOrderForWA, itemsToInsert).catch(e => console.error("WA error", e));
+                } catch (e) {}
             }
 
             // --- Printer Support ---
@@ -4759,12 +4779,12 @@ export const Admin: React.FC = () => {
 
                                         <div className="space-y-4">
                                             <div>
-                                                <label className="block text-xs font-bold text-[#d9a65a] uppercase mb-2 tracking-widest text-center">Valor Recebido (MT)</label>
+                                                <label className="block text-xs font-bold text-[#d9a65a] uppercase mb-2 tracking-widest text-center">Valor Recebido em Dinheiro (MT)</label>
                                                 <input
                                                     type="number"
-                                                    value={cashReceived}
+                                                    value={splitPayments['cash'] || ''}
                                                     autoFocus
-                                                    onChange={e => setCashReceived(e.target.value)}
+                                                    onChange={e => setSplitPayments(prev => ({...prev, cash: e.target.value}))}
                                                     placeholder="0.00"
                                                     className="w-full bg-white border-2 border-gray-100 rounded-2xl p-6 text-4xl font-black text-center text-[#3b2f2f] focus:border-[#d9a65a] outline-none transition-all shadow-inner"
                                                 />
@@ -4775,7 +4795,7 @@ export const Admin: React.FC = () => {
                                                 {[200, 500, 1000, 2000].map(val => (
                                                     <button
                                                         key={val}
-                                                        onClick={() => setCashReceived(val)}
+                                                        onClick={() => setSplitPayments(prev => ({...prev, cash: val}))}
                                                         className="bg-white border border-gray-100 py-3 rounded-xl text-xs font-bold text-[#3b2f2f] hover:bg-[#d9a65a] hover:text-white transition-all shadow-sm"
                                                     >
                                                         {val} MT
@@ -4796,15 +4816,43 @@ export const Admin: React.FC = () => {
                                             {paymentMethod === 'card' ? <CreditCard size={40} /> : <Smartphone size={40} />}
                                         </div>
                                         <h4 className="text-xl font-bold text-[#3b2f2f] mb-2 uppercase">Confirmar {paymentMethod}</h4>
-                                        <p className="text-gray-500 text-sm mb-6">Por favor, processe o pagamento no terminal ou telemóvel antes de confirmar.</p>
-                                        <div className="text-3xl font-black text-[#d9a65a]">
+                                        <p className="text-gray-500 text-sm mb-6">Por favor, introduza o valor pago via {paymentMethod.toUpperCase()} (ou deixe em branco para o total).</p>
+                                        <div className="text-3xl font-black text-[#d9a65a] mb-6">
                                             {posCart.reduce((acc, curr) => acc + (curr.price * curr.quantity), 0).toLocaleString()} MT
+                                        </div>
+                                        <div>
+                                            <input
+                                                type="number"
+                                                value={splitPayments[paymentMethod] || ''}
+                                                onChange={e => setSplitPayments(prev => ({...prev, [paymentMethod]: e.target.value}))}
+                                                placeholder="Partilhar Pag. (MT) Opcional"
+                                                className="w-full bg-white border-2 border-gray-100 rounded-2xl p-4 text-2xl font-black text-center text-[#3b2f2f] focus:border-[#d9a65a] outline-none transition-all shadow-inner"
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Show Split Payments Summary if multiple */}
+                                {Object.keys(splitPayments).filter(k => Number(splitPayments[k]) > 0).length > 0 && (
+                                    <div className="bg-white border-2 border-gray-100 p-4 rounded-2xl mb-6 relative z-10 animate-fade-in">
+                                        <h5 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Pagamentos Adicionados</h5>
+                                        <div className="flex flex-col gap-1">
+                                            {Object.entries(splitPayments).filter(([k,v]) => Number(v) > 0).map(([k,v]) => (
+                                                <div key={k} className="flex justify-between text-sm font-bold text-[#3b2f2f]">
+                                                    <span>{k.toUpperCase()}</span>
+                                                    <span>{Number(v).toLocaleString()} MT</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <div className="mt-3 pt-3 border-t border-gray-100 flex justify-between font-black text-[#d9a65a]">
+                                            <span>SOMA RECEBIDA</span>
+                                            <span>{Object.values(splitPayments).reduce((a,b) => a + (Number(b)||0), 0).toLocaleString()} MT</span>
                                         </div>
                                     </div>
                                 )}
 
                                 <div className="flex flex-col items-center gap-6 relative z-10">
-                                    {paymentMethod === 'cash' && (
+                                    {(paymentMethod === 'cash' || Object.keys(splitPayments).includes('cash')) && (
                                         <div className="text-center animate-bounce-slow">
                                             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.3em] mb-1">Troco a Entregar</p>
                                             <p className={`text-5xl font-black ${changeDue > 0 ? 'text-green-500' : 'text-gray-300'}`}>
@@ -4821,11 +4869,11 @@ export const Admin: React.FC = () => {
                                             Cancelar
                                         </button>
                                         <button
-                                            disabled={isSubmitting || (paymentMethod === 'cash' && (!cashReceived || Number(cashReceived) < posCart.reduce((acc, curr) => acc + (curr.price * curr.quantity), 0)))}
+                                            disabled={isSubmitting || (Object.keys(splitPayments).filter(k => Number(splitPayments[k]) > 0).length > 0 && Object.values(splitPayments).reduce((acc, val) => acc + (Number(val) || 0), 0) < posCart.reduce((acc, curr) => acc + (curr.price * curr.quantity), 0))}
                                             onClick={handleProcessPayment}
                                             className="flex-[2] py-4 bg-[#3b2f2f] text-[#d9a65a] font-bold rounded-2xl shadow-xl hover:brightness-110 active:scale-95 transition-all text-sm uppercase tracking-widest flex items-center justify-center gap-3 disabled:opacity-50 disabled:grayscale"
                                         >
-                                            {isSubmitting ? <span className="w-4 h-4 border-2 border-[#d9a65a] border-t-transparent rounded-full animate-spin"></span> : <><CheckCircle size={20} /> Confirmar Pagamento e Gerar Recibo</>}
+                                            {isSubmitting ? <span className="w-4 h-4 border-2 border-[#d9a65a] border-t-transparent rounded-full animate-spin"></span> : <><CheckCircle size={20} /> Confirmar ({posCart.reduce((acc, curr) => acc + (curr.price * curr.quantity), 0).toLocaleString()} MT)</>}
                                         </button>
                                     </div>
                                 </div>
@@ -6034,6 +6082,19 @@ export const Admin: React.FC = () => {
 
                                         if (receiptRes.success && receiptRes.data) {
                                             await notifyPaymentConfirmed(selectedOrder.orderId, selectedOrder.customer.phone);
+
+                                            try {
+                                                const { notifyCustomerNewOrderWhatsApp } = await import('../services/whatsapp');
+                                                const compatOrder = {
+                                                    id: selectedOrder.id,
+                                                    short_id: selectedOrder.orderId,
+                                                    customer_name: selectedOrder.customer.name,
+                                                    customer_phone: selectedOrder.customer.phone,
+                                                    total_amount: selectedOrder.total
+                                                };
+                                                notifyCustomerNewOrderWhatsApp(compatOrder, selectedOrder.items).catch(e => console.error("WA err", e));
+                                            } catch (e) {}
+
                                             // Map to standardized receipt state and show modal
                                             setLastOrderData({
                                                 short_id: selectedOrder.orderId,

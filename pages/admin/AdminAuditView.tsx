@@ -274,13 +274,35 @@ export const AdminAuditView: React.FC = () => {
                 details: l.details
             }));
 
-            const { data, error } = await supabase.functions.invoke('analyze-audit', {
-                body: { logs: logsToAnalyze }
+            const systemContext = `Você é o Auditor IA Oficial do sistema 'Pão Caseiro'. A sua função é analisar métricas, eventos de log e o comportamento dos utilizadores da nossa plataforma.
+Recebeu uma lista de eventos JSON filtrados recentes. Elabore um relatório analítico direto e conciso, em Markdown.
+
+**Foco:**
+1. Resumo da Atividade Global.
+2. Identificação de Padrões Críticos ou Suspeitos (ex: Logins falhados sucessivos, Erros de Checkout).
+3. Jornada de Utilizadores: O que estão tipicamente a tentar fazer? Quais as ações que repetem mais?
+
+Escreva em Português de Portugal. Assuma um tom analítico, sénior e construtivo.`;
+
+            const prompt = "Logs recentes para análise: \n\n" + JSON.stringify(logsToAnalyze);
+
+            const { data, error } = await supabase.functions.invoke('chat-ai', {
+                body: {
+                    systemContext: systemContext,
+                    messages: [
+                        { role: 'user', content: prompt }
+                    ]
+                }
             });
 
-            if (error) throw error;
-            if (data?.report) setAiReport(data.report);
-            else setAiReport('Não foi possível gerar avaliação. Verifique a API Key.');
+            if (error) throw new Error(`Edge Error: ${error.message}`);
+            if (data?.error) throw new Error(`OpenRouter Error: ${data.error}`);
+
+            if (data?.choices && data.choices.length > 0) {
+                setAiReport(data.choices[0].message.content);
+            } else {
+                setAiReport('Não foi possível gerar avaliação. Sem resposta da IA.');
+            }
         } catch (err: any) {
             console.error('AI Error:', err);
             setAiReport('Ocorreu um erro ao invocar a Inteligência Artificial: ' + err.message);

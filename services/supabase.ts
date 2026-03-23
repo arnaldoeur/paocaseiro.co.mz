@@ -289,48 +289,15 @@ export const generateReceipt = async (orderId: string, shortId: string, customer
         // --- Generate PDF & Sync to Drive ---
         if (generatePdfFile) {
             try {
-                const doc = new jsPDF();
-            doc.setFont('helvetica', 'bold');
-            doc.setFontSize(22);
-            doc.text("Pão Caseiro", 14, 20);
-            
-            doc.setFontSize(14);
-            doc.setTextColor(100);
-            doc.text(`${documentType === 'Receipt' ? 'Recibo' : 'Fatura'} N.º: ${receiptNo}`, 14, 30);
-            
-            doc.setFont('helvetica', 'normal');
-            doc.setFontSize(11);
-            doc.setTextColor(0);
-            doc.text(`Data: ${receiptData.date}`, 14, 40);
-            doc.text(`Cliente: ${customerName}`, 14, 46);
-            
-            const tableData = items.map(i => [
-                i.name, 
-                i.quantity.toString(), 
-                `${i.price.toLocaleString()} MT`, 
-                `${(i.price * i.quantity).toLocaleString()} MT`
-            ]);
-            
-            autoTable(doc, {
-                startY: 55,
-                head: [['Artigo', 'Qtd', 'Preço Unit', 'Subtotal']],
-                body: tableData,
-                theme: 'striped',
-                headStyles: { fillColor: [217, 166, 90] } // #d9a65a
-            });
-            
-            const finalY = (doc as any).lastAutoTable.finalY || 55;
-            doc.setFont('helvetica', 'bold');
-            doc.setFontSize(14);
-            doc.text(`Total a Pagar: ${totalAmount.toLocaleString()} MT`, 14, finalY + 15);
-            
-            doc.setFont('helvetica', 'normal');
-            doc.setFontSize(10);
-            doc.setTextColor(150);
-            doc.text("Obrigado pela preferência!", 14, finalY + 30);
+                const { generateCustomerReceiptPDF } = await import('./pdfGenerator');
+                const doc = await generateCustomerReceiptPDF(
+                    { ...receiptData, short_id: shortId, transaction_id: receiptNo, delivery_type: 'pickup', amount_paid: totalAmount }, 
+                    items, 
+                    documentType
+                );
 
-            const pdfBlob = doc.output('blob');
-            const fileName = `${documentType === 'Receipt' ? 'recibos' : 'faturas'}/${receiptNo}.pdf`;
+                const pdfBlob = doc.output('blob');
+                const fileName = `${documentType === 'Receipt' ? 'recibos' : 'faturas'}/${receiptNo}.pdf`;
             
             // Upload to products bucket
             const { error: uploadError } = await supabase.storage.from('products').upload(fileName, pdfBlob, {
