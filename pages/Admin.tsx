@@ -433,6 +433,72 @@ export const Admin: React.FC = () => {
     const [adminPasswordInput, setAdminPasswordInput] = useState('');
     const [pendingAdminAction, setPendingAdminAction] = useState<(() => void) | null>(null);
 
+    const handleExportDatabase = async () => {
+        try {
+            const tables = ['products', 'customers', 'orders', 'order_items', 'receipts', 'logistics_drivers', 'audit_logs'];
+            const exportData: any = {};
+
+            for (const table of tables) {
+                const { data, error } = await supabase.from(table).select('*');
+                if (!error) exportData[table] = data;
+            }
+
+            const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `backup_paocaseiro_${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            await logAudit({
+                action: 'DATABASE_EXPORT',
+                entity_type: 'system',
+                details: { tables: tables }
+            });
+            
+            alert('Base de dados exportada com sucesso!');
+        } catch (err) {
+            console.error('Export error:', err);
+            alert('Falha ao exportar base de dados.');
+        }
+    };
+
+    const handlePurgeDatabase = async () => {
+        if (!confirm('AVISO CRÍTICO: Isto irá apagar TODOS os pedidos, clientes e histórico de faturamento para sempre. Os produtos e fotos serão mantidos. Deseja continuar?')) return;
+        
+        const password = prompt('Introduza a senha de administração para confirmar a limpeza total:');
+        if (password !== 'admin' && password !== '2025') { // Basic safeguard
+            alert('Senha incorreta. Operação cancelada.');
+            return;
+        }
+
+        setIsSubmitting(true);
+        try {
+            const tablesToClear = ['order_items', 'receipts', 'financial_movements', 'audit_logs', 'sms_logs', 'queue_tickets', 'orders', 'customers', 'contact_messages'];
+            
+            for (const table of tablesToClear) {
+                const { error } = await supabase.from(table).delete().neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all rows
+                if (error) console.error(`Erro ao limpar ${table}:`, error);
+            }
+
+            await logAudit({
+                action: 'DATABASE_PURGE',
+                entity_type: 'system',
+                details: { tables: tablesToClear, performed_by: username }
+            });
+
+            alert('Limpeza de produção concluída com sucesso!');
+            window.location.reload(); // Refresh to clear state
+        } catch (err: any) {
+            alert('Erro durante a limpeza: ' + err.message);
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
     // --- Data Loading ---
     const loadReceipts = async () => {
         try {
@@ -2582,7 +2648,7 @@ export const Admin: React.FC = () => {
                              activeView === 'customers' ? 'Base de Clientes' :
                              activeView === 'pos' ? 'Ponto de Venda' :
                              activeView === 'messages' ? 'Centro de Mensagens' :
-                             activeView === 'support_ai' ? 'Antigravity AI' :
+                             activeView === 'support_ai' ? 'FEIAI' :
                              activeView === 'logistics' ? 'Logística e Entregas' :
                              activeView === 'kitchen' ? 'Cozinha e KDS' :
                              activeView === 'blog' ? 'Blog e CMS' :
@@ -3284,7 +3350,7 @@ export const Admin: React.FC = () => {
                                 </button>
                             </div>
                         </div>
-                        <div className="overflow-x-auto">
+                        <div className="overflow-x-auto max-h-[calc(100vh-300px)] overflow-y-auto custom-scrollbar">
                             <table className="w-full text-left">
                                 <thead className="bg-gray-50 text-xs uppercase font-bold text-gray-500 border-b">
                                     <tr><th className="p-4">Nome</th><th className="p-4">Telefone</th><th className="p-4">Email / Info</th><th className="p-4">Data Registo</th><th className="p-4 text-right">Ações</th></tr>

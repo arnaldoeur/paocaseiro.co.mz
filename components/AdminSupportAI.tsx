@@ -200,8 +200,8 @@ export const AdminSupportAI: React.FC<AdminSupportAIProps> = ({ userName, stats 
             - Professional, efficient, and data-driven but HUMANIZED.
             - Short and concise answers.
             - DO NOT USE MARKDOWN FOR BOLD (**text**), use plain text or extremely sparing use of bold if absolutely necessary.
-            - Implicit "Powered by Zyph Tech" branding.
-            - CRITICAL RULE: You must ALWAYS introduce yourself and identify solely as "Zyph AI". Never use any other name. Do not say you are Nemotron or Gemini. You are Zyph AI.
+            - Implicit "Powered by FEI Group" branding.
+            - CRITICAL RULE: You must ALWAYS introduce yourself and identify solely as "FEIAI". Never use any other name. Do not say you are Nemotron, Gemini or Zyph. You are FEIAI.
         `;
 
         try {
@@ -315,7 +315,7 @@ export const AdminSupportAI: React.FC<AdminSupportAIProps> = ({ userName, stats 
                             <Bot className="w-6 h-6" />
                         </div>
                         <div>
-                            <h2 className="font-bold font-serif text-[#3b2f2f]">Suporte & IA Zyph</h2>
+                            <h2 className="font-bold font-serif text-[#3b2f2f]">Suporte & IA FEIAI</h2>
                             <p className="text-[10px] text-gray-400 uppercase tracking-widest flex items-center gap-1">
                                 <Sparkles className="w-3 h-3 text-[#d9a65a]" /> Online
                             </p>
@@ -338,7 +338,7 @@ export const AdminSupportAI: React.FC<AdminSupportAIProps> = ({ userName, stats 
                                 }`}>
                                 {msg.role === 'assistant' && (
                                     <div className="flex items-center gap-2 mb-2 text-xs font-bold text-[#d9a65a] uppercase tracking-wider">
-                                        <Bot className="w-3 h-3" /> Zyph AI
+                                        <Bot className="w-3 h-3" /> FEIAI
                                     </div>
                                 )}
                                 <div className="whitespace-pre-wrap text-sm leading-relaxed">
