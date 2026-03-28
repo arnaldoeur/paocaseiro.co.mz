@@ -138,6 +138,7 @@ export const Admin: React.FC = () => {
     const [adminUser, setAdminUser] = useState<string>('');
     const [adminPhoto, setAdminPhoto] = useState<string>('');
     const [showPassword, setShowPassword] = useState(false);
+    const [soundEnabled, setSoundEnabled] = useState(() => localStorage.getItem('admin_sound') !== 'false');
 
     // Sidebar/View State
     const [activeView, setActiveView] = useState<'dashboard' | 'orders' | 'kitchen' | 'stock' | 'pos' | 'delivery' | 'settings' | 'customers' | 'team' | 'logistics' | 'support' | 'support_ai' | 'billing' | 'documents' | 'messages' | 'blog' | 'newsletter' | 'queue'>('dashboard');
@@ -147,6 +148,83 @@ export const Admin: React.FC = () => {
     const handleNavClick = (view: any) => {
         setActiveView(view);
         if (window.innerWidth < 768) setIsSidebarCollapsed(true);
+    };
+
+    // --- Voice Notifications (TTS) ---
+    const speakQueue = useRef<string[]>([]);
+    const isSpeaking = useRef(false);
+
+    const processSpeakQueue = () => {
+        if (isSpeaking.current || speakQueue.current.length === 0 || !soundEnabled) {
+            if (!soundEnabled) {
+                speakQueue.current = [];
+                window.speechSynthesis.cancel();
+            }
+            return;
+        }
+        
+        isSpeaking.current = true;
+        const text = speakQueue.current.shift()!;
+        
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'pt-PT';
+        utterance.rate = 0.9;
+        
+        utterance.onend = () => {
+            isSpeaking.current = false;
+            setTimeout(processSpeakQueue, 500);
+        };
+
+        utterance.onerror = () => {
+            isSpeaking.current = false;
+            processSpeakQueue();
+        };
+
+        window.speechSynthesis.speak(utterance);
+    };
+
+    const announceOrder = async (orderIdInDB: string) => {
+        if (!soundEnabled) return;
+
+        try {
+            // Play a small "ping" first
+            const chime = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+            chime.volume = 0.2;
+            chime.play().catch(() => {});
+
+            // Fetch full order details
+            const { data: order } = await supabase
+                .from('orders')
+                .select('*, items:order_items(product_name, quantity)')
+                .eq('id', orderIdInDB)
+                .single();
+
+            if (order) {
+                const displayId = order.orderId || order.id.slice(-4);
+                const type = order.customer?.type === 'delivery' ? 'Entrega' : 
+                             order.customer?.type === 'pickup' ? 'Levantamento' : 'Cozinha';
+                
+                const itemsText = (order.items || [])
+                    .map((i: any) => `${i.quantity} ${i.product_name}`)
+                    .join(', ');
+
+                const text = `Pedido ${displayId}. ${type}. ${itemsText}`;
+                speakQueue.current.push(text);
+                processSpeakQueue();
+            }
+        } catch (e) {
+            console.error("TTS Error:", e);
+        }
+    };
+
+    const toggleSound = () => {
+        const newVal = !soundEnabled;
+        setSoundEnabled(newVal);
+        localStorage.setItem('admin_sound', newVal.toString());
+        if (!newVal) {
+            window.speechSynthesis.cancel();
+            speakQueue.current = [];
+        }
     };
 
     const handleExportMaster = async () => {
@@ -197,6 +275,24 @@ export const Admin: React.FC = () => {
     const [orders, setOrders] = useState<Order[]>([]);
     const [products, setProducts] = useState<any[]>([]);
 
+    // Real-time Orders Listener for Sound
+    useEffect(() => {
+        if (!isAuthenticated) return;
+
+        const channel = supabase
+            .channel('admin-orders-sound')
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
+                console.log('New order received in Admin!', payload.new.id);
+                announceOrder(payload.new.id);
+                if (typeof loadOrders === 'function') loadOrders();
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [isAuthenticated, soundEnabled]);
+
     // Logistics State
     const [logisticsTab, setLogisticsTab] = useState<'dashboard' | 'deliveries' | 'drivers'>('dashboard');
     const [drivers, setDrivers] = useState<Driver[]>([]);
@@ -213,12 +309,9 @@ export const Admin: React.FC = () => {
     const [teamMembers, setTeamMembers] = useState<any[]>([]);
     const [customers, setCustomers] = useState<any[]>([]);
     const [receipts, setReceipts] = useState<any[]>([]);
-    const [messages, setMessages] = useState<any[]>([]);
-    const [messageFolder, setMessageFolder] = useState<'inbox' | 'sent' | 'trash'>('inbox');
-    const [selectedMessage, setSelectedMessage] = useState<any | null>(null);
-    const [isComposingEmail, setIsComposingEmail] = useState(false);
     const [memberAvatar, setMemberAvatar] = useState<string | null>(null);
-
+    const [customerSearch, setCustomerSearch] = useState('');
+    const [selectedCustomerDetails, setSelectedCustomerDetails] = useState<any | null>(null);
     // POS State
     const [posCart, setPosCart] = useState<any[]>([]);
     const [posCustomer, setPosCustomer] = useState<any>(null);
@@ -432,6 +525,7 @@ export const Admin: React.FC = () => {
     const [isAddingCustomer, setIsAddingCustomer] = useState(false);
     const [adminPasswordInput, setAdminPasswordInput] = useState('');
     const [pendingAdminAction, setPendingAdminAction] = useState<(() => void) | null>(null);
+    const [setPendingAdminActionState, _setPendingAdminAction] = useState<any>(null); // Alias if needed
 
     const handleExportDatabase = async () => {
         try {
@@ -470,7 +564,7 @@ export const Admin: React.FC = () => {
         if (!confirm('AVISO CRÍTICO: Isto irá apagar TODOS os pedidos, clientes e histórico de faturamento para sempre. Os produtos e fotos serão mantidos. Deseja continuar?')) return;
         
         const password = prompt('Introduza a senha de administração para confirmar a limpeza total:');
-        if (password !== 'admin' && password !== '2025') { // Basic safeguard
+        if (password !== 'admin' && password !== '2025') { 
             alert('Senha incorreta. Operação cancelada.');
             return;
         }
@@ -480,7 +574,7 @@ export const Admin: React.FC = () => {
             const tablesToClear = ['order_items', 'receipts', 'financial_movements', 'audit_logs', 'sms_logs', 'queue_tickets', 'orders', 'customers', 'contact_messages'];
             
             for (const table of tablesToClear) {
-                const { error } = await supabase.from(table).delete().neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all rows
+                const { error } = await supabase.from(table).delete().neq('id', '00000000-0000-0000-0000-000000000000'); 
                 if (error) console.error(`Erro ao limpar ${table}:`, error);
             }
 
@@ -491,7 +585,7 @@ export const Admin: React.FC = () => {
             });
 
             alert('Limpeza de produção concluída com sucesso!');
-            window.location.reload(); // Refresh to clear state
+            window.location.reload(); 
         } catch (err: any) {
             alert('Erro durante a limpeza: ' + err.message);
         } finally {
@@ -499,7 +593,21 @@ export const Admin: React.FC = () => {
         }
     };
 
-    // --- Data Loading ---
+    // --- Modal/Edit States (continued) ---
+    const [messages, setMessages] = useState<any[]>([]);
+    const [messageFolder, setMessageFolder] = useState<'inbox' | 'sent' | 'trash'>('inbox');
+    const [selectedMessage, setSelectedMessage] = useState<any | null>(null);
+    const [isComposingEmail, setIsComposingEmail] = useState(false);
+    const loadCustomerLogs = async (customerId: string) => {
+        try {
+            const { data, error } = await supabase.from('orders').select('*').eq('customer_id', customerId).order('created_at', { ascending: false });
+            if (error) throw error;
+            if (data) setCustomerLogs(data);
+        } catch (e) {
+            console.error("Failed to load customer logs", e);
+        }
+    };
+
     const loadReceipts = async () => {
         try {
             const { data, error } = await supabase.from('receipts').select('*').order('created_at', { ascending: false });
@@ -1189,75 +1297,47 @@ export const Admin: React.FC = () => {
 
     const handleUpdateUser = async (e: React.FormEvent) => {
         e.preventDefault();
-        console.log("Submit clicked. Form State:", userForm); // DEBUG
         setIsSubmitting(true);
 
         if (userForm.password && userForm.password !== userForm.confirmPassword) {
-            console.warn("Password mismatch validation failed");
             alert('As senhas não coincidem!');
             setIsSubmitting(false);
             return;
         }
 
         try {
-            // Assuming we have a way to identify the current user ID, e.g., stored in localStorage or context
-            // Since we don't have the ID in state in this snippet, we might need to fetch it or rely on username
-            // Ideally should use ID. For now, let's try to update by username if unique or if we have the ID.
-
-            // Allow update if we have an ID or just update local if legacy
-            // But requirement is persistence.
-            // Let's assume we can query by username first to get ID if needed, 
-            // or we might have the user object in state if we expanded `loadTeam`.
-
-            const updates: any = {};
-            if (userForm.name) {
-                updates.name = userForm.name;
-                localStorage.setItem('admin_user', userForm.name);
-            }
-            if (userForm.photo) {
-                updates.avatar_url = userForm.photo; // Assuming column is avatar_url or we need to add it? Let's check schema/types implicitly or add generic 'photo'
-                localStorage.setItem('admin_photo', userForm.photo);
-            }
-            if (userForm.phone) {
-                updates.phone = userForm.phone;
-                localStorage.setItem('admin_phone', userForm.phone);
-            }
-            if (userForm.password) {
-                updates.password = userForm.password;
-            }
-
-            // Update in Supabase
-            // Use ID if available, otherwise try fallback
             let uid = userId;
-
             if (!uid) {
                 // Try to find by username map if we don't have ID (Legacy session)
-                // This is risky if username state is actually 'Name'
-                // We'll throw an error and ask to relogin if ID is missing
                 const { data: userProps } = await supabase.from('team_members').select('id').eq('username', username).single();
                 if (userProps) uid = userProps.id;
             }
 
-            if (uid) {
-                const { error: updateError } = await supabase.from('team_members').update(updates).eq('id', uid);
-                if (updateError) throw updateError;
+            if (!uid) {
+                throw new Error("SESSÃO INVÁLIDA: Por favor faça LOGOUT e LOGIN novamente.");
+            }
 
-                // Reload user data
-                const { data: freshUser } = await supabase.from('team_members').select('*').eq('id', uid).single();
-                if (freshUser) {
-                    setUsername(freshUser.name);
-                    setAdminUser(freshUser.name);
-                    localStorage.setItem('admin_user', freshUser.name); 
-                    localStorage.setItem('admin_id', freshUser.id);
-                    if (freshUser.role) localStorage.setItem('admin_role', freshUser.role);
-                    if (freshUser.avatar_url) {
-                        setAdminPhoto(freshUser.avatar_url);
-                        localStorage.setItem('admin_photo', freshUser.avatar_url);
-                    }
-                }
-            } else {
-                console.error("DEBUG: UserId missing and username lookup failed. User needs to re-login.");
-                throw new Error("SESSÃO INVÁLIDA: O sistema não conseguiu identificar seu usuário. Por favor faça LOGOUT e LOGIN novamente.");
+            const updates: any = {};
+            if (userForm.name) updates.name = userForm.name;
+            if (userForm.photo) updates.avatar_url = userForm.photo;
+            if (userForm.phone) updates.phone = userForm.phone;
+            if (userForm.password) updates.password = userForm.password;
+
+            const { error: updateError } = await supabase.from('team_members').update(updates).eq('id', uid);
+            if (updateError) throw updateError;
+
+            // Sync with LocalStorage and State
+            if (userForm.name) {
+                setAdminUser(userForm.name);
+                setUsername(userForm.name);
+                localStorage.setItem('admin_user', userForm.name);
+            }
+            if (userForm.photo) {
+                setAdminPhoto(userForm.photo);
+                localStorage.setItem('admin_photo', userForm.photo);
+            }
+            if (userForm.phone) {
+                localStorage.setItem('admin_phone', userForm.phone);
             }
 
             if (userForm.password && userForm.phone) {
@@ -1266,10 +1346,9 @@ export const Admin: React.FC = () => {
 
             setShowUserModal(false);
             alert('Perfil atualizado com sucesso!');
-
         } catch (err: any) {
             console.error("Update Error", err);
-            alert('ATENÇÃO: ' + (err.message || err));
+            alert('Erro: ' + (err.message || 'Falha ao atualizar perfil.'));
         } finally {
             setIsSubmitting(false);
         }
@@ -2325,22 +2404,42 @@ export const Admin: React.FC = () => {
 
     const handleSaveMassStock = async () => {
         const productIds = Object.keys(editedMassStock);
-        if (productIds.length === 0) return;
+        if (productIds.length === 0 && selectedMassStockIds.length === 0) {
+             alert('Nenhum produto selecionado ou alterado.');
+             return;
+        }
 
         setIsSavingMassStock(true);
         try {
-            const updates = productIds.map(id => {
-                const changes = editedMassStock[id];
-                return supabase.from('products').update({
-                    stock_quantity: changes.stockQuantity,
-                    unit: changes.unit,
-                    is_available: changes.inStock
-                }).eq('id', id);
-            });
+            // If we have specific edits in editedMassStock, use those.
+            // If we want to apply a single value to all selectedMassStockIds, we need a separate UI flow or massInput parsing.
+            // The user requested "colocar todos com a quantidade de stock 10".
+            
+            let updates: any[] = [];
+            
+            if (productIds.length > 0) {
+                updates = productIds.map(id => {
+                    const changes = editedMassStock[id];
+                    return supabase.from('products').update({
+                        stock_quantity: changes.stockQuantity,
+                        unit: changes.unit,
+                        is_available: changes.inStock
+                    }).eq('id', id);
+                });
+            } else if (selectedMassStockIds.length > 0) {
+                // If user just selected items and clicked save without individual edits, 
+                // we might need a prompt or the "massInput" logic.
+                // For now, let's allow the individual edits or the "Set All to X" logic if implemented in the UI.
+                alert('Por favor, faça as alterações nos produtos selecionados antes de salvar.');
+                setIsSavingMassStock(false);
+                return;
+            }
+
             await Promise.all(updates);
             
-            alert(`${productIds.length} produtos atualizados com sucesso!`);
+            alert(`${updates.length} produtos atualizados com sucesso!`);
             setEditedMassStock({});
+            setSelectedMassStockIds([]);
             loadProducts();
             setStockTab('overview');
         } catch (e: any) {
@@ -2659,6 +2758,13 @@ export const Admin: React.FC = () => {
                         </p>
                     </div>
                     <div className="flex items-center gap-4">
+                        <button 
+                            onClick={toggleSound} 
+                            className={`p-3 rounded-2xl transition-all shadow-sm ${soundEnabled ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'}`}
+                            title={soundEnabled ? "Desativar Voz de Notificação" : "Ativar Voz de Notificação"}
+                        >
+                            {soundEnabled ? <Bell size={20} /> : <EyeOff size={20} />}
+                        </button>
                         <div className="flex flex-col items-end">
                             <span className="font-black text-[#3b2f2f] text-sm uppercase">{username}</span>
                             <span className="text-[10px] text-[#d9a65a] font-bold uppercase tracking-tighter">{currentUserRole}</span>
@@ -3188,7 +3294,92 @@ export const Admin: React.FC = () => {
                                     </tfoot>
                                 </table>
                             ) : (
-                                <table className="w-full text-left">
+                                <>
+                                    {selectedMassStockIds.length > 0 && (
+                                        <div className="p-4 bg-[#d9a65a]/5 border-b border-[#d9a65a]/20 flex flex-wrap items-center gap-6 animate-slide-down">
+                                            <div className="flex items-center gap-2">
+                                                <span className="bg-[#3b2f2f] text-[#d9a65a] text-xs font-bold px-3 py-1 rounded-full shadow-sm">
+                                                    {selectedMassStockIds.length} selecionados
+                                                </span>
+                                            </div>
+                                            <div className="h-6 w-px bg-gray-200"></div>
+                                            
+                                            <div className="flex items-center gap-4">
+                                                <div className="flex items-center gap-2">
+                                                    <label className="text-[10px] font-bold text-gray-400 uppercase">Definir Qtd</label>
+                                                    <input 
+                                                        type="number" 
+                                                        placeholder="Ex: 10" 
+                                                        className="w-20 p-1.5 text-xs border border-gray-200 rounded-lg focus:border-[#d9a65a] outline-none"
+                                                        onChange={(e) => {
+                                                            const val = Number(e.target.value);
+                                                            if (isNaN(val)) return;
+                                                            selectedMassStockIds.forEach(id => {
+                                                                const p = filteredProducts.find(prod => prod.id === id);
+                                                                if (p) {
+                                                                    setEditedMassStock(prev => ({
+                                                                        ...prev,
+                                                                        [id]: { ...(prev[id] || { stockQuantity: p.stockQuantity, unit: p.unit, inStock: p.inStock, sku: p.sku || '' }), stockQuantity: val }
+                                                                    }));
+                                                                }
+                                                            });
+                                                        }}
+                                                    />
+                                                </div>
+                                                
+                                                <div className="flex items-center gap-2">
+                                                    <label className="text-[10px] font-bold text-gray-400 uppercase">Unidade</label>
+                                                    <select 
+                                                        className="p-1.5 text-xs border border-gray-200 rounded-lg focus:border-[#d9a65a] outline-none"
+                                                        onChange={(e) => {
+                                                            const val = e.target.value;
+                                                            selectedMassStockIds.forEach(id => {
+                                                                const p = filteredProducts.find(prod => prod.id === id);
+                                                                if (p) {
+                                                                    setEditedMassStock(prev => ({
+                                                                        ...prev,
+                                                                        [id]: { ...(prev[id] || { stockQuantity: p.stockQuantity, unit: p.unit, inStock: p.inStock, sku: p.sku || '' }), unit: val }
+                                                                    }));
+                                                                }
+                                                            });
+                                                        }}
+                                                    >
+                                                        <option value="">Manter</option>
+                                                        <option value="un">un</option>
+                                                        <option value="kg">kg</option>
+                                                        <option value="g">g</option>
+                                                        <option value="l">l</option>
+                                                        <option value="ml">ml</option>
+                                                    </select>
+                                                </div>
+
+                                                <div className="flex items-center gap-2">
+                                                    <label className="text-[10px] font-bold text-gray-400 uppercase">Estado</label>
+                                                    <select 
+                                                        className="p-1.5 text-xs border border-gray-200 rounded-lg focus:border-[#d9a65a] outline-none"
+                                                        onChange={(e) => {
+                                                            if (!e.target.value) return;
+                                                            const val = e.target.value === 'true';
+                                                            selectedMassStockIds.forEach(id => {
+                                                                const p = filteredProducts.find(prod => prod.id === id);
+                                                                if (p) {
+                                                                    setEditedMassStock(prev => ({
+                                                                        ...prev,
+                                                                        [id]: { ...(prev[id] || { stockQuantity: p.stockQuantity, unit: p.unit, inStock: p.inStock, sku: p.sku || '' }), inStock: val }
+                                                                    }));
+                                                                }
+                                                            });
+                                                        }}
+                                                    >
+                                                        <option value="">Manter</option>
+                                                        <option value="true">Disponível</option>
+                                                        <option value="false">Esgotado</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                    <table className="w-full text-left">
                                     <thead className="bg-[#d9a65a]/10 text-xs uppercase font-bold text-[#3b2f2f] border-b sticky top-0 z-10 backdrop-blur-md">
                                         <tr>
                                             <th className="p-4 w-12 text-center">
@@ -3321,7 +3512,55 @@ export const Admin: React.FC = () => {
                                         </tr>
                                     </tfoot>
                                 </table>
-                            )}
+                            </>
+                        )}
+
+                        {/* Customers View */}
+                        {activeView === 'customers' && (
+                            <div className="bg-white rounded-2xl shadow-sm border border-[#d9a65a]/10 overflow-hidden animate-fade-in relative z-0">
+                                <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-[#fcfbf9]">
+                                    <h2 className="text-2xl font-bold text-[#3b2f2f]">Base de Clientes</h2>
+                                    <div className="flex gap-2">
+                                        <button onClick={() => setIsAddingCustomer(true)} className="bg-[#3b2f2f] text-[#d9a65a] px-4 py-2 rounded-lg font-bold text-sm shadow-lg hover:brightness-110 transition-all">+ Novo Cliente</button>
+                                    </div>
+                                </div>
+                                <div className="p-4 border-b border-gray-100 bg-white">
+                                    <div className="relative">
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                                        <input 
+                                            type="text" 
+                                            placeholder="Pesquisar por nome ou telefone..." 
+                                            className="w-full pl-10 pr-4 py-2 border rounded-xl focus:border-[#d9a65a] outline-none"
+                                            value={customerSearch}
+                                            onChange={e => setCustomerSearch(e.target.value)}
+                                        />
+                                    </div>
+                                </div>
+                                <table className="w-full text-left">
+                                    <thead className="bg-gray-50 text-xs uppercase font-bold text-gray-500 border-b">
+                                        <tr><th className="p-4">Cliente</th><th className="p-4">Contacto</th><th className="p-4">Localidade</th><th className="p-4 text-right">Ações</th></tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                        {customers
+                                            .filter(c => c.name.toLowerCase().includes(customerSearch.toLowerCase()) || c.contact_no.includes(customerSearch))
+                                            .map(c => (
+                                            <tr key={c.id} className="hover:bg-blue-50/30 transition-colors">
+                                                <td className="p-4">
+                                                    <div className="font-bold text-[#3b2f2f]">{c.name}</div>
+                                                    <div className="text-[10px] text-gray-400">Desde: {new Date(c.created_at).toLocaleDateString()}</div>
+                                                </td>
+                                                <td className="p-4 text-sm text-gray-500">{c.contact_no}</td>
+                                                <td className="p-4 text-sm text-gray-500">{c.address || 'Não especificada'}</td>
+                                                <td className="p-4 text-right space-x-2">
+                                                    <button onClick={() => { setSelectedCustomerDetails(c); loadCustomerLogs(c.id); }} className="text-[#d9a65a] font-bold text-xs hover:underline">Ver Histórico</button>
+                                                    <button onClick={() => { setCustomerForm(c); setIsEditingCustomer(true); }} className="text-blue-600 font-bold text-xs hover:underline">Editar</button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
                         </div>
                     </div>
                 )}

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { ChefHat, Clock, CheckCircle, AlertCircle, Loader, LogOut, User, Bell, Plus, Search, Archive, LayoutDashboard, Package } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { ChefHat, Clock, CheckCircle, AlertCircle, Loader, LogOut, User, Bell, Plus, Search, Archive, LayoutDashboard, Package, EyeOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatProductName } from '../services/stringUtils';
 
@@ -69,6 +69,7 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
     const [activeTab, setActiveTab] = useState<'kds' | 'dashboard' | 'archive'>('kds');
     const [products, setProducts] = useState<Product[]>([]);
     const [refreshing, setRefreshing] = useState(false);
+    const [soundEnabled, setSoundEnabled] = useState(() => localStorage.getItem('kitchen_sound') !== 'false');
 
     // Modal State
     const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -235,6 +236,84 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
         }
     };
 
+    // --- Audio & Voice Notifications ---
+    const speakQueue = useRef<string[]>([]);
+    const isSpeaking = useRef(false);
+
+    const processSpeakQueue = () => {
+        if (isSpeaking.current || speakQueue.current.length === 0 || !soundEnabled) {
+            if (!soundEnabled) {
+                speakQueue.current = [];
+                window.speechSynthesis.cancel();
+            }
+            return;
+        }
+        
+        isSpeaking.current = true;
+        const text = speakQueue.current.shift()!;
+        
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'pt-PT';
+        utterance.rate = 0.9;
+        
+        utterance.onend = () => {
+            isSpeaking.current = false;
+            setTimeout(processSpeakQueue, 500); // Small pause between announcements
+        };
+
+        utterance.onerror = () => {
+            isSpeaking.current = false;
+            processSpeakQueue();
+        };
+
+        window.speechSynthesis.speak(utterance);
+    };
+
+    const announceOrder = async (orderIdInDB: string) => {
+        if (!soundEnabled) return;
+
+        try {
+            // Play a small "ping" first
+            const chime = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+            chime.volume = 0.2;
+            chime.play().catch(() => {});
+
+            // Fetch full order details with items for accurate announcement
+            const { supabase } = await import('../services/supabase');
+            const { data: order } = await supabase
+                .from('orders')
+                .select('*, items:order_items(product_name, quantity)')
+                .eq('id', orderIdInDB)
+                .single();
+
+            if (order) {
+                const displayId = order.orderId || order.id.slice(-4);
+                const type = order.customer?.type === 'delivery' ? 'Entrega' : 
+                             order.customer?.type === 'pickup' ? 'Levantamento' : 'Cozinha';
+                
+                const itemsText = (order.items || [])
+                    .map((i: any) => `${i.quantity} ${i.product_name}`)
+                    .join(', ');
+
+                const text = `Pedido ${displayId}. ${type}. ${itemsText}`;
+                speakQueue.current.push(text);
+                processSpeakQueue();
+            }
+        } catch (e) {
+            console.error("TTS Error:", e);
+        }
+    };
+
+    const toggleSound = () => {
+        const newVal = !soundEnabled;
+        setSoundEnabled(newVal);
+        localStorage.setItem('kitchen_sound', newVal.toString());
+        if (!newVal) {
+            window.speechSynthesis.cancel();
+            speakQueue.current = [];
+        }
+    };
+
     // Poll for new orders every 10 seconds
     useEffect(() => {
         if (!isAuthenticated) return;
@@ -250,8 +329,15 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
             // Listen for any order changes
             ordersChannel = supabase
                 .channel('kitchen-orders')
-                .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
-                    console.log('Orders changed, reloading...');
+                .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
+                    console.log('New Order!', payload.new.id);
+                    announceOrder(payload.new.id);
+                    fetchOrders();
+                })
+                .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' }, () => {
+                    fetchOrders();
+                })
+                .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'orders' }, () => {
                     fetchOrders();
                 })
                 .subscribe();
@@ -577,6 +663,13 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
                     </button>
                     <button onClick={fetchOrders} className={`p-2 bg-white/10 rounded hover:bg-white/20 ${refreshing ? 'animate-spin' : ''}`} title="Refresh">
                         <Loader size={20} />
+                    </button>
+                    <button 
+                        onClick={toggleSound} 
+                        className={`p-2 rounded transition-colors ${soundEnabled ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}
+                        title={soundEnabled ? "Desativar Voz de Notificação" : "Ativar Voz de Notificação"}
+                    >
+                        {soundEnabled ? <Bell size={20} /> : <EyeOff size={20} />}
                     </button>
                     {!externalUser && <button onClick={handleLogout} className="p-2 bg-red-500/20 text-red-400 rounded hover:bg-red-500 hover:text-white transition-colors">
                         <LogOut size={20} />

@@ -38,10 +38,10 @@ export const AdminPerformanceView: React.FC = () => {
             today.setHours(0,0,0,0);
             const { data: ordersData } = await supabase.from('orders').select('user_id, status, created_at, updated_at').gte('created_at', today.toISOString());
             
-            // 2. Fetch Active Employee Sessions
-            const { data: sessionsData } = await supabase.from('employee_sessions').select('*').order('check_in', { ascending: false });
-            const activeSessions = (sessionsData || []).filter((s:any) => s.status === 'active');
-            const activeStaffIds = new Set(activeSessions.map((s:any) => s.employee_id));
+            // 2. Fetch Active Team Checkins
+            const { data: sessionsData } = await supabase.from('team_checkins').select('*').order('check_in_at', { ascending: false });
+            const activeSessions = (sessionsData || []).filter((s:any) => !s.check_out_at);
+            const activeStaffIds = new Set(activeSessions.map((s:any) => s.member_id));
 
             // Calculate Order Times
             let totalOrderTime = 0;
@@ -60,12 +60,12 @@ export const AdminPerformanceView: React.FC = () => {
 
             // 3. Map Staff Data
             const staffWithMetrics = staffList.map((u:any) => {
-                const session = activeSessions.find((s:any) => s.employee_id === u.id);
+                const session = activeSessions.find((s:any) => s.member_id === u.id);
                 const ordersByMe = (ordersData||[]).filter((o:any) => o.user_id === u.id).length;
                 let currentDuration = '---';
                 let checkInTime = '---';
                 if(session) {
-                    const cIn = new Date(session.check_in);
+                    const cIn = new Date(session.check_in_at);
                     checkInTime = cIn.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
                     const diffMs = Date.now() - cIn.getTime();
                     const diffHrs = Math.floor(diffMs / 3600000);
@@ -85,12 +85,14 @@ export const AdminPerformanceView: React.FC = () => {
 
             // 4. Calculate Stats
             let todayHours = 0;
-            const todaySessions = (sessionsData || []).filter((s:any) => new Date(s.check_in) >= today);
+            const todaySessions = (sessionsData || []).filter((s:any) => new Date(s.check_in_at) >= today);
             todaySessions.forEach((s:any) => {
-                if(s.status === 'active') {
-                    todayHours += (Date.now() - new Date(s.check_in).getTime()) / 3600000;
-                } else if(s.total_hours) {
-                    todayHours += parseFloat(s.total_hours);
+                const start = new Date(s.check_in_at).getTime();
+                if(!s.check_out_at) {
+                    todayHours += (Date.now() - start) / 3600000;
+                } else {
+                    const end = new Date(s.check_out_at).getTime();
+                    todayHours += (end - start) / 3600000;
                 }
             });
 

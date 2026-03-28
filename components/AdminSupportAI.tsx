@@ -3,9 +3,10 @@ import { Send, Bot, MessageCircle, Sparkles, Loader, Trash2, Clock, Plus, Chevro
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../services/supabase';
 
-// Gemini API Key provided by user
-const GEMINI_API_KEY = "AIzaSyCfA3Pi_LFBw77ueTERJKmqG71PyoEAg4k";
-const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
+// OpenRouter API Configuration
+const OPENROUTER_API_KEY = "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";
+const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+const AI_MODEL = "google/gemini-2.0-flash-lite:free";
 
 interface Message {
     id?: string;
@@ -197,47 +198,60 @@ export const AdminSupportAI: React.FC<AdminSupportAIProps> = ({ userName, stats 
                 unavailable_items: stats.unavailableProducts
             },
             instructions: [
-                "Respond solely as 'Zyph AI'. Never mention Nemotron, Gemini, or other names.",
-                "Fast, humanized, and objective responses.",
-                "Use Portuguese (Mozambique) standards.",
-                "Keep messages short and direct.",
-                "Do NOT use markdown bold (**text**). Use plain text or extremely sparing italics if needed.",
-                "Always be based on the bakery reality and local context."
+                "Você é a 'Zyph AI'. Nunca use outros nomes.",
+                "Respostas extremamente curtas, humanas e objetivas.",
+                "Português de Moçambique.",
+                "Sem saudações repetitivas. Se já disse 'Olá', pule para a resposta nas próximas interações.",
+                "Foco total na realidade da Padaria Pão Caseiro em Lichinga.",
+                "Não use negrito (**). Use texto simples."
             ],
-            style: "concise_and_helpful"
+            style: "concise"
         });
 
+        // Add a hint for the AI about previous messages
+        const conversationHint = messages.length > 2 ? "\n(Note: This is a continuing conversation. No need for greetings or introductions.)" : "";
+
         try {
-            // Convert history to Google Gemini format
-            const contents = messages
+            // Convert history to OpenAI/OpenRouter format
+            const historyMessages = messages
                 .filter(m => m.role !== 'system')
-                .slice(-6) // Keep it light for speed
+                .slice(-10)
                 .map(m => ({
-                    role: m.role === 'assistant' ? 'model' : 'user',
-                    parts: [{ text: m.content }]
+                    role: m.role === 'assistant' ? 'assistant' : 'user',
+                    content: m.content
                 }));
 
-            // Add the dynamic system context + user message
-            contents.push({
-                role: 'user',
-                parts: [{ text: `SYSTEM_INSTRUCTIONS: ${systemContext}\n\nUSER_MESSAGE: ${text}` }]
-            });
+            const finalMessages = [
+                { role: 'system', content: `INSTRUCTIONS: ${systemContext}` },
+                ...historyMessages,
+                { role: 'user', content: `${text}${conversationHint}` }
+            ];
 
-            const response = await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
+            const response = await fetch(OPENROUTER_URL, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ contents })
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+                    'HTTP-Referer': window.location.origin,
+                    'X-Title': 'Pão Caseiro Admin'
+                },
+                body: JSON.stringify({ 
+                    model: AI_MODEL,
+                    messages: finalMessages,
+                    temperature: 0.7,
+                    max_tokens: 1000
+                })
             });
 
             if (!response.ok) {
                 const errorData = await response.json();
-                throw new Error(errorData.error?.message || 'Erro na API do Gemini');
+                throw new Error(errorData.error?.message || 'Erro na API do OpenRouter');
             }
 
             const data = await response.json();
             
-            if (data.candidates && data.candidates[0]?.content?.parts?.[0]?.text) {
-                const content = data.candidates[0].content.parts[0].text;
+            if (data.choices && data.choices[0]?.message?.content) {
+                const content = data.choices[0].message.content;
                 const botMsg: Message = { role: 'assistant', content: content };
                 setMessages(prev => [...prev, botMsg]);
                 if (targetSessionId) saveMessageIndex(botMsg, targetSessionId);
@@ -247,7 +261,13 @@ export const AdminSupportAI: React.FC<AdminSupportAIProps> = ({ userName, stats 
 
         } catch (error: any) {
             console.error('AI Error:', error);
-            const errorMsg: Message = { role: 'assistant', content: `Falha na conexão com Zyph AI. Tente novamente.` };
+            const isOffline = !navigator.onLine;
+            const errorMsg: Message = { 
+                role: 'assistant', 
+                content: isOffline 
+                    ? `Sem conexão à internet. Verifique sua rede e tente novamente.` 
+                    : `Falha na conexão com Zyph AI. Por favor, tente novamente em instantes.` 
+            };
             setMessages(prev => [...prev, errorMsg]);
         } finally {
             setIsLoading(false);

@@ -104,32 +104,40 @@ const App: React.FC = () => {
     setLanguage((prev) => (prev === 'pt' ? 'en' : 'pt'));
   };
 
-  // Dynamic SEO Tags based on Language
+  // Dynamic SEO Tags based on Language & Route
   useEffect(() => {
+    const pageTitles: Record<string, string> = {
+      '/': language === 'en' ? "Home" : "Início",
+      '/menu': language === 'en' ? "Menu & Ordering" : "Menu e Encomendas",
+      '/gallery': language === 'en' ? "Bakery Gallery" : "Galeria da Padaria",
+      '/blog': language === 'en' ? "Bakery Blog" : "Blog da Padaria",
+      '/dashboard': language === 'en' ? "Customer Dashboard" : "Painel do Cliente",
+      '/kitchen': "KDS - Cozinha",
+      '/admin': "Admin Panel",
+      '/delivery': "Logística de Entrega"
+    };
+
+    const currentTitle = pageTitles[location.pathname] || "Pão Caseiro";
+    const suffix = language === 'en' ? "The taste that warms the heart" : "O sabor que aquece o coração";
+
     if (language === 'en') {
-      document.title = "Pão Caseiro | The taste that warms the heart";
+      document.title = `${currentTitle} | Pão Caseiro - ${suffix}`;
       document.documentElement.lang = "en";
       const metaDesc = document.querySelector('meta[name="description"]');
       if (metaDesc) metaDesc.setAttribute('content', 'Discover Pão Caseiro, the best bakery in Lichinga, Niassa. Fresh bread every day, excellent pastry and easy online ordering. The taste that warms the heart!');
       
       const ogTitle = document.querySelector('meta[property="og:title"]');
-      if (ogTitle) ogTitle.setAttribute('content', 'Pão Caseiro | The taste that warms the heart');
-      
-      const ogDesc = document.querySelector('meta[property="og:description"]');
-      if (ogDesc) ogDesc.setAttribute('content', 'Discover Pão Caseiro, the best bakery in Lichinga, Niassa. Fresh bread every day, excellent pastry and easy online ordering.');
+      if (ogTitle) ogTitle.setAttribute('content', `Pão Caseiro | ${currentTitle}`);
     } else {
-      document.title = "Pão Caseiro | O sabor que aquece o coração";
+      document.title = `${currentTitle} | Pão Caseiro - ${suffix}`;
       document.documentElement.lang = "pt-PT";
       const metaDesc = document.querySelector('meta[name="description"]');
-      if (metaDesc) metaDesc.setAttribute('content', 'Descubra a Pão Caseiro, a melhor padaria em Lichinga, no Niassa. Pão fresco todos os dias, pastelaria de excelência e facilidade em encomendas online. O sabor que aquece o coração!');
+      if (metaDesc) metaDesc.setAttribute('content', 'Padaria Pão Caseiro em Lichinga, Niassa. Pão fresco, pastelaria e encomendas online. O verdadeiro sabor artesanal que aquece o coração. Peça já!');
       
       const ogTitle = document.querySelector('meta[property="og:title"]');
-      if (ogTitle) ogTitle.setAttribute('content', 'Pão Caseiro | O sabor que aquece o coração');
-      
-      const ogDesc = document.querySelector('meta[property="og:description"]');
-      if (ogDesc) ogDesc.setAttribute('content', 'Descubra a Pão Caseiro, a melhor padaria em Lichinga, no Niassa. Pão fresco todos os dias, pastelaria de excelência e facilidade em encomendas online.');
+      if (ogTitle) ogTitle.setAttribute('content', `Pão Caseiro | ${currentTitle}`);
     }
-  }, [language]);
+  }, [language, location.pathname]);
 
   return (
     <CartProvider>
