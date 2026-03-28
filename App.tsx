@@ -35,7 +35,20 @@ const MaintenanceGuard: React.FC<{ children: React.ReactNode }> = ({ children })
   useEffect(() => {
     const checkStatus = async () => {
       try {
-        const { data } = await supabase.from('system_settings').select('key, value').in('key', ['maintenance_mode', 'panic_mode']);
+        if (!supabase || !supabase.from) {
+            console.warn("Supabase client not initialized correctly.");
+            setLoading(false);
+            return;
+        }
+
+        const { data, error } = await supabase.from('system_settings').select('key, value').in('key', ['maintenance_mode', 'panic_mode']);
+        
+        if (error) {
+            console.warn("Could not fetch maintenance status:", error.message);
+            setLoading(false);
+            return;
+        }
+
         if (data) {
           const maint = data.find(d => d.key === 'maintenance_mode');
           const panic = data.find(d => d.key === 'panic_mode');
@@ -43,7 +56,7 @@ const MaintenanceGuard: React.FC<{ children: React.ReactNode }> = ({ children })
           setIsPanic(panic?.value?.active === true);
         }
       } catch (e) {
-        // Assume not in maintenance if query fails
+        console.error("Maintenance check error:", e);
       }
       setLoading(false);
     };

@@ -26,7 +26,11 @@ export const setConnectionMode = (mode: ConnectionMode) => {
 };
 
 const getSupabaseUrl = () => {
-    const directUrl = import.meta.env.VITE_SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+    // Hardcoded production fallback
+    const HARDCODED_URL = 'https://bqiegszufcqimlvucrpm.supabase.co';
+    
+    const directUrl = import.meta.env.VITE_SUPABASE_URL || process.env.VITE_SUPABASE_URL || HARDCODED_URL;
+    
     if (import.meta.env.DEV && currentMode === 'proxy') {
         return `${window.location.origin}/supabase-proxy`;
     }
@@ -34,14 +38,27 @@ const getSupabaseUrl = () => {
 };
 
 const SUPABASE_URL = getSupabaseUrl();
-const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+
+// Hardcoded production fallback for PUBLIC Anon Key
+const HARDCODED_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJxaWVnc3p1ZmNxaW1sdnVjcnBtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEyNzA4MzgsImV4cCI6MjA4Njg0NjgzOH0.AvypZPxytOhoftIFjmK_KclmF3yf_vps-xxzYw9q18k';
+
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || HARDCODED_KEY;
 
 if (!SUPABASE_URL || !SUPABASE_KEY) {
-    console.warn("Supabase configuration missing!");
+    console.error("Supabase configuration missing and fallback failed! The app will likely crash.");
 }
 
-// Export a function to recreate the client when mode changes
-export let supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+// Defensive initialization
+let supabaseClient;
+try {
+    supabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY);
+} catch (e) {
+    console.error("Fatal: Supabase client initialization failed", e);
+    // Even if it fails, we provide a placeholder to prevent immediate JS crash in modules that import 'supabase'
+    supabaseClient = { from: () => ({ select: () => ({ in: () => ({}) }) }) } as any; 
+}
+
+export let supabase = supabaseClient;
 
 export const refreshSupabaseClient = () => {
     const newUrl = getSupabaseUrl();
