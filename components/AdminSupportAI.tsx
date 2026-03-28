@@ -4,7 +4,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../services/supabase';
 
 // Gemini API Key provided by user
-const GEMINI_API_KEY = (import.meta as any).env.VITE_GEMINI_API_KEY;
+const GEMINI_API_KEY = "AIzaSyCfA3Pi_LFBw77ueTERJKmqG71PyoEAg4k";
+const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
 
 interface Message {
     id?: string;
@@ -179,72 +180,74 @@ export const AdminSupportAI: React.FC<AdminSupportAIProps> = ({ userName, stats 
             saveMessageIndex(userMsg, targetSessionId);
         }
 
-        const systemContext = `
-            You are Zyph, an advanced AI software engineer and business analyst created by 'Zyph Tech, Lda'.
-            
-            CURRENT CONTEXT:
-            - Administrator Name: ${userName}
-            - Total Sales (Today): ${stats.totalSales} MT
-            - Total Orders: ${stats.totalOrders}
-            - Pending Orders: ${stats.pendingOrders}
-            - Low Stock Alert: ${stats.lowStockCount} items
-            - OUT OF STOCK PRODUCTS: ${stats.unavailableProducts.join(', ') || 'None'}
-            
-            YOUR CAPABILITIES:
-            1. Analyze business data to give specific insights.
-            2. Suggest actions (e.g., if pending orders > 0, tell user to check orders tab).
-            3. Provide strategic advice for bakery growth and technical support.
-            
-            TONE & STYLE:
-            - Language: Portuguese (Mozambique).
-            - Professional, efficient, and data-driven but HUMANIZED.
-            - Short and concise answers.
-            - DO NOT USE MARKDOWN FOR BOLD (**text**), use plain text or extremely sparing use of bold if absolutely necessary.
-            - Implicit "Powered by FEI Group" branding.
-            - CRITICAL RULE: You must ALWAYS introduce yourself and identify solely as "FEIAI". Never use any other name. Do not say you are Nemotron, Gemini or Zyph. You are FEIAI.
-        `;
+        const systemContext = JSON.stringify({
+            identity: "Zyph AI",
+            creator: "Zyph Tech, Lda",
+            localized_context: {
+                country: "Moçambique",
+                city: "Lichinga",
+                business_type: "Padaria e Pastelaria (Pão Caseiro)",
+                admin_name: userName
+            },
+            data_context: {
+                today_sales: `${stats.totalSales} MT`,
+                total_orders: stats.totalOrders,
+                pending_orders: stats.pendingOrders,
+                low_stock: stats.lowStockCount,
+                unavailable_items: stats.unavailableProducts
+            },
+            instructions: [
+                "Respond solely as 'Zyph AI'. Never mention Nemotron, Gemini, or other names.",
+                "Fast, humanized, and objective responses.",
+                "Use Portuguese (Mozambique) standards.",
+                "Keep messages short and direct.",
+                "Do NOT use markdown bold (**text**). Use plain text or extremely sparing italics if needed.",
+                "Always be based on the bakery reality and local context."
+            ],
+            style: "concise_and_helpful"
+        });
 
         try {
-            // Construct history for OpenRouter (OpenAI format)
-            const history = messages
+            // Convert history to Google Gemini format
+            const contents = messages
                 .filter(m => m.role !== 'system')
-                .slice(-10)
+                .slice(-6) // Keep it light for speed
                 .map(m => ({
-                    role: m.role === 'assistant' ? 'assistant' : m.role,
-                    content: m.content
+                    role: m.role === 'assistant' ? 'model' : 'user',
+                    parts: [{ text: m.content }]
                 }));
 
-            // Call the Supabase Edge Function to protect the OpenRouter API Key
-            const { data, error } = await supabase.functions.invoke('chat-ai', {
-                body: {
-                    systemContext: systemContext,
-                    messages: [
-                        ...history,
-                        { role: 'user', content: text }
-                    ]
-                }
+            // Add the dynamic system context + user message
+            contents.push({
+                role: 'user',
+                parts: [{ text: `SYSTEM_INSTRUCTIONS: ${systemContext}\n\nUSER_MESSAGE: ${text}` }]
             });
 
-            if (error) {
-                throw new Error(`Edge Function Error: ${error.message} \n(Verifique se a Edge Function 'chat-ai' foi publicada)`);
+            const response = await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ contents })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error?.message || 'Erro na API do Gemini');
             }
 
-            if (data?.error) {
-                throw new Error(`OpenRouter/Edge Error: ${data.error}`);
-            }
-
-            if (data.choices && data.choices.length > 0) {
-                const content = data.choices[0].message.content;
+            const data = await response.json();
+            
+            if (data.candidates && data.candidates[0]?.content?.parts?.[0]?.text) {
+                const content = data.candidates[0].content.parts[0].text;
                 const botMsg: Message = { role: 'assistant', content: content };
                 setMessages(prev => [...prev, botMsg]);
                 if (targetSessionId) saveMessageIndex(botMsg, targetSessionId);
             } else {
-                throw new Error('No response from AI');
+                throw new Error('Nenhuma resposta do AI');
             }
 
         } catch (error: any) {
             console.error('AI Error:', error);
-            const errorMsg: Message = { role: 'assistant', content: `Desculpe, falha na conexão com Zyph AI. Detalhes: ${error.message}` };
+            const errorMsg: Message = { role: 'assistant', content: `Falha na conexão com Zyph AI. Tente novamente.` };
             setMessages(prev => [...prev, errorMsg]);
         } finally {
             setIsLoading(false);
@@ -315,7 +318,7 @@ export const AdminSupportAI: React.FC<AdminSupportAIProps> = ({ userName, stats 
                             <Bot className="w-6 h-6" />
                         </div>
                         <div>
-                            <h2 className="font-bold font-serif text-[#3b2f2f]">Suporte & IA FEIAI</h2>
+                            <h2 className="font-bold font-serif text-[#3b2f2f]">Suporte & IA Zyph</h2>
                             <p className="text-[10px] text-gray-400 uppercase tracking-widest flex items-center gap-1">
                                 <Sparkles className="w-3 h-3 text-[#d9a65a]" /> Online
                             </p>
@@ -338,7 +341,7 @@ export const AdminSupportAI: React.FC<AdminSupportAIProps> = ({ userName, stats 
                                 }`}>
                                 {msg.role === 'assistant' && (
                                     <div className="flex items-center gap-2 mb-2 text-xs font-bold text-[#d9a65a] uppercase tracking-wider">
-                                        <Bot className="w-3 h-3" /> FEIAI
+                                        <Bot className="w-3 h-3" /> Zyph AI
                                     </div>
                                 )}
                                 <div className="whitespace-pre-wrap text-sm leading-relaxed">

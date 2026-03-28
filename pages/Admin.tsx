@@ -2648,7 +2648,7 @@ export const Admin: React.FC = () => {
                              activeView === 'customers' ? 'Base de Clientes' :
                              activeView === 'pos' ? 'Ponto de Venda' :
                              activeView === 'messages' ? 'Centro de Mensagens' :
-                             activeView === 'support_ai' ? 'FEIAI' :
+                             activeView === 'support_ai' ? 'Zyph AI' :
                              activeView === 'logistics' ? 'Logística e Entregas' :
                              activeView === 'kitchen' ? 'Cozinha e KDS' :
                              activeView === 'blog' ? 'Blog e CMS' :
