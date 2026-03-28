@@ -39,6 +39,11 @@ export const Privacy: React.FC = () => {
               <h2 className="text-2xl font-serif italic text-[#3b2f2f] mb-4 border-b border-[#d9a65a]/20 pb-2">4. Direitos do Cliente</h2>
               <p>A qualquer momento enquanto utilizador livre da plataforma, pode solicitar informações detalhadas sobre as informações registadas a seu respeito ou apagar totalmente o seu rasto do nosso ecossistema, contactando a gerência da nossa equipa através dos Canais de Suporte oficiais.</p>
             </section>
+
+            <section>
+              <h2 className="text-2xl font-serif italic text-[#3b2f2f] mb-4 border-b border-[#d9a65a]/20 pb-2">5. Gestão de Cancelamentos (Logs)</h2>
+              <p>Quando uma encomenda é ativamente <strong>cancelada</strong> pelo utilizador no Painel de Cliente, a operação é devidamente executada, travando o prosseguimento da mesma. No entanto, por razões associadas a métricas de segurança, prevenção de comportamentos fraudulentos e arquivo fiscal, os metadados de pedidos cancelados transitam para um histórico inativo e seguro (Read-Only) não sendo apagados instantaneamente das tabelas primárias de suporte.</p>
+            </section>
           </div>
         </motion.div>
       </div>

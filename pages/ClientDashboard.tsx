@@ -2,9 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '../services/supabase';
 import { Language, translations } from '../translations';
 import { useNavigate } from 'react-router-dom';
-import { ShoppingBag, LogOut, Clock, CheckCircle, XCircle, ChevronRight, MessageSquare, Loader, PenBox, User, RotateCcw, HelpCircle } from 'lucide-react';
+import { ShoppingBag, LogOut, Clock, CheckCircle, XCircle, ChevronRight, MessageSquare, Loader, PenBox, User, RotateCcw, HelpCircle, Ticket, Smartphone, UserCheck } from 'lucide-react';
 import { useCart } from '../context/CartContext';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { sendEmail } from '../services/email';
 import { sendSMS } from '../services/sms';
 import { logAudit } from '../services/audit';
@@ -15,11 +15,17 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
     const [user, setUser] = useState<any>(null);
     const [orders, setOrders] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [needsPhonePrompt, setNeedsPhonePrompt] = useState(false);
+    const [googlePhone, setGooglePhone] = useState('');
+    const [isSubmittingPhone, setIsSubmittingPhone] = useState(false);
     const [supportMsg, setSupportMsg] = useState('');
     const [isSubmittingSupport, setIsSubmittingSupport] = useState(false);
     const [supportStatus, setSupportStatus] = useState<'idle' | 'success' | 'error'>('idle');
     const { addToCart } = useCart();
     const navigate = useNavigate();
+    const [activeTicket, setActiveTicket] = useState<any>(null);
+    const [ticketLoading, setTicketLoading] = useState(false);
+    const [peopleAhead, setPeopleAhead] = useState(0);
 
     useEffect(() => {
         window.scrollTo(0, 0);
@@ -70,7 +76,12 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
 
                 const finalIdentifier = customerRecord?.contact_no || authIdentifier;
 
-                setUser({ ...su, phone: finalIdentifier, isGoogle: su.app_metadata?.provider === 'google' });
+                const isGoogle = su.app_metadata?.provider === 'google';
+                if (isGoogle && (!customerRecord?.contact_no || customerRecord.contact_no.includes('@'))) {
+                    setNeedsPhonePrompt(true);
+                }
+
+                setUser({ ...su, phone: finalIdentifier, isGoogle });
                 fetchOrders(finalIdentifier);
 
                 if (customerRecord) {
@@ -103,6 +114,125 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
         };
         checkUser();
     }, [navigate]);
+
+    useEffect(() => {
+        if (!user?.phone && !user?.id) return;
+
+        fetchActiveTicket();
+
+        const channel = supabase
+            .channel('customer-ticket')
+            .on(
+                'postgres_changes',
+                { 
+                    event: '*', 
+                    schema: 'public', 
+                    table: 'queue_tickets',
+                    filter: user.id ? `user_id=eq.${user.id}` : `phone_number=eq.${user.phone}`
+                },
+                (payload) => {
+                    if (payload.eventType === 'DELETE') {
+                        setActiveTicket(null);
+                    } else {
+                        const ticket = payload.new as any;
+                        if (ticket.status === 'completed' || ticket.status === 'skipped') {
+                            setActiveTicket(ticket);
+                        } else {
+                            setActiveTicket(ticket);
+                        }
+                    }
+                }
+            )
+            .subscribe();
+
+        return () => { supabase.removeChannel(channel); };
+    }, [user?.phone, user?.id]);
+
+    useEffect(() => {
+        if (!user?.phone) return;
+
+        const localNumber = user.phone.replace(/\D/g, '').slice(-9);
+
+        const channel = supabase
+            .channel('customer-orders')
+            .on(
+                'postgres_changes',
+                { 
+                    event: 'UPDATE', 
+                    schema: 'public', 
+                    table: 'orders',
+                    filter: `customer_phone=ilike.%${localNumber}%`
+                },
+                (payload) => {
+                    const updatedOrder = payload.new as any;
+                    setOrders(prev => prev.map(o => o.id === updatedOrder.id ? { ...o, ...updatedOrder } : o));
+                }
+            )
+            .subscribe();
+
+        return () => { supabase.removeChannel(channel); };
+    }, [user?.phone]);
+
+    useEffect(() => {
+        if (activeTicket?.status !== 'waiting') return;
+
+        const checkAhead = async () => {
+            const { count } = await supabase
+                .from('queue_tickets')
+                .select('*', { count: 'exact', head: true })
+                .eq('status', 'waiting')
+                .lt('created_at', activeTicket.created_at);
+            if (count !== null) setPeopleAhead(count);
+        };
+
+        checkAhead();
+        const interval = setInterval(checkAhead, 10000);
+        return () => clearInterval(interval);
+    }, [activeTicket]);
+
+    const fetchActiveTicket = async () => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        let query = supabase
+            .from('queue_tickets')
+            .select('*')
+            .gte('created_at', today.toISOString())
+            .in('status', ['waiting', 'calling'])
+            .order('created_at', { ascending: false })
+            .limit(1);
+        
+        if (user?.id) {
+            query = query.eq('user_id', user.id);
+        } else {
+            query = query.eq('phone_number', user?.phone);
+        }
+
+        const { data } = await query;
+        if (data && data.length > 0) {
+            setActiveTicket(data[0]);
+        }
+    };
+
+    const handleRequestTicket = async (priority: boolean = false) => {
+        setTicketLoading(true);
+        try {
+            const { data, error } = await supabase.rpc('generate_queue_ticket', {
+                p_phone: user?.phone || null,
+                p_user_id: user?.id || null,
+                p_priority: priority
+            });
+
+            if (error) throw error;
+            if (data && data.length > 0) {
+                setActiveTicket(data[0]);
+            }
+        } catch (error: any) {
+            alert(language === 'en' ? 'Error requesting ticket: ' + error.message : 'Erro ao solicitar senha: ' + error.message);
+        } finally {
+            setTicketLoading(false);
+        }
+    };
 
     const [customerData, setCustomerData] = useState<any>(null);
     const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
@@ -162,6 +292,50 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
             console.error('Error fetching past orders:', error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleGooglePhoneSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsSubmittingPhone(true);
+        try {
+            let formattedPhone = googlePhone.replace(/\D/g, '');
+            if (formattedPhone.length >= 9) {
+                if (!formattedPhone.startsWith('258')) {
+                    formattedPhone = '258' + formattedPhone;
+                }
+            } else {
+                throw new Error(language === 'en' ? 'Invalid phone number.' : 'Número de telemóvel inválido.');
+            }
+
+            // Check if phone already registered
+            const { data: existing } = await supabase.from('customers').select('*').eq('contact_no', formattedPhone).limit(1);
+            if (existing && existing.length > 0) {
+                throw new Error(language === 'en' ? 'Number already registered! Please log out and sign in with this number.' : 'Número já registado! Por favor, saia e entre com este número (Palavra-passe ou OTP) em vez de usar o Google.');
+            }
+
+            const { error } = await supabase.from('customers').update({ 
+                contact_no: formattedPhone, whatsapp: formattedPhone 
+            }).eq('email', user?.email);
+
+            if (error) throw error;
+
+            setUser({ ...user, phone: formattedPhone });
+            setNeedsPhonePrompt(false);
+            
+            // Reload user data
+            const { data: updatedCustomer } = await supabase.from('customers').select('*').eq('contact_no', formattedPhone).single();
+            if (updatedCustomer) {
+                setCustomerData(updatedCustomer);
+                localStorage.setItem('pc_auth_phone', formattedPhone);
+                localStorage.setItem('pc_user_data', JSON.stringify(updatedCustomer));
+                window.dispatchEvent(new Event('pc_user_update'));
+                fetchOrders(formattedPhone);
+            }
+        } catch (err: any) {
+            alert(err.message);
+        } finally {
+            setIsSubmittingPhone(false);
         }
     };
 
@@ -270,6 +444,36 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
         }
     };
 
+    const handleCancelOrder = async (order: any) => {
+        if (!window.confirm(language === 'en' ? 'Are you sure you want to cancel this order?' : 'Tem a certeza que deseja cancelar esta encomenda?')) return;
+        
+        setLoading(true);
+        try {
+            const { error } = await supabase
+                .from('orders')
+                .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+                .eq('id', order.id)
+                .eq('status', 'pending');
+                
+            if (error) throw error;
+            
+            await logAudit({
+                action: 'ORDER_CANCELLED_BY_CLIENT',
+                entity_type: 'order',
+                entity_id: order.id,
+                details: { short_id: order.short_id || order.id.slice(0, 6) }
+            });
+
+            await fetchOrders(user?.phone);
+            alert(language === 'en' ? 'Order cancelled successfully.' : 'Encomenda cancelada com sucesso.');
+        } catch (err: any) {
+            console.error('Error cancelling order:', err);
+            alert(language === 'en' ? 'Failed to cancel the order. It might already be in preparation.' : 'Erro ao cancelar a encomenda. Pode já estar em preparação.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const AVATARS = [
         '/avatars/defi_male_1.png',
         '/avatars/defi_male_2.png',
@@ -338,11 +542,170 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
         }
     };
 
+    const ActiveOrderTracking: React.FC<{ orders: any[] }> = ({ orders }) => {
+        const activeOrders = orders.filter(o => 
+            ['pending', 'confirmed', 'kitchen', 'ready', 'delivering'].includes(o.status?.toLowerCase())
+        );
+
+        if (activeOrders.length === 0) return null;
+
+        const latestOrder = activeOrders[0];
+        const statusSteps = ['pending', 'kitchen', 'ready', 'delivered'];
+        
+        const getStatusIndex = (status: string) => {
+            const s = status?.toLowerCase();
+            if (s === 'pending') return 0;
+            if (s === 'kitchen' || s === 'confirmed') return 1;
+            if (s === 'ready' || s === 'delivering') return 2;
+            if (s === 'delivered' || s === 'completed') return 3;
+            return 0;
+        };
+
+        const currentIndex = getStatusIndex(latestOrder.status);
+
+        return (
+            <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border-2 border-[#d9a65a]/10 relative overflow-hidden"
+            >
+                <div className="absolute top-0 right-0 p-4">
+                    <motion.div 
+                        animate={{ scale: [1, 1.1, 1] }} 
+                        transition={{ repeat: Infinity, duration: 2 }}
+                        className="flex items-center gap-2 bg-amber-50 text-amber-600 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest"
+                    >
+                        <Clock className="w-3 h-3" />
+                        {language === 'en' ? 'Live Tracking' : 'Em Direto'}
+                    </motion.div>
+                </div>
+
+                <div className="flex items-center gap-4 mb-8">
+                    <div className="w-12 h-12 bg-[#3b2f2f] rounded-2xl flex items-center justify-center">
+                        <ShoppingBag className="w-6 h-6 text-[#d9a65a]" />
+                    </div>
+                    <div>
+                        <h2 className="font-serif text-2xl text-[#3b2f2f]">
+                            {language === 'en' ? 'Acompanhar Pedido' : 'Acompanhar Pedido'}
+                        </h2>
+                        <p className="text-sm text-gray-400 font-medium">#{latestOrder.short_id || latestOrder.id.slice(0, 6)}</p>
+                    </div>
+                </div>
+
+                {/* Stepper */}
+                <div className="relative flex justify-between items-center px-2">
+                    {/* Background Line */}
+                    <div className="absolute left-0 right-0 h-1 bg-gray-100 top-1/2 -translate-y-1/2 z-0" />
+                    {/* Active Line */}
+                    <motion.div 
+                        initial={{ width: 0 }}
+                        animate={{ width: `${(currentIndex / (statusSteps.length - 1)) * 100}%` }}
+                        className="absolute left-0 h-1 bg-[#d9a65a] top-1/2 -translate-y-1/2 z-0"
+                    />
+
+                    {statusSteps.map((s, idx) => {
+                        const isActive = idx <= currentIndex;
+                        const isCurrent = idx === currentIndex;
+                        
+                        let label = '';
+                        let icon = null;
+                        
+                        if (idx === 0) {
+                            label = language === 'en' ? 'Received' : 'Recebido';
+                            icon = <CheckCircle className={`w-5 h-5 ${isActive ? 'text-white' : 'text-gray-400'}`} />;
+                        } else if (idx === 1) {
+                            label = language === 'en' ? 'Kitchen' : 'Cozinha';
+                            icon = <PenBox className={`w-5 h-5 ${isActive ? 'text-white' : 'text-gray-400'}`} />;
+                        } else if (idx === 2) {
+                            label = language === 'en' ? 'Ready' : 'Pronto';
+                            icon = <RotateCcw className={`w-5 h-5 ${isActive ? 'text-white' : 'text-gray-400'}`} />;
+                        } else {
+                            label = language === 'en' ? 'Finalized' : 'Finalizado';
+                            icon = <CheckCircle className={`w-5 h-5 ${isActive ? 'text-white' : 'text-gray-400'}`} />;
+                        }
+
+                        return (
+                            <div key={idx} className="relative z-10 flex flex-col items-center gap-3">
+                                <motion.div 
+                                    animate={isCurrent ? { scale: [1, 1.2, 1] } : {}}
+                                    transition={{ repeat: Infinity, duration: 2 }}
+                                    className={`w-10 h-10 rounded-full flex items-center justify-center border-4 ${isActive ? 'bg-[#d9a65a] border-[#fcf7f2]' : 'bg-white border-gray-100 shadow-sm'}`}
+                                >
+                                    {icon}
+                                </motion.div>
+                                <span className={`text-[10px] font-bold uppercase tracking-widest ${isActive ? 'text-[#3b2f2f]' : 'text-gray-400'}`}>
+                                    {label}
+                                </span>
+                            </div>
+                        );
+                    })}
+                </div>
+
+                {latestOrder.status === 'delivering' && (
+                    <div className="mt-8 p-4 bg-green-50 rounded-2xl flex items-center gap-4 border border-green-100 animate-pulse">
+                        <div className="w-10 h-10 bg-green-500 rounded-xl flex items-center justify-center">
+                            <Smartphone className="w-5 h-5 text-white" />
+                        </div>
+                        <div>
+                            <p className="text-green-700 font-bold text-sm">
+                                {language === 'en' ? 'Driver is on the way!' : 'O estafeta está a caminho!'}
+                            </p>
+                            <p className="text-green-600/70 text-xs font-medium">
+                                {language === 'en' ? 'Keep your phone nearby.' : 'Mantenha o seu telemóvel por perto.'}
+                            </p>
+                        </div>
+                    </div>
+                )}
+            </motion.div>
+        );
+    };
+
     if (loading) return (
         <div className="min-h-screen flex items-center justify-center bg-[#f7f1eb]">
             <Loader className="w-12 h-12 text-[#d9a65a] animate-spin" />
         </div>
     );
+
+    if (needsPhonePrompt) {
+        return (
+            <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+                <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 text-center"
+                >
+                    <div className="w-16 h-16 bg-[#f7f1eb] rounded-full flex items-center justify-center mx-auto mb-6">
+                        <MessageSquare className="w-8 h-8 text-[#d9a65a]" />
+                    </div>
+                    <h2 className="font-serif text-2xl text-[#3b2f2f] mb-4">
+                        {language === 'en' ? 'Confirm your Phone Number' : 'Confirme o seu Telemóvel'}
+                    </h2>
+                    <p className="text-gray-500 mb-6 text-sm">
+                        {language === 'en' 
+                            ? 'Please provide your WhatsApp number so we can notify you about your order status.' 
+                            : 'Por favor, introduza o seu número de WhatsApp para podermos notificar sobre o estado dos seus pedidos.'}
+                    </p>
+                    <form onSubmit={handleGooglePhoneSubmit} className="space-y-4">
+                        <input
+                            type="tel"
+                            required
+                            value={googlePhone}
+                            onChange={(e) => setGooglePhone(e.target.value)}
+                            placeholder="84/85 xxx xxxx"
+                            className="w-full p-4 rounded-xl border border-gray-200 focus:border-[#d9a65a] focus:ring-2 focus:ring-[#d9a65a]/20 outline-none transition-all text-center text-lg"
+                        />
+                        <button
+                            type="submit"
+                            disabled={isSubmittingPhone || googlePhone.length < 9}
+                            className="w-full bg-[#3b2f2f] text-[#d9a65a] py-4 rounded-xl font-bold uppercase tracking-widest hover:bg-[#d9a65a] hover:text-[#3b2f2f] transition-all flex justify-center items-center disabled:opacity-70"
+                        >
+                            {isSubmittingPhone ? <Loader className="w-6 h-6 animate-spin" /> : (language === 'en' ? 'Confirm Details' : 'Confirmar Dados')}
+                        </button>
+                    </form>
+                </motion.div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-[#f7f1eb] pt-28 pb-12 px-4 md:px-8">
@@ -552,6 +915,86 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                     </div>
                 )}
 
+                {/* Active Order Tracking */}
+                <ActiveOrderTracking orders={orders} />
+
+                {/* Queue Ticket Section */}
+                <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-[#d9a65a]/20">
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                        <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 bg-[#d9a65a]/10 rounded-2xl flex items-center justify-center">
+                                <Ticket className="w-6 h-6 text-[#d9a65a]" />
+                            </div>
+                            <div>
+                                <h2 className="font-serif text-2xl text-[#3b2f2f]">{language === 'en' ? 'Service Queue' : 'Fila de Atendimento'}</h2>
+                                <p className="text-sm text-gray-500">{language === 'en' ? 'Get your ticket and wait comfortably' : 'Tire a sua senha e aguarde confortavelmente'}</p>
+                            </div>
+                        </div>
+
+                        {!activeTicket ? (
+                            <div className="flex flex-col sm:flex-row gap-2">
+                                <button 
+                                    onClick={() => handleRequestTicket(false)}
+                                    disabled={ticketLoading}
+                                    className="bg-[#3b2f2f] text-[#d9a65a] px-6 py-3 rounded-xl font-bold uppercase tracking-widest text-[10px] flex items-center gap-2 hover:bg-[#2a2121] transition-all shadow-lg active:scale-95 disabled:opacity-50"
+                                >
+                                    <Ticket className="w-4 h-4" />
+                                    {language === 'en' ? 'Normal' : 'Normal'}
+                                </button>
+                                <button 
+                                    onClick={() => handleRequestTicket(true)}
+                                    disabled={ticketLoading}
+                                    className="bg-amber-500/10 text-amber-600 border border-amber-500/20 px-4 py-3 rounded-xl font-bold uppercase tracking-widest text-[10px] flex items-center gap-2 hover:bg-amber-500/20 transition-all active:scale-95 disabled:opacity-50"
+                                >
+                                    <UserCheck className="w-4 h-4" />
+                                    {language === 'en' ? 'Priority' : 'Prioritária'}
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="w-full md:w-auto flex items-center gap-4 bg-[#f7f1eb] p-3 rounded-2xl border border-[#d9a65a]/30">
+                                <div className="text-center px-4 border-r border-[#d9a65a]/20">
+                                    <div className="flex flex-col items-center">
+                                        <p className="text-[10px] font-bold text-[#d9a65a] uppercase tracking-tighter">{language === 'en' ? 'Your Ticket' : 'Sua Senha'}</p>
+                                        <div className="flex items-center gap-1">
+                                            <p className="text-2xl font-black font-mono text-[#3b2f2f]">{activeTicket.ticket_number}</p>
+                                            {activeTicket.is_priority && (
+                                                <div className="bg-amber-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded leading-none uppercase" title="Prioritária">P</div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="flex-1 px-2">
+                                    {activeTicket.status === 'waiting' && (
+                                        <div className="flex flex-col">
+                                            <span className="text-xs font-bold text-amber-600 flex items-center gap-1">
+                                                <Clock className="w-3 h-3" /> {language === 'en' ? 'Waiting' : 'Em Espera'}
+                                            </span>
+                                            <span className="text-[10px] text-gray-500">
+                                                {peopleAhead} {language === 'en' ? 'people ahead' : 'pessoas à frente'}
+                                            </span>
+                                        </div>
+                                    )}
+                                    {activeTicket.status === 'calling' && (
+                                        <div className="flex flex-col">
+                                            <span className="text-xs font-bold text-green-600 animate-pulse flex items-center gap-1">
+                                                <Ticket className="w-3 h-3" /> {language === 'en' ? 'Your Turn!' : 'Sua Vez!'}
+                                            </span>
+                                            <span className="text-[10px] text-green-700 font-bold uppercase tracking-tighter">
+                                                {activeTicket.counter || (language === 'en' ? 'Main Counter' : 'Balcão Principal')}
+                                            </span>
+                                        </div>
+                                    )}
+                                </div>
+                                {(activeTicket.status === 'completed' || activeTicket.status === 'skipped') && (
+                                    <button onClick={() => setActiveTicket(null)} className="text-gray-400 hover:text-gray-600 p-1">
+                                        <XCircle className="w-5 h-5" />
+                                    </button>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </div>
+
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     {/* Left: Orders History */}
                     <div className="lg:col-span-2 space-y-6">
@@ -616,6 +1059,15 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                                                 <HelpCircle className="w-4 h-4" />
                                                 {t.support}
                                             </button>
+                                            {order.status === 'pending' && (
+                                                <button
+                                                    onClick={() => handleCancelOrder(order)}
+                                                    className="flex-1 min-w-[140px] flex items-center justify-center gap-2 bg-red-50 text-red-500 py-3 rounded-xl font-bold hover:bg-red-100 transition-all text-xs uppercase tracking-widest border border-red-100"
+                                                >
+                                                    <XCircle className="w-4 h-4" />
+                                                    {language === 'en' ? 'Cancel' : 'Cancelar'}
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
                                 ))}

@@ -73,7 +73,12 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
     // Modal State
     const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
     const [prepTime, setPrepTime] = useState(15);
+    const [customPrepTime, setCustomPrepTime] = useState<string>('');
     const [isTimeModalOpen, setIsTimeModalOpen] = useState(false);
+
+    // Add Time State
+    const [isAddTimeModalOpen, setIsAddTimeModalOpen] = useState(false);
+    const [addTimeOrder, setAddTimeOrder] = useState<Order | null>(null);
 
     // Manual Order Modal
     const [isManualModalOpen, setIsManualModalOpen] = useState(false);
@@ -293,7 +298,13 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
     const handleAcceptClick = (order: Order) => {
         setSelectedOrder(order);
         setPrepTime(15); // Default
+        setCustomPrepTime(''); // Reset custom
         setIsTimeModalOpen(true);
+    };
+
+    const handleAddTimeClick = (order: Order) => {
+        setAddTimeOrder(order);
+        setIsAddTimeModalOpen(true);
     };
 
     const confirmAccept = async () => {
@@ -306,8 +317,9 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
         const { supabase } = await import('../services/supabase');
 
         // Calculate estimated time
+        const finalTime = customPrepTime ? parseInt(customPrepTime, 10) : prepTime;
         const now = new Date();
-        now.setMinutes(now.getMinutes() + prepTime);
+        now.setMinutes(now.getMinutes() + (isNaN(finalTime) ? 15 : finalTime));
 
         await supabase
             .from('orders')
@@ -318,6 +330,39 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
             .eq('id', selectedOrder.id);
 
         fetchOrders(); // Sync
+
+        // Notify prep time
+        const updatedOrder = { ...selectedOrder, status: 'processing', prep_time: finalTime };
+        import('../services/sms').then(m => m.notifyCustomer(updatedOrder, 'status_update')).catch(console.error);
+        import('../services/whatsapp').then(m => m.notifyCustomerOrderStatusWhatsApp(updatedOrder, 'processing')).catch(console.error);
+    };
+
+    const confirmAddTime = async (minutesToAdd: number) => {
+        if (!addTimeOrder || !addTimeOrder.estimated_ready_at) return;
+        setIsAddTimeModalOpen(false);
+
+        const currentReadyAt = new Date(addTimeOrder.estimated_ready_at);
+        currentReadyAt.setMinutes(currentReadyAt.getMinutes() + minutesToAdd);
+
+        // Optimistic
+        setOrders(prev => prev.map(o => o.id === addTimeOrder.id ? { ...o, estimated_ready_at: currentReadyAt.toISOString() } : o));
+
+        const { supabase } = await import('../services/supabase');
+        await supabase
+            .from('orders')
+            .update({
+                estimated_ready_at: currentReadyAt.toISOString()
+            })
+            .eq('id', addTimeOrder.id);
+
+        const reason = window.prompt("Motivo do atraso? (Ex: excesso de pedidos). Cancele ou deixe em branco para não notificar o cliente.");
+        
+        fetchOrders(); // Sync
+
+        if (reason && reason.trim() !== '') {
+            import('../services/sms').then(m => m.notifyCustomerDelay(addTimeOrder, minutesToAdd.toString(), reason)).catch(console.error);
+            import('../services/whatsapp').then(m => m.notifyCustomerDelayWhatsApp(addTimeOrder, minutesToAdd.toString(), reason)).catch(console.error);
+        }
     };
 
     const handleMarkReady = async (orderId: string) => {
@@ -637,12 +682,21 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
                                         </div>
                                     ))}
                                 </div>
-                                <button
-                                    onClick={() => handleMarkReady(order.id)}
-                                    className="w-full bg-green-600 text-white py-2 rounded font-bold uppercase text-sm hover:bg-green-500 transition-all flex items-center justify-center gap-2"
-                                >
-                                    <CheckCircle size={16} /> Pronto
-                                </button>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => handleAddTimeClick(order)}
+                                        className="w-1/3 bg-gray-600/40 text-gray-300 py-2 rounded font-bold uppercase text-xs hover:bg-gray-600 transition-all flex items-center justify-center gap-1"
+                                        title="Adicionar Tempo"
+                                    >
+                                        <Clock size={14} /> + Tempo
+                                    </button>
+                                    <button
+                                        onClick={() => handleMarkReady(order.id)}
+                                        className="w-2/3 bg-green-600 text-white py-2 rounded font-bold uppercase text-sm hover:bg-green-500 transition-all flex items-center justify-center gap-2"
+                                    >
+                                        <CheckCircle size={16} /> Pronto
+                                    </button>
+                                </div>
                             </motion.div>
                         ))}
                     </div>
@@ -784,20 +838,66 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
                             className="bg-[#2f3b3b] p-6 rounded-2xl w-full max-w-sm border border-gray-600"
                         >
                             <h3 className="text-xl font-bold text-white mb-4 text-center">Tempo de Preparo</h3>
-                            <div className="grid grid-cols-3 gap-3 mb-6">
+                            <div className="grid grid-cols-3 gap-3 mb-4">
                                 {[10, 15, 20, 30, 45, 60].map(time => (
                                     <button
                                         key={time}
-                                        onClick={() => setPrepTime(time)}
-                                        className={`py-3 rounded-lg font-bold border transition-all ${prepTime === time ? 'bg-[#d9a65a] text-[#3b2f2f] border-[#d9a65a]' : 'border-gray-600 text-gray-300 hover:border-[#d9a65a]'}`}
+                                        onClick={() => {
+                                            setPrepTime(time);
+                                            setCustomPrepTime(''); // Clear custom when picking preset
+                                        }}
+                                        className={`py-3 rounded-lg font-bold border transition-all ${prepTime === time && !customPrepTime ? 'bg-[#d9a65a] text-[#3b2f2f] border-[#d9a65a]' : 'border-gray-600 text-gray-300 hover:border-[#d9a65a]'}`}
                                     >
                                         {time} min
                                     </button>
                                 ))}
                             </div>
+                            <div className="mb-6">
+                                <label className="text-xs text-gray-400 mb-1 block">Tempo Personalizado (minutos)</label>
+                                <input
+                                    type="number"
+                                    min="1"
+                                    placeholder="Ex: 25"
+                                    className="w-full bg-[#1f2626] border border-gray-600 text-white p-3 rounded-lg focus:outline-none focus:border-[#d9a65a]"
+                                    value={customPrepTime}
+                                    onChange={(e) => setCustomPrepTime(e.target.value)}
+                                />
+                            </div>
                             <div className="flex gap-3">
                                 <button onClick={() => setIsTimeModalOpen(false)} className="flex-1 py-3 rounded-lg font-bold bg-transparent border border-gray-500 text-gray-300">Cancelar</button>
                                 <button onClick={confirmAccept} className="flex-1 py-3 rounded-lg font-bold bg-[#d9a65a] text-[#3b2f2f]">Confirmar</button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* Add Time Modal */}
+            <AnimatePresence>
+                {isAddTimeModalOpen && (
+                    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            className="bg-[#2f3b3b] p-6 rounded-2xl w-full max-w-sm border border-gray-600"
+                        >
+                            <h3 className="text-xl font-bold text-white mb-4 text-center">Adicionar Mais Tempo</h3>
+                            <p className="text-gray-400 text-sm mb-6 text-center">
+                                Quanto tempo quer acrescentar ao pedido <strong className="text-white">#{addTimeOrder?.orderId || addTimeOrder?.id.slice(0, 6)}</strong>?
+                            </p>
+                            <div className="grid grid-cols-2 gap-3 mb-6">
+                                {[5, 10, 15, 20, 30, 45].map(time => (
+                                    <button
+                                        key={time}
+                                        onClick={() => confirmAddTime(time)}
+                                        className="py-3 rounded-lg font-bold border border-gray-600 text-gray-300 hover:bg-[#d9a65a] hover:text-[#3b2f2f] hover:border-[#d9a65a] transition-all"
+                                    >
+                                        + {time} min
+                                    </button>
+                                ))}
+                            </div>
+                            <div className="flex gap-3">
+                                <button onClick={() => setIsAddTimeModalOpen(false)} className="w-full py-3 rounded-lg font-bold bg-transparent border border-gray-500 text-gray-300">Sair</button>
                             </div>
                         </motion.div>
                     </div>

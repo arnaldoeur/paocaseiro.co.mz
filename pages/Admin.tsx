@@ -21,14 +21,16 @@ const mapPinIcon = new L.DivIcon({
 });
 
 const QuillBase = ReactQuill as any;
-import { Eye, EyeOff, Sparkles, MessageSquare, Trash2, Upload, Send, CheckCircle, Package, TrendingUp, User, LogOut, ShoppingBag, Clock, Menu, X, ChevronRight, Search, Plus, Calendar, MapPin, Truck, Smartphone, Users, MessageCircle, Mail, Download, ChevronLeft, Loader, ShoppingCart, Lock, Unlock, XCircle, CreditCard, Banknote, Printer, FileText, Key, Edit3, Usb, Wifi, Share2, RefreshCw, UserPlus, Bell, Award, BarChart3, ShieldCheck, MailPlus, Box, Store, Zap, LineChart, AlertTriangle, Star, Save, Bot, RotateCw, Image as ImageIcon, Paperclip } from 'lucide-react';
+import { Eye, EyeOff, Sparkles, MessageSquare, Trash2, Upload, Send, CheckCircle, Package, TrendingUp, User, LogOut, ShoppingBag, Clock, Menu, X, ChevronRight, Search, Plus, Calendar, MapPin, Truck, Smartphone, Users, MessageCircle, Mail, Download, ChevronLeft, Loader, ShoppingCart, Lock, Unlock, XCircle, CreditCard, Banknote, Printer, FileText, Key, Edit3, Usb, Wifi, Share2, RefreshCw, UserPlus, Bell, Award, BarChart3, ShieldCheck, MailPlus, Box, Store, Zap, LineChart, AlertTriangle, Star, Save, Bot, RotateCw, Image as ImageIcon, Paperclip, ExternalLink, Tv, Settings, Sliders, LayoutDashboard } from 'lucide-react';
 import { AdminSupportAI } from '../components/AdminSupportAI';
 import { logAudit } from '../services/audit';
 import { Kitchen } from './Kitchen';
 import { AnalyticsChart } from '../components/Analytics/AnalyticsChart';
 import { AdminPerformanceView } from './admin/AdminPerformanceView';
 import { AdminAuditView } from './admin/AdminAuditView';
+import { QueueManager } from '../components/admin/QueueManager';
 import { AdminDriveView } from './admin/AdminDriveView';
+import { AdminBillingView } from '../components/admin/AdminBillingView';
 import { AdminNewsletterView } from '../components/admin/AdminNewsletterView';
 import { AdminEmailPipelineView } from '../components/admin/AdminEmailPipelineView';
 import { generateMasterReport } from '../services/reportGenerator';
@@ -138,7 +140,7 @@ export const Admin: React.FC = () => {
     const [showPassword, setShowPassword] = useState(false);
 
     // Sidebar/View State
-    const [activeView, setActiveView] = useState<'dashboard' | 'orders' | 'kitchen' | 'stock' | 'pos' | 'delivery' | 'settings' | 'customers' | 'team' | 'logistics' | 'support' | 'support_ai' | 'documents' | 'messages' | 'blog' | 'newsletter'>('dashboard');
+    const [activeView, setActiveView] = useState<'dashboard' | 'orders' | 'kitchen' | 'stock' | 'pos' | 'delivery' | 'settings' | 'customers' | 'team' | 'logistics' | 'support' | 'support_ai' | 'billing' | 'documents' | 'messages' | 'blog' | 'newsletter' | 'queue'>('dashboard');
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(window.innerWidth < 768);
     
     // Auto-close sidebar on mobile after navigation
@@ -517,7 +519,9 @@ export const Admin: React.FC = () => {
             const orderData = {
                 short_id: shortId,
                 customer_name: posCustomer?.name || 'Venda Local (Balcão)',
-                customer_phone: posCustomer?.contact_no || 'N/A',
+                customer_phone: posCustomer?.contact_no || '',
+                customer_email: posCustomer?.email || '',
+                customer_nuit: posCustomer?.nuit || '',
                 customer_id: posCustomer?.id || null,
                 total_amount: total,
                 status: 'completed',
@@ -1509,6 +1513,7 @@ export const Admin: React.FC = () => {
                 category: p.category,
                 inStock: p.is_available,
                 stockQuantity: Number(p.stock_quantity) || 0, // Fixed: UI uses stockQuantity
+                taxType: p.tax_type || 'incluso',
                 prepTime: p.prep_time,
                 deliveryTime: p.delivery_time,
                 image: p.image,
@@ -1627,6 +1632,7 @@ export const Admin: React.FC = () => {
             name: form.name.value,
             category: form.category.value,
             price: Number(form.price.value),
+            tax_type: form.taxType.value,
             stock_quantity: Number(form.stockQuantity.value) || 0,
             is_available: form.inStock.checked,
             prep_time: form.prepTime.value,
@@ -2406,7 +2412,8 @@ export const Admin: React.FC = () => {
             )}
 
             {/* Sidebar */}
-            <div className={`fixed md:relative top-0 left-0 h-full z-50 bg-[#3b2f2f] text-white transition-transform duration-300 md:transition-all ease-in-out flex flex-col justify-between shrink-0 shadow-2xl ${isSidebarCollapsed ? '-translate-x-full md:translate-x-0 md:w-20 md:p-4 md:items-center' : 'translate-x-0 w-72 p-6'}`}>
+            <div className={`fixed md:relative top-0 left-0 h-full z-50 bg-[#3b2f2f] text-white transition-transform duration-300 md:transition-all ease-in-out flex flex-col shrink-0 shadow-2xl ${isSidebarCollapsed ? '-translate-x-full md:translate-x-0 md:w-20 md:p-4 md:items-center' : 'translate-x-0 w-72 p-6'}`}>
+                {/* Scrollable Navigation Area */}
                 <div className="flex-1 flex flex-col min-h-0 overflow-y-auto custom-scrollbar pr-1">
                     <div className={`flex items-center gap-3 mb-10 ${isSidebarCollapsed ? 'md:justify-center' : ''} relative hidden md:flex`}>
                         <img src="/logo_on_dark.png" alt="Pão Caseiro Logo" className={`${isSidebarCollapsed ? 'h-10 w-10' : 'h-16 w-16'} object-contain`} />
@@ -2423,6 +2430,7 @@ export const Admin: React.FC = () => {
                             {isSidebarCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
                         </button>
                     </div>
+
                     {/* Mobile Close Button Inside Sidebar */}
                     <div className="md:hidden flex items-center justify-between mb-8 pb-4 border-b border-white/10">
                         <span className="font-serif font-bold text-xl">Menu</span>
@@ -2430,98 +2438,175 @@ export const Admin: React.FC = () => {
                             <X size={24} />
                         </button>
                     </div>
+
                     <nav className="space-y-2">
                         {currentUserRole !== 'driver' && (
                             <>
-                                <button onClick={() => handleNavClick('dashboard')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeView === 'dashboard' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'md:justify-center' : ''}`} title="Dashboard"><TrendingUp size={22} className="shrink-0" /> <span className={isSidebarCollapsed ? 'md:hidden' : ''}>Dashboard</span></button>
-                                <button onClick={() => handleNavClick('orders')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeView === 'orders' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'md:justify-center' : ''}`} title="Pedidos"><CheckCircle size={22} className="shrink-0" /> <span className={isSidebarCollapsed ? 'md:hidden' : ''}>Pedidos</span></button>
-                                <button onClick={() => handleNavClick('stock')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeView === 'stock' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'md:justify-center' : ''}`} title="Stock"><Package size={22} className="shrink-0" /> <span className={isSidebarCollapsed ? 'md:hidden' : ''}>Stock</span></button>
-                                <button onClick={() => handleNavClick('pos')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeView === 'pos' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'md:justify-center' : ''}`} title="POS / Balcão"><Smartphone size={22} className="shrink-0" /> <span className={isSidebarCollapsed ? 'md:hidden' : ''}>POS / Balcão</span></button>
-                                <button onClick={() => handleNavClick('documents')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeView === 'documents' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'md:justify-center' : ''}`} title="Repositório de Documentos"><FileText size={22} className="shrink-0" /> <span className={isSidebarCollapsed ? 'md:hidden' : ''}>Documentos</span></button>
+                                <button onClick={() => handleNavClick('dashboard')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeView === 'dashboard' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'md:justify-center' : ''}`} title="Painel Principal">
+                                    <LayoutDashboard size={22} className="shrink-0" /> 
+                                    <span className={isSidebarCollapsed ? 'md:hidden' : ''}>Painel Principal</span>
+                                </button>
+                                
+                                <button onClick={() => handleNavClick('orders')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeView === 'orders' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'md:justify-center' : ''}`} title="Encomendas">
+                                    <ShoppingBag size={22} className="shrink-0" /> 
+                                    <span className={isSidebarCollapsed ? 'md:hidden' : ''}>Encomendas</span>
+                                </button>
+
+                                <button onClick={() => handleNavClick('stock')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeView === 'stock' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'md:justify-center' : ''}`} title="Stock">
+                                    <Package size={22} className="shrink-0" /> 
+                                    <span className={isSidebarCollapsed ? 'md:hidden' : ''}>Stock</span>
+                                </button>
+
+                                <button onClick={() => handleNavClick('pos')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeView === 'pos' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'md:justify-center' : ''}`} title="POS / Balcão">
+                                    <Smartphone size={22} className="shrink-0" /> 
+                                    <span className={isSidebarCollapsed ? 'md:hidden' : ''}>POS / Balcão</span>
+                                </button>
+
+                                <button onClick={() => handleNavClick('billing')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeView === 'billing' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'md:justify-center' : ''}`} title="Faturação">
+                                    <Banknote size={22} className="shrink-0" /> 
+                                    <span className={isSidebarCollapsed ? 'md:hidden' : ''}>Faturação</span>
+                                </button>
+
+                                <button onClick={() => handleNavClick('documents')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeView === 'documents' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'md:justify-center' : ''}`} title="Documentos">
+                                    <FileText size={22} className="shrink-0" /> 
+                                    <span className={isSidebarCollapsed ? 'md:hidden' : ''}>Documentos</span>
+                                </button>
                             </>
                         )}
+
                         {(currentUserRole === 'admin' || currentUserRole === 'it') && (
                             <>
-                                <button onClick={() => handleNavClick('customers')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeView === 'customers' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'md:justify-center' : ''}`} title="Clientes"><Users size={22} className="shrink-0" /> <span className={isSidebarCollapsed ? 'md:hidden' : ''}>Clientes</span></button>
+                                <button onClick={() => handleNavClick('customers')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeView === 'customers' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'md:justify-center' : ''}`} title="Clientes">
+                                    <Users size={22} className="shrink-0" /> 
+                                    <span className={isSidebarCollapsed ? 'md:hidden' : ''}>Clientes</span>
+                                </button>
+
+                                <div className={`pt-4 pb-2 border-t border-white/5 ${isSidebarCollapsed ? 'hidden' : 'block'}`}>
+                                    <p className="text-[10px] font-black text-[#d9a65a] uppercase tracking-[0.2em] px-3 mb-2 opacity-50">Sistemas de Filas</p>
+                                </div>
+
+                                <button onClick={() => handleNavClick('queue')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeView === 'queue' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'md:justify-center' : ''}`} title="Gestão de Filas">
+                                    <Clock size={22} className="shrink-0" /> 
+                                    <span className={isSidebarCollapsed ? 'md:hidden' : ''}>Gestão de Filas</span>
+                                </button>
+
+                                <div className={`grid ${isSidebarCollapsed ? 'grid-cols-1' : 'grid-cols-2'} gap-2`}>
+                                    <button onClick={() => window.open('/get-ticket', '_blank')} className={`flex items-center gap-2 p-2.5 rounded-xl font-bold transition-all text-gray-400 hover:text-white hover:bg-white/5 ${isSidebarCollapsed ? 'md:justify-center' : ''}`} title="Kiosk (Senhas)">
+                                        <ExternalLink size={18} className="shrink-0" /> 
+                                        <span className={`text-xs ${isSidebarCollapsed ? 'md:hidden' : ''}`}>Kiosk</span>
+                                    </button>
+
+                                    <button onClick={() => window.open('/tv-senhas', '_blank')} className={`flex items-center gap-2 p-2.5 rounded-xl font-bold transition-all text-gray-400 hover:text-white hover:bg-white/5 ${isSidebarCollapsed ? 'md:justify-center' : ''}`} title="TV Display">
+                                        <Tv size={18} className="shrink-0" /> 
+                                        <span className={`text-xs ${isSidebarCollapsed ? 'md:hidden' : ''}`}>TV Display</span>
+                                    </button>
+                                </div>
                             </>
                         )}
+
                         {currentUserRole !== 'driver' && (
-                            <button onClick={() => handleNavClick('messages')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeView === 'messages' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'md:justify-center' : ''}`} title="Mensagens"><MessageSquare size={22} className="shrink-0" /> <span className={isSidebarCollapsed ? 'md:hidden' : ''}>Mensagens {messages.some(m => m.status === 'unread') && <span className="w-2 h-2 bg-red-500 rounded-full inline-block ml-2"></span>}</span></button>
+                            <button onClick={() => handleNavClick('messages')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeView === 'messages' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'md:justify-center' : ''}`} title="Mensagens">
+                                <Mail size={22} className="shrink-0" /> 
+                                <span className={isSidebarCollapsed ? 'md:hidden' : ''}>Mensagens {messages.some(m => m.status === 'unread') && <span className="w-2 h-2 bg-red-500 rounded-full inline-block ml-2"></span>}</span>
+                            </button>
                         )}
-                        <button onClick={() => handleNavClick('support_ai')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeView === 'support_ai' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'md:justify-center' : ''}`} title="Suporte IT"><Sparkles size={22} className="shrink-0" /> <span className={isSidebarCollapsed ? 'md:hidden' : ''}>Suporte IT</span></button>
-                        <button onClick={() => handleNavClick('logistics')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeView === 'logistics' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'md:justify-center' : ''}`} title="Logística"><Truck size={22} className="shrink-0" /> <span className={isSidebarCollapsed ? 'md:hidden' : ''}>Logística</span></button>
-                        <button onClick={() => handleNavClick('kitchen')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeView === 'kitchen' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'md:justify-center' : ''}`} title="Cozinha (KDS)"><Menu size={22} className="shrink-0" /> <span className={isSidebarCollapsed ? 'md:hidden' : ''}>Cozinha (KDS)</span></button>
+
+                        <button onClick={() => handleNavClick('support_ai')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeView === 'support_ai' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'md:justify-center' : ''}`} title="Suporte IT">
+                            <Sparkles size={22} className="shrink-0" /> 
+                            <span className={isSidebarCollapsed ? 'md:hidden' : ''}>Suporte IT</span>
+                        </button>
+
+                        <button onClick={() => handleNavClick('logistics')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeView === 'logistics' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'md:justify-center' : ''}`} title="Logística">
+                            <Truck size={22} className="shrink-0" /> 
+                            <span className={isSidebarCollapsed ? 'md:hidden' : ''}>Logística</span>
+                        </button>
+
+                        <button onClick={() => handleNavClick('kitchen')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeView === 'kitchen' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'md:justify-center' : ''}`} title="Cozinha (KDS)">
+                            <LayoutDashboard size={22} className="shrink-0" /> 
+                            <span className={isSidebarCollapsed ? 'md:hidden' : ''}>Cozinha (KDS)</span>
+                        </button>
+
                         {(currentUserRole === 'admin' || currentUserRole === 'it') && (
-                            <button onClick={() => handleNavClick('blog')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeView === 'blog' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'md:justify-center' : ''}`} title="Blog / CMS"><FileText size={22} className="shrink-0" /> <span className={isSidebarCollapsed ? 'md:hidden' : ''}>Blog / CMS</span></button>
+                            <>
+                                <button onClick={() => handleNavClick('blog')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeView === 'blog' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'md:justify-center' : ''}`} title="Blog / CMS">
+                                    <FileText size={22} className="shrink-0" /> 
+                                    <span className={isSidebarCollapsed ? 'md:hidden' : ''}>Blog / CMS</span>
+                                </button>
+                                
+                                <button onClick={() => handleNavClick('settings')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeView === 'settings' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'md:justify-center' : ''}`} title="Definições">
+                                    <Settings size={22} className="shrink-0" /> 
+                                    <span className={isSidebarCollapsed ? 'md:hidden' : ''}>Definições</span>
+                                </button>
+                            </>
                         )}
-                        <button onClick={() => handleNavClick('settings')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeView === 'settings' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'md:justify-center' : ''}`} title="Definições"><Sparkles size={22} className="shrink-0" /> <span className={isSidebarCollapsed ? 'md:hidden' : ''}>Definições</span></button>
                     </nav>
                 </div>
-                <div className="flex flex-col gap-4">
-                    <button
-                        onClick={isUserCheckedIn ? handleCheckOut : handleCheckIn}
+
+                {/* Sidebar Footer Section - Fixed at Bottom */}
+                <div className="flex flex-col gap-4 mt-auto pt-6 border-t border-white/5 bg-[#2d2424]/50 rounded-t-3xl p-4 shrink-0">
+                    <button 
+                        onClick={isUserCheckedIn ? handleCheckOut : handleCheckIn} 
                         disabled={isSubmitting}
-                        className={`flex items-center gap-3 w-full p-3 rounded-xl transition-all duration-300 ${isSidebarCollapsed ? 'md:justify-center' : ''} ${
-                            isUserCheckedIn 
-                                ? 'bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 border border-indigo-500/30' 
-                                : 'bg-red-500/20 text-red-300 hover:bg-red-500/30 border border-red-500/30'
-                        } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        className={`flex items-center gap-3 w-full p-3 rounded-xl transition-all duration-300 ${isSidebarCollapsed ? 'md:justify-center' : ''} ${isUserCheckedIn ? 'bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 border border-indigo-500/30' : 'bg-red-500/20 text-red-300 hover:bg-red-500/30 border border-red-500/30'} ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`} 
                         title={isUserCheckedIn ? 'Terminar Turno (Saída)' : 'Iniciar Turno (Entrada)'}
                     >
-                        <Clock size={22} className={`shrink-0 ${isUserCheckedIn ? 'animate-pulse' : ''}`} />
+                        <Clock size={22} className={`shrink-0 ${isUserCheckedIn ? 'animate-pulse' : ''}`} /> 
                         <div className={`flex flex-col text-left ${isSidebarCollapsed ? 'md:hidden' : ''}`}>
-                            <span className="text-[9px] font-black uppercase tracking-widest opacity-60 leading-none">
-                                Status Atual:
-                            </span>
-                            <span className="text-[11px] font-black uppercase tracking-wider leading-none mt-1">
-                                {isUserCheckedIn ? 'EM SERVIÇO (Sair)' : 'FORA DE SERVIÇO (Entrar)'}
-                            </span>
+                            <span className="text-[9px] font-black uppercase tracking-widest opacity-60 leading-none">Status Atual:</span>
+                            <span className="text-[11px] font-black uppercase tracking-wider leading-none mt-1">{isUserCheckedIn ? 'EM SERVIÇO (Sair)' : 'FORA DE SERVIÇO (Entrar)'}</span>
                         </div>
                     </button>
-                    <button onClick={handleLogout} className={`flex items-center gap-3 text-red-400 hover:text-red-300 transition-colors w-full p-3 hover:bg-white/5 rounded-xl ${isSidebarCollapsed ? 'md:justify-center' : ''}`} title="Sair">
-                        <LogOut size={22} className="shrink-0" />
+
+                    <button onClick={handleLogout} className={`flex items-center gap-3 text-red-400 hover:text-red-300 transition-colors w-full p-3 hover:bg-white/5 rounded-xl ${isSidebarCollapsed ? 'md:justify-center' : ''}`} title="Sair do Painel">
+                        <LogOut size={22} className="shrink-0" /> 
                         <span className={`font-bold uppercase tracking-widest text-[12px] ${isSidebarCollapsed ? 'md:hidden' : ''}`}>Sair do Painel</span>
                     </button>
-                    {/* Footer - New Logo */}
+
                     {!isSidebarCollapsed && (
-                        <div className="mt-8 pt-4 border-t border-gray-700 text-center flex flex-col items-center justify-center animate-fade-in">
-                            <img
-                                src="/logo_on_dark.png"
-                                alt="P\u00e3o Caseiro Logo"
-                                className="w-24 h-auto opacity-90 hover:opacity-100 transition-opacity drop-shadow-lg"
-                            />
-                            <p className="text-[10px] text-gray-500 mt-3 italic max-w-[150px] mx-auto leading-tight font-serif">
-                                "O Sabor que aquece o coração"
-                            </p>
+                        <div className="mt-4 pt-4 border-t border-gray-700/30 text-center flex flex-col items-center justify-center animate-fade-in">
+                            <img src="/logo_on_dark.png" alt="Pão Caseiro Logo" className="w-20 h-auto opacity-70 hover:opacity-100 transition-opacity drop-shadow-lg" />
+                            <p className="text-[9px] text-gray-500 mt-2 italic max-w-[150px] mx-auto leading-tight font-serif">"O sabor que aquece o coração"</p>
                         </div>
                     )}
                 </div>
             </div>
-            <div className={`flex-1 overflow-y-auto relative flex flex-col ${activeView === 'logistics' ? 'bg-white' : 'p-6 md:p-10'} pt-20 md:pt-10`}>
-                {/* Absolute Top Right Check-in Button Removed and Relocated to Sidebar */}
 
-                {/* Global Header for essential views */}
-                {['dashboard', 'orders', 'stock', 'documents', 'pos'].includes(activeView) && (
-                    <div className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 animate-fade-in relative border-b border-[#d9a65a]/10 pb-6">
-                        <div className="flex items-center gap-4">
-                            <div>
-                                <h2 className="text-2xl font-bold text-[#3b2f2f] mb-1 capitalize">
-                                    {activeView === 'dashboard' ? `Olá, ${adminUser.split(' ')[0]}` : activeView === 'pos' ? 'Ponto de Venda' : activeView}
-                                </h2>
-                                {activeView === 'dashboard' && <p className="text-gray-500 text-sm max-w-md italic">"{quote}"</p>}
-                            </div>
-                            {/* Check-In / Check-Out Global Button was moved to absolute top right */}                            {/* Printer Status Bubble */}
-                            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border ${isPrinterConnected ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'} transition-all duration-300 shadow-sm hidden sm:flex`}>
-                                <Printer size={14} className={isPrinterConnected ? 'animate-pulse' : ''} />
-                                <span className="text-[10px] font-bold uppercase tracking-wider">
-                                    {isPrinterConnected ? 'Impressora Pronta' : 'Impressora Offline'}
-                                </span>
-                            </div>
-                        </div>
+            <div className={`flex-1 overflow-y-auto relative flex flex-col ${activeView === 'logistics' ? 'bg-white' : 'p-6 md:p-10'} pt-20 md:pt-10 shadow-inner`}>
+                {/* Global Header */}
+                <div className="flex justify-between items-center mb-8 gap-4 hidden md:flex shrink-0">
+                    <div className="flex flex-col">
+                        <h1 className="text-3xl font-serif font-black text-[#3b2f2f] uppercase tracking-tighter">
+                            {activeView === 'dashboard' ? 'Painel de Controlo' : 
+                             activeView === 'orders' ? 'Gestão de Pedidos' :
+                             activeView === 'stock' ? 'Inventário e Stock' :
+                             activeView === 'customers' ? 'Base de Clientes' :
+                             activeView === 'pos' ? 'Ponto de Venda' :
+                             activeView === 'messages' ? 'Centro de Mensagens' :
+                             activeView === 'support_ai' ? 'Antigravity AI' :
+                             activeView === 'logistics' ? 'Logística e Entregas' :
+                             activeView === 'kitchen' ? 'Cozinha e KDS' :
+                             activeView === 'blog' ? 'Blog e CMS' :
+                             activeView.charAt(0).toUpperCase() + activeView.slice(1)}
+                        </h1>
+                        <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mt-1">
+                            {new Date().toLocaleDateString('pt-MZ', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                        </p>
                     </div>
-                )}
+                    <div className="flex items-center gap-4">
+                        <div className="flex flex-col items-end">
+                            <span className="font-black text-[#3b2f2f] text-sm uppercase">{username}</span>
+                            <span className="text-[10px] text-[#d9a65a] font-bold uppercase tracking-tighter">{currentUserRole}</span>
+                        </div>
+                        <button 
+                            onClick={handleLogout}
+                            className="bg-red-50 text-red-600 p-3 rounded-2xl hover:bg-red-600 hover:text-white transition-all shadow-sm group"
+                            title="Sair"
+                        >
+                            <LogOut size={20} className="group-hover:rotate-12 transition-transform" />
+                        </button>
+                    </div>
+                </div>
 
-                {/* Dashboard View */}
                 {activeView === 'dashboard' && (
                     <div className="space-y-6 animate-fade-in">
                         {/* Compact Stats Row */}
@@ -4888,6 +4973,11 @@ export const Admin: React.FC = () => {
                         </div>
                     )
                 }
+                {
+                    activeView === 'billing' && (
+                        <AdminBillingView />
+                    )
+                }
                 {/* Documents / Receipts View */}
                 {
                     activeView === 'documents' && (
@@ -5054,6 +5144,9 @@ export const Admin: React.FC = () => {
                             </div>
                         </div>
                     )
+                }
+                {
+                    activeView === 'queue' && <QueueManager />
                 }
                 {
                     activeView === 'settings' && (
@@ -6225,6 +6318,17 @@ export const Admin: React.FC = () => {
                                 <form onSubmit={handleSaveProduct} className="space-y-3">
                                     <input name="name" defaultValue={currentProduct?.name} placeholder="Nome do Produto" className="w-full p-2 border rounded-lg focus:border-[#d9a65a] outline-none" required />
                                     <input name="category" defaultValue={currentProduct?.category || 'Pães'} placeholder="Categoria" className="w-full p-2 border rounded-lg focus:border-[#d9a65a] outline-none" required />
+                                    
+                                    {/* IVA Configuration */}
+                                    <div className="flex flex-col mb-1">
+                                        <label className="text-xs font-bold text-gray-500 uppercase mb-1">Configuração de IVA</label>
+                                        <select name="taxType" defaultValue={currentProduct?.taxType || 'incluso'} className="w-full p-2 border rounded-lg focus:border-[#d9a65a] outline-none text-sm bg-white">
+                                            <option value="incluso">IVA Incluso (Stock/Pronto)</option>
+                                            <option value="exclusivo">IVA Exclusivo (Acréscimo +16%)</option>
+                                            <option value="isento">Isento de IVA</option>
+                                        </select>
+                                    </div>
+
                                     <div className="grid grid-cols-2 gap-2">
                                         <input name="price" type="number" defaultValue={currentProduct?.price} placeholder="Preço Base (MT)" className="w-full p-2 border rounded-lg focus:border-[#d9a65a] outline-none" required />
                                         <div className="grid grid-cols-2 gap-2">
@@ -6689,13 +6793,13 @@ export const Admin: React.FC = () => {
                         </div>
                     )
                 }
-            </div >
-        </div >
+            </div>
+            </div>
     );
 };
 
 
-const AdminBlogView: React.FC = () => {
+function AdminBlogView() {
     const [posts, setPosts] = useState<any[]>([]);
     const [comments, setComments] = useState<any[]>([]);
     const [mediaFiles, setMediaFiles] = useState<any[]>([]);

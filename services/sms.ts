@@ -186,7 +186,11 @@ export const notifyDriverNewDelivery = async (driver: any, order: any) => {
     if (!driver.phone) return;
 
     const itemsList = order.items.map((i: any) => `- ${i.quantity}x ${formatProductName(i.name)}`).join('\n');
-    const message = `Pão Caseiro (ENTREGA): #${order.short_id || order.orderId}\nCliente: ${order.customer_name || order.customer?.name}\nEndereço: ${order.customer_address || order.customer?.address}\nItems:\n${itemsList}\nOTP: ${order.otp}\nO sabor que aquece o coração!`;
+    let addressStr = order.customer_address || order.customer?.address || 'Ver painel';
+    const coords = order.delivery_coordinates?.replace(/[()]/g, '');
+    const mapLink = coords ? `\nMapa: https://maps.google.com/?q=${coords}` : '';
+    
+    const message = `Pão Caseiro (ENTREGA): #${order.short_id || order.orderId}\nCliente: ${order.customer_name || order.customer?.name}\nEndereço: ${addressStr}${mapLink}\nItems:\n${itemsList}\nOTP: ${order.otp}\nO sabor que aquece o seu coracao!`;
 
     // Send via SMS
     await sendSMS(driver.phone, message.substring(0, 160));
@@ -196,30 +200,65 @@ export const notifyDriverNewDelivery = async (driver: any, order: any) => {
     return `https://wa.me/258${driver.phone.replace(/[^0-9]/g, '').slice(-9)}?text=${whatsappMsg}`;
 };
 
+const getFirstName = (order: any) => {
+    const fullName = order.customer_name || order.customer?.name || 'Cliente';
+    if (fullName.toLowerCase() === 'cliente') return 'Cliente';
+    return fullName.trim().split(' ')[0];
+};
+
 export const notifyCustomer = async (order: any, type: 'order_confirmed' | 'status_update', driver?: any) => {
     if (!order.customer_phone && (!order.customer || !order.customer.phone)) return;
     const phone = order.customer_phone || order.customer.phone;
 
-    const domain = window.location.host;
-    const receiptLink = `${domain}/order-receipt/${order.short_id || order.orderId}`;
+    let baseUrl = 'https://paocaseiro.co.mz';
+    if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1' && !window.location.hostname.startsWith('192.168.')) {
+        baseUrl = window.location.origin;
+    }
+    const receiptLink = `${baseUrl}/order-receipt/${order.short_id || order.orderId || order.id}`;
     let message = '';
+    
+    const firstName = getFirstName(order);
+    const shortId = order.short_id || order.orderId || order.id?.slice(-6).toUpperCase() || '';
 
     if (type === 'order_confirmed') {
-        message = `Pão Caseiro: Pedido #${order.short_id || order.orderId} recebido! O sabor que aquece o coração na sua mesa. Recibo: ${receiptLink}`;
+        const total = order.total_amount || order.total || 0;
+        const items = order.items || [];
+        const itemsText = items.length > 0 ? items.map((i: any) => `${i.quantity}x ${i.name || i.product_name} - ${i.price} MT`).join('\n') : '';
+        
+        message = `Ola ${firstName},\n\nMuito obrigado.\nA sua encomenda foi confirmada com sucesso.\n\nDetalhes do Pedido N. ${shortId}\n\nArtigos:\n${itemsText}\n\nTotal do recibo: ${total} MT\n\nVerifique o recibo atraves do link:\n${receiptLink}`;
     } else {
-        if (order.status === 'delivering') {
-            message = `Pão Caseiro: O seu pedido #${order.short_id || order.orderId} já saiu e está a caminho! Sabor que aquece o coração a chegar.`;
-        } else if (order.status === 'arrived') {
-            message = `Pão Caseiro: O nosso entregador ${driver?.name || ''} já chegou à sua localização! Pode ligar para ${driver?.phone || ''}.`;
-        } else if (order.status === 'completed') {
-            message = `Pão Caseiro: Pedido #${order.short_id || order.orderId} entregue com sucesso. Bom apetite com o sabor que aquece o nosso coração!`;
-        } else {
-            const statusText = order.status === 'cancelled' ? 'Cancelado' : order.status;
-            message = `Pão Caseiro: Pedido #${order.short_id || order.orderId} atualizado para ${statusText}. Detalhes: ${receiptLink}`;
+        let statusText = order.status;
+        let extra = '';
+        if (order.status === 'kitchen') { 
+            statusText = 'Na Cozinha'; 
+            extra = '\nO seu pedido ja esta na cozinha a ser preparado.'; 
         }
+        else if (order.status === 'processing') { 
+            statusText = 'Em Preparacao'; 
+            extra = order.prep_time 
+                ? `\nO seu pedido estara pronto em aproximadamente ${order.prep_time} minutos.`
+                : '\nA sua encomenda esta a ser preparada.'; 
+        }
+        else if (order.status === 'ready') { statusText = 'Pronto'; extra = order.delivery_type === 'delivery' ? '\nA sua encomenda ja esta a caminho de si!' : '\nA sua encomenda ja se encontra pronta e a sua espera!'; }
+        else if (order.status === 'delivering') { statusText = 'Em Transito'; extra = '\nO motorista ja esta a caminho.'; }
+        else if (order.status === 'arrived') { statusText = 'O Motorista Chegou'; extra = '\nPor favor, prepare-se para o receber com o seu Codigo PIN.'; }
+        else if (order.status === 'completed') { statusText = 'Concluido'; extra = '\nA sua encomenda foi entregue. Bom apetite.'; }
+        else if (order.status === 'cancelled') { statusText = 'Cancelado'; extra = '\nA sua encomenda foi cancelada.'; }
+
+        message = `O estado do seu pedido da Pao Caseiro foi atualizado:\n\nPedido N. ${shortId}\nNovo Estado: ${statusText}${extra}\n\nAcompanhe: ${receiptLink}`;
     }
 
-    return await sendSMS(phone, message.substring(0, 160));
+    // Pass the full message string (no hard 160 char limit as modern SMS providers support long SMS concatenation)
+    return await sendSMS(phone, message);
+};
+
+export const notifyCustomerDelay = async (order: any, delayMinutes: string, reason: string) => {
+    const phone = order.customer_phone || order.phone || order.customer?.phone;
+    if (!phone) return;
+    const shortId = order.short_id || order.orderId || order.id?.slice(-6).toUpperCase() || '';
+
+    const message = `Pao Caseiro: Pedido N. ${shortId}\nSinceras desculpas, o seu pedido vai demorar mais ${delayMinutes} minutos devido a: ${reason}.\nAgradecemos a compreensao!\nO sabor que aquece o seu coracao!`;
+    return await sendSMS(phone, message);
 };
 
 export const notifyPaymentConfirmed = async (orderId: string, phone: string, shortId?: string) => {
@@ -231,7 +270,7 @@ export const notifyPaymentConfirmed = async (orderId: string, phone: string, sho
 
 export const notifyRegistration = async (phone: string, name: string) => {
     const firstName = name.split(' ')[0] || 'Cliente';
-    const message = `Bem-vindo à Pão Caseiro, ${firstName}! Registo concluído. O melhor pão de Lichinga agora a um clique!`;
+    const message = `Bem-vindo a Pao Caseiro, ${firstName}! Registo concluido com sucesso.\nO sabor que aquece o seu coracao!`;
     return await sendSMS(phone, message.substring(0, 160));
 };
 
@@ -253,13 +292,16 @@ export const notifyDriverAssigned = async (driver: any, order: any) => {
     const customerPhone = order.customer_phone || order.customer?.phone || '';
 
     // Short SMS (160 chars)
-    const smsMsg = `Pão Caseiro: Nova entrega #${orderId}. Cliente: ${customerName} (${customerPhone}). OTP: ${order.otp}. Acesse o portal para detalhes.`.substring(0, 160);
+    const coords = order.delivery_coordinates?.replace(/[()]/g, '');
+    const mapLink = coords ? ` Mapa: https://maps.google.com/?q=${coords}` : '';
+    
+    const smsMsg = `Pão Caseiro: Entrega #${orderId} atribuida! Cliente: ${customerName} (${customerPhone}). OTP: ${order.otp}.${mapLink} O sabor que aquece o seu coracao!`.substring(0, 160);
     await sendSMS(driver.phone, smsMsg);
 
     // Rich WhatsApp message with full details
     const domain = typeof window !== 'undefined' ? window.location.origin : 'https://paocaseiro.co.mz';
     const portalLink = `${domain}/delivery`;
-    const waMsg = `🍞 *Pão Caseiro — Nova Entrega Atribuída*\n\n📦 Pedido: *#${orderId}*\n👤 Cliente: ${customerName}\n📞 Tel: ${customerPhone}\n📍 Endereço: ${address}\n\n🛒 *Itens:*\n${itemsList}\n\n🔑 *OTP de Entrega: ${order.otp}*\n\n➡️ Acesse o portal: ${portalLink}\n\n_O sabor que aquece o coração!_ 🤎`;
+    const waMsg = `🍞 *Pão Caseiro — Nova Entrega Atribuída*\n\n📦 Pedido: *#${orderId}*\n👤 Cliente: ${customerName}\n📞 Tel: ${customerPhone}\n📍 Endereço: ${address}${coords ? `\n🗺️ Mapa: https://maps.google.com/?q=${coords}` : ''}\n\n🛒 *Itens:*\n${itemsList}\n\n🔑 *OTP de Entrega: ${order.otp}*\n\n➡️ Acesse o portal: ${portalLink}\n\n_O sabor que aquece o seu coração!_ 🤎`;
 
     const encoded = encodeURIComponent(waMsg);
     const driverPhone = driver.phone.replace(/[^0-9]/g, '');
@@ -277,8 +319,25 @@ export const notifyCustomerApproaching = async (order: any, driver: any) => {
     const driverName = driver?.name || 'o nosso entregador';
     const driverPhone = driver?.phone || '';
     const orderId = order.short_id || order.orderId;
-    const message = `Pão Caseiro: #${orderId} está a chegar! ${driverName} já está próximo. Contacte: ${driverPhone}. Fique perto do telemóvel!`.substring(0, 160);
+    const message = `Pao Caseiro: #${orderId} esta a chegar! ${driverName} ja esta proximo. Contacte: ${driverPhone}.\nO sabor que aquece o seu coracao!`.substring(0, 160);
 
     return await sendSMS(phone, message);
 };
 
+
+/**
+ * Notifies the customer that their ticket is now being called to a specific counter.
+ */
+export const notifyQueueTicketCalling = async (ticket: any, counter: string, phone?: string) => {
+    if (!phone) return null;
+    const message = `Pão Caseiro: Senha ${ticket.ticket_number} - Dirija-se ao ${counter}. Bom atendimento!\nO sabor que aquece o seu coracao!`;
+    return await sendSMS(phone, message.substring(0, 160));
+};
+
+/**
+ * Sends a confirmation when a ticket is generated.
+ */
+export const notifyQueueTicketGenerated = async (ticket: any, phone: string) => {
+    const message = `Pão Caseiro: Senha ${ticket.ticket_number} gerada com sucesso. Acompanhe a sua posição no local.\nO sabor que aquece o seu coracao!`;
+    return await sendSMS(phone, message.substring(0, 160));
+};

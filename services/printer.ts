@@ -128,6 +128,79 @@ export class PrinterService {
         return this.printReceipt(order, items);
     }
 
+
+    async printTicket(ticket: any) {
+        const encoder = new TextEncoder();
+        let commands = new Uint8Array([0x1B, 0x40]); // Initialize
+
+        const addText = (text: string, align: 'left' | 'center' = 'left') => {
+            // align center: ESC a 1
+            if (align === 'center') {
+                const alignCmd = new Uint8Array([0x1B, 0x61, 0x01]);
+                const newCmds = new Uint8Array(commands.length + alignCmd.length);
+                newCmds.set(commands);
+                newCmds.set(alignCmd, commands.length);
+                commands = newCmds;
+            } else {
+                const alignCmd = new Uint8Array([0x1B, 0x61, 0x00]);
+                const newCmds = new Uint8Array(commands.length + alignCmd.length);
+                newCmds.set(commands);
+                newCmds.set(alignCmd, commands.length);
+                commands = newCmds;
+            }
+
+            const encoded = encoder.encode(text + '\n');
+            const newCommands = new Uint8Array(commands.length + encoded.length);
+            newCommands.set(commands);
+            newCommands.set(encoded, commands.length);
+            commands = newCommands;
+        };
+
+        // Header
+        addText('PAO CASEIRO', 'center');
+        addText('"O Sabor que aquece"', 'center');
+        addText('-----------------------', 'center');
+        addText('SENHA DE FILA', 'center');
+        addText('', 'center');
+        
+        // Large text for ticket number (double width/height if possible)
+        // ESC ! n (n=0x30 for double height/width)
+        const largeTextCmd = new Uint8Array([0x1B, 0x21, 0x30]);
+        const largeCmds = new Uint8Array(commands.length + largeTextCmd.length);
+        largeCmds.set(commands);
+        largeCmds.set(largeTextCmd, commands.length);
+        commands = largeCmds;
+        
+        addText(ticket.ticket_number || '000', 'center');
+        
+        // Reset text size: ESC ! 0
+        const resetTextCmd = new Uint8Array([0x1B, 0x21, 0x00]);
+        const resetCmds = new Uint8Array(commands.length + resetTextCmd.length);
+        resetCmds.set(commands);
+        resetCmds.set(resetTextCmd, commands.length);
+        commands = resetCmds;
+
+        addText('', 'center');
+        addText(`Data: ${new Date(ticket.created_at || Date.now()).toLocaleString()}`, 'center');
+        addText(`Tipo: ${ticket.is_priority ? 'PRIORITARIA' : 'NORMAL'}`, 'center');
+        addText('-----------------------', 'center');
+        addText('Aguarde ser chamado', 'center');
+        addText('pelo painel.', 'center');
+        addText('\n\n\n', 'center');
+
+        // Cut command (if supported)
+        const cut = new Uint8Array([0x1D, 0x56, 0x41, 0x10]);
+        const final = new Uint8Array(commands.length + cut.length);
+        final.set(commands);
+        final.set(cut, commands.length);
+
+        if (this.characteristic) {
+            await this.characteristic.writeValue(final);
+        } else {
+            console.log("Printing Ticket to console:\n", new TextDecoder().decode(commands));
+        }
+    }
+
     isConnected() {
         return !!this.characteristic;
     }

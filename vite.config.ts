@@ -60,6 +60,7 @@ export default defineConfig(({ mode }) => {
     '/supabase-proxy': {
       target: env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co',
       changeOrigin: true,
+      ws: true,
       rewrite: (path: string) => path.replace(/^\/supabase-proxy/, ''),
       secure: false,
       configure: (proxy: any, _options: any) => {

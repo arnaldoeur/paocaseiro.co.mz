@@ -45,6 +45,13 @@ export const Terms: React.FC = () => {
                             </p>
                         </section>
 
+                        <section>
+                            <h2 className="text-2xl font-serif italic text-[#3b2f2f] mb-4 border-b border-[#d9a65a]/20 pb-2">5. Política de Cancelamento de Encomendas</h2>
+                            <p>
+                                O cliente tem o direito de solicitar o cancelamento da sua encomenda através do seu painel de registo (Dashboard). O cancelamento autónomo só é permitido caso a encomenda ainda se encontre no estado "Pendente". Uma vez transitada para "Em Preparação", o pedido de cancelamento deverá ser encaminhado aos nossos canais de apoio, podendo estar sujeito a retenção do valor por motivos de alocação de ingredientes e labor já incorrido visando garantir a nossa sustentabilidade.
+                            </p>
+                        </section>
+
                         <section className="bg-[#f7f1eb] p-6 rounded-2xl border-l-4 border-[#d9a65a]">
                             <h2 className="text-lg font-bold text-[#3b2f2f] mb-2 font-serif italic">Nota Legal</h2>
                             <p className="text-sm">

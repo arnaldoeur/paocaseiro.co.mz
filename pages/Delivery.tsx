@@ -542,11 +542,11 @@ export const Delivery: React.FC = () => {
                                         </div>
                                     )}
 
-                                    {/* OTP */}
+                                    {/* OTP (Hidden for security) */}
                                     <div className="bg-[#3b2f2f] rounded-xl p-3 flex justify-between items-center">
                                         <div>
                                             <p className="text-[10px] font-bold text-[#d9a65a]/60 uppercase">OTP de Entrega</p>
-                                            <p className="text-2xl font-bold text-[#d9a65a] tracking-widest">{order.otp || '----'}</p>
+                                            <p className="text-2xl font-bold text-[#d9a65a] tracking-widest">****</p>
                                         </div>
                                         <Lock size={24} className="text-[#d9a65a]/40" />
                                     </div>
@@ -631,16 +631,18 @@ export const Delivery: React.FC = () => {
                                                     </button>
                                                     <button
                                                         onClick={async () => {
-                                                            if (!confirm('Enviar SMS com OTP para o cliente agora?')) return;
+                                                            if (!confirm('Reenviar OTP via SMS e WhatsApp para o cliente agora?')) return;
                                                             const { sendSMS } = await import('../services/sms');
+                                                            const { sendWhatsAppMessage } = await import('../services/whatsapp');
                                                             const msg = `Pão Caseiro: O motorista chegou com a sua encomenda #${order.short_id}! O seu Código (OTP) é ${order.otp}. Forneça-o ao motorista.`;
-                                                            await sendSMS(order.customer_phone, msg);
-                                                            alert('SMS com OTP enviada ao cliente!');
+                                                            await sendSMS(order.customer_phone, msg).catch(console.error);
+                                                            await sendWhatsAppMessage(order.customer_phone, msg).catch(console.error);
+                                                            alert('OTP enviado via SMS e WhatsApp ao cliente!');
                                                         }}
                                                         className="bg-blue-600 text-white py-3 rounded-xl font-bold text-[13px] flex items-center justify-center gap-2 hover:bg-blue-700 transition-all shadow-md"
                                                     >
                                                         <MessageSquare size={16} />
-                                                        Solicitar OTP
+                                                        Reenviar OTP
                                                     </button>
                                                 </div>
                                                 <button
@@ -673,24 +675,41 @@ export const Delivery: React.FC = () => {
 
                                         {/* ARRIVED → Finalizar */}
                                         {order.status === 'arrived' && (
-                                            <button
-                                                onClick={async () => {
-                                                    const otp = prompt(`OTP do cliente para finalizar #${order.short_id}:`);
-                                                    if (otp !== order.otp && otp !== '0689') return alert('OTP incorreto!');
-                                                    const { supabase } = await import('../services/supabase');
-                                                    await supabase.from('orders').update({ status: 'completed' }).eq('id', order.id);
-                                                    notifyCustomer({ ...order, status: 'completed' }, 'status_update').catch(console.error);
-                                                    import('../services/whatsapp').then(m => m.notifyCustomerOrderStatusWhatsApp(order, 'completed')).catch();
-                                                    import('../services/email').then(m => m.notifyOrderStatusUpdateEmail({...order, status: 'completed'})).catch();
-                                                    stopTracking();
-                                                    await fetchOrders();
-                                                    alert('Entrega concluída com sucesso! 🎉');
-                                                }}
-                                                className="w-full bg-green-500 text-white py-4 rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-green-600 transition-all shadow-md"
-                                            >
-                                                <CheckCircle size={20} />
-                                                Finalizar Entrega (Pedir OTP)
-                                            </button>
+                                            <div className="flex flex-col gap-2">
+                                                <button
+                                                    onClick={async () => {
+                                                        const otp = prompt(`OTP do cliente para finalizar #${order.short_id}:`);
+                                                        if (otp !== order.otp && otp !== '0689') return alert('OTP incorreto!');
+                                                        const { supabase } = await import('../services/supabase');
+                                                        await supabase.from('orders').update({ status: 'completed' }).eq('id', order.id);
+                                                        notifyCustomer({ ...order, status: 'completed' }, 'status_update').catch(console.error);
+                                                        import('../services/whatsapp').then(m => m.notifyCustomerOrderStatusWhatsApp(order, 'completed')).catch();
+                                                        import('../services/email').then(m => m.notifyOrderStatusUpdateEmail({...order, status: 'completed'})).catch();
+                                                        stopTracking();
+                                                        await fetchOrders();
+                                                        alert('Entrega concluída com sucesso! 🎉');
+                                                    }}
+                                                    className="w-full bg-green-500 text-white py-4 rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-green-600 transition-all shadow-md"
+                                                >
+                                                    <CheckCircle size={20} />
+                                                    Finalizar Entrega (Pedir OTP)
+                                                </button>
+                                                <button
+                                                    onClick={async () => {
+                                                        if (!confirm('Reenviar OTP via SMS e WhatsApp para o cliente agora?')) return;
+                                                        const { sendSMS } = await import('../services/sms');
+                                                        const { sendWhatsAppMessage } = await import('../services/whatsapp');
+                                                        const msg = `Pão Caseiro: O motorista chegou com a sua encomenda #${order.short_id}! O seu Código (OTP) é ${order.otp}. Forneça-o ao motorista.`;
+                                                        await sendSMS(order.customer_phone, msg).catch(console.error);
+                                                        await sendWhatsAppMessage(order.customer_phone, msg).catch(console.error);
+                                                        alert('OTP enviado via SMS e WhatsApp ao cliente!');
+                                                    }}
+                                                    className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-blue-700 transition-all shadow-md"
+                                                >
+                                                    <MessageSquare size={18} />
+                                                    Reenviar OTP (SMS e WhatsApp)
+                                                </button>
+                                            </div>
                                         )}
                                     </div>
                                 </div>

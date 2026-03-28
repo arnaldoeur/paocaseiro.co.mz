@@ -65,6 +65,23 @@ export const ProductModal: React.FC<ProductModalProps> = ({
     const currentPrice = basePrice;
     const canAdd = (!product.variations || product.variations.length === 0) || selectedVariation;
 
+    const getPlaceholder = (p: Product, lang: Language) => {
+        const cat = (p as any).category?.toLowerCase() || '';
+        if (cat.includes('bolo') || cat.includes('sobremesa')) {
+            return lang === 'pt' ? 'Ex: Escrever "Feliz Aniversário", sem morangos...' : 'E.g.: Write "Happy Birthday", no strawberries...';
+        }
+        if (cat.includes('pão') || cat.includes('pães')) {
+            return lang === 'pt' ? 'Ex: Bem torrado, fatiado...' : 'E.g.: Well toasted, sliced...';
+        }
+        if (cat.includes('bebida') || cat.includes('sumo') || cat.includes('café')) {
+            return lang === 'pt' ? 'Ex: Com gelo, pouco açúcar...' : 'E.g.: With ice, less sugar...';
+        }
+        if (cat.includes('hambúrguer') || cat.includes('sandes') || cat.includes('salgado') || cat.includes('refeição')) {
+            return lang === 'pt' ? 'Ex: Sem cebola, extra queijo...' : 'E.g.: No onions, extra cheese...';
+        }
+        return lang === 'pt' ? 'Ex: Observações, restrições alimentares...' : 'E.g.: Notes, dietary restrictions...';
+    };
+
     const handleAdd = () => {
         if (!canAdd) return;
 
@@ -229,7 +246,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                                         <textarea
                                             value={customMessage}
                                             onChange={(e) => setCustomMessage(e.target.value)}
-                                            placeholder={language === 'pt' ? 'Ex: Tirar cebola, adicionar piripiri...' : 'E.g.: No onions, add spicy sauce...'}
+                                            placeholder={getPlaceholder(product, language)}
                                             className="w-full h-24 p-4 rounded-xl border border-gray-200 focus:border-[#d9a65a] focus:ring-1 focus:ring-[#d9a65a] transition-all resize-none shadow-sm text-sm"
                                             maxLength={150}
                                         />

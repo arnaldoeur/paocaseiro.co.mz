@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
-import html2canvas from 'html2canvas';
+import html2canvas from 'html2canvas'; // Removing usage, kept import for syntax but will not be used in this file
 import { jsPDF } from 'jspdf';
 import { Download, Share2, Printer, CheckCircle, MapPin, Phone, User, Store } from 'lucide-react';
 import { CartItem } from '../context/CartContext';
@@ -58,170 +58,56 @@ export const Receipt: React.FC<ReceiptProps> = ({
         }
     }, []);
 
-    const getReceiptElement = () => {
-        const element = receiptRef.current;
-        if (!element) return null;
-
-        const clone = element.cloneNode(true) as HTMLElement;
-        clone.style.overflow = 'visible';
-        clone.style.height = 'auto';
-        clone.style.minHeight = 'auto';
-        clone.style.maxHeight = 'none';
-        clone.style.width = '480px';
-        clone.style.background = '#fffbf5';
-        clone.style.padding = '20px';
-
-        // Ensure footer is visible
-        const footer = clone.querySelector('.mt-8');
-        if (footer) (footer as HTMLElement).style.display = 'block';
-
-        return clone;
+    const generateVectorPDF = async () => {
+        const { generateCustomerReceiptPDF, generateFormalInvoicePDF } = await import('../services/pdfGenerator');
+        const compatOrder = {
+            short_id: orderId,
+            payment_ref: paymentRef,
+            transaction_id: transactionId,
+            date: date,
+            delivery_type: details.type,
+            customer_name: details.name,
+            customer_phone: details.phone,
+            customer_address: details.address,
+            amount_paid: amountPaid,
+        };
+        return documentType === 'Invoice'
+            ? await generateFormalInvoicePDF(compatOrder, cart)
+            : await generateCustomerReceiptPDF(compatOrder, cart, 'Receipt');
     };
 
-    const generatePDF = async () => {
-        const clone = getReceiptElement();
-        if (!clone) return null;
-
-        const container = document.createElement('div');
-        // Mobile-safe off-screen rendering
-        container.style.position = 'absolute';
-        container.style.top = '0';
-        container.style.left = '0';
-        container.style.zIndex = '-9999';
-        container.style.width = '480px';
-        container.style.visibility = 'visible'; // Important for rendering
-        container.appendChild(clone);
-        document.body.appendChild(container);
-
+    const handleDownloadPDF = async () => {
         try {
-            // Temporarily disable max-height/overflow to capture full element content
-            const originalStyle = clone.getAttribute('style') || '';
-            const originalClass = clone.className;
+            const pdf = await generateVectorPDF();
+            pdf.save(`${documentType === 'Invoice' ? 'Fatura' : 'Recibo-Fatura'}_${settings?.senderId || 'PaoCaseiro'}_${displayOrderId}.pdf`);
+        } catch (error) {
+            console.error("Failed to generate vector PDF", error);
+            alert("Ocorreu um erro ao gerar o PDF. Verifique a consola.");
+        }
+    };
 
-            clone.style.maxHeight = 'none';
-            clone.style.overflow = 'visible';
-            clone.classList.remove('overflow-y-auto');
-
-            // Force layout calculation
-            await new Promise(resolve => setTimeout(resolve, 100)); // Small delay for rendering
-
-            const canvas = await html2canvas(clone, {
-                scale: 2,
-                useCORS: true,
-                allowTaint: true,
-                logging: false,
-                width: 480,
-                windowWidth: 480,
-                backgroundColor: '#fffbf5',
-                scrollY: -window.scrollY, // Avoid scroll offset issues
-                windowHeight: clone.scrollHeight
-            });
-
-            // Restore styles
-            clone.setAttribute('style', originalStyle);
-            clone.className = originalClass;
-
-            const imgData = canvas.toDataURL('image/png');
-            const imgProps = canvas.width / canvas.height;
-
-            // Standard thermal width 80mm
-            const pdfWidth = 80;
-                const pdfHeight = pdfWidth / imgProps;
-
-                const pdf = new jsPDF({
-                    orientation: 'p',
-                    unit: 'mm',
-                    format: [pdfWidth, pdfHeight]
-                });
-
-                pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-                return pdf;
-            } finally {
-                document.body.removeChild(container);
-            }
-        };
-
-        const handleDownloadPDF = async () => {
-            const pdf = await generatePDF();
-            if (pdf) pdf.save(`${documentType === 'Invoice' ? 'Fatura' : 'Recibo'}_${settings?.senderId || 'PaoCaseiro'}_${displayOrderId}.pdf`);
-        };
-
-        useEffect(() => {
-            if (autoSaveToDrive && !hasAutoSaved.current) {
-                hasAutoSaved.current = true;
-                const saveToBackend = async () => {
-                    try {
-                        const pdf = await generatePDF();
-                        if (pdf) {
-                            const blob = pdf.output('blob');
-                            const { uploadReceiptToDrive } = await import('../services/supabase');
-                            await uploadReceiptToDrive(blob, orderId, documentType as 'Receipt' | 'Invoice');
-                        }
-                    } catch (e) {
-                        console.error('Failed to auto-save receipt to drive:', e);
-                    }
-                };
-                
-                // Add a small delay so layout finishes painting robustly before generating the auto-save canvas
-                setTimeout(saveToBackend, 800);
-            }
-        }, [autoSaveToDrive, orderId, documentType]);
+    // Auto-save generation shifted securely to the backend (supabase.ts -> generateReceipt)
 
 
-    const handlePrint = () => {
-        if (!receiptRef.current) return;
-
-        // Create a hidden iframe
-        const iframe = document.createElement('iframe');
-        iframe.style.display = 'none';
-        document.body.appendChild(iframe);
-
-        const content = receiptRef.current.innerHTML;
-
-        const doc = iframe.contentWindow?.document;
-        if (doc) {
-            doc.open();
-            doc.write(`
-                <html>
-                <head>
-                    <title>Recibo</title>
-                    <script src="https://cdn.tailwindcss.com"></script>
-                    <style>
-                        body { background-color: white; padding: 20px; font-family: sans-serif; }
-                        /* Ensure Tailwind CDN loads or use inline styles for critical parts */
-                        .text-center { text-align: center; }
-                        .font-bold { font-weight: bold; }
-                        .flex { display: flex; }
-                        .justify-between { justify-content: space-between; }
-                        /* Hide things that shouldn't print if any */
-                    </style>
-                </head>
-                <body>
-                    <div style="max-width: 400px; margin: 0 auto;">
-                        ${content}
-                    </div>
-                </body>
-                </html>
-            `);
-            doc.close();
-
-            // Wait for styles/images (if any) then print
-            setTimeout(() => {
-                iframe.contentWindow?.focus();
-                iframe.contentWindow?.print();
-
-                // Cleanup
-                setTimeout(() => {
-                    document.body.removeChild(iframe);
-                }, 1000);
-            }, 1000);
+    const handlePrint = async () => {
+        try {
+            const pdf = await generateVectorPDF();
+            const blob = pdf.output('blob');
+            const url = URL.createObjectURL(blob);
+            
+            // Open the PDF directly in a new tab to leverage native browser PDF viewer
+            // which provides the highest quality thermal print support
+            window.open(url, '_blank');
+        } catch (error) {
+            console.error('Print error:', error);
+            alert("Erro ao imprimir PDF.");
         }
     };
 
     const handleShare = async () => {
         try {
             if (navigator.share) {
-                const pdf = await generatePDF();
+                const pdf = await generateVectorPDF();
                 if (pdf) {
                     const blob = pdf.output('blob');
                     const file = new File([blob], `Recibo_${displayOrderId}.pdf`, { type: 'application/pdf' });

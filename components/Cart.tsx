@@ -84,6 +84,7 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
 
     // Order Metadata for Receipt
     const [completedOrder, setCompletedOrder] = useState<any>(null);
+    const [showSuccessModal, setShowSuccessModal] = useState(false);
 
     // Global listener to open cart from modals
     useEffect(() => {
@@ -271,11 +272,20 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
         if (params.get('payment_return') === 'true') {
             setIsOpen(true);
             const status = params.get('status');
+            const orderId = params.get('orderId') || localStorage.getItem('last_order_id');
 
             if (status === 'success' || status === 'approved' || !status) {
                 // Clean URL
                 window.history.replaceState({}, document.title, window.location.pathname);
-                finishOrder();
+                
+                // If we have an order in state, finish it. 
+                // In a redirect, we might have lost state, so we might need to verify via orderId
+                if (orderId) {
+                    finishOrder(orderId);
+                } else {
+                    finishOrder();
+                }
+                setShowSuccessModal(true);
             } else {
                 setStep('payment');
                 setError('Pagamento não concluído ou cancelado.');
@@ -477,6 +487,7 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
 
         setCurrentPaymentRef(refId);
         setCurrentOrderId(shortId);
+        localStorage.setItem('last_order_id', shortId); // Store for redirect recovery
         setStep('processing');
         setError('');
 
@@ -581,6 +592,7 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                     if (status.success) {
                         clearInterval(interval);
                         finishOrder();
+                        setShowSuccessModal(true);
                     } else if (status.status === 'failed') {
                         clearInterval(interval);
                         setError('Pagamento falhou ou foi cancelado.');
@@ -1380,6 +1392,80 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                     />
                 )
             }
+
+                {/* Payment Success Modal */}
+                <AnimatePresence>
+                    {showSuccessModal && (
+                        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
+                            <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                className="absolute inset-0 bg-[#3b2f2f]/80 backdrop-blur-md"
+                                onClick={() => setShowSuccessModal(false)}
+                            />
+                            <motion.div
+                                initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                                className="bg-white rounded-[2.5rem] p-8 md:p-12 max-w-md w-full relative z-10 shadow-2xl border border-[#d9a65a]/20 text-center"
+                            >
+                                <div className="w-24 h-24 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-8 relative">
+                                    <motion.div
+                                        initial={{ scale: 0 }}
+                                        animate={{ scale: 1 }}
+                                        transition={{ delay: 0.2, type: 'spring' }}
+                                    >
+                                        <CheckCircle className="w-16 h-16 text-green-500" />
+                                    </motion.div>
+                                    <motion.div
+                                        animate={{ scale: [1, 1.2, 1] }}
+                                        transition={{ repeat: Infinity, duration: 2 }}
+                                        className="absolute inset-0 bg-green-500/10 rounded-full"
+                                    />
+                                </div>
+
+                                <h2 className="font-serif text-3xl text-[#3b2f2f] mb-2">
+                                    {language === 'en' ? 'Payment Successful!' : 'Pagamento Confirmado!'}
+                                </h2>
+                                <p className="text-gray-500 mb-8 font-medium">
+                                    {language === 'en' 
+                                        ? 'Your order is being prepared with love.' 
+                                        : 'A sua encomenda está a ser preparada com todo o carinho.'}
+                                </p>
+
+                                <div className="bg-[#f7f1eb] p-6 rounded-3xl mb-8">
+                                    <p className="text-[#3b2f2f]/60 text-xs font-bold uppercase tracking-widest mb-1">
+                                        {language === 'en' ? 'Order Number' : 'Número do Pedido'}
+                                    </p>
+                                    <p className="text-3xl font-black text-[#d9a65a] tracking-tighter">
+                                        #{completedOrder?.orderId || currentOrderId}
+                                    </p>
+                                </div>
+
+                                <div className="space-y-3">
+                                    <button
+                                        onClick={() => {
+                                            setShowSuccessModal(false);
+                                            setIsOpen(false);
+                                            window.location.href = '/dashboard';
+                                        }}
+                                        className="w-full bg-[#3b2f2f] text-[#d9a65a] py-4 rounded-2xl font-bold uppercase tracking-widest hover:bg-[#d9a65a] hover:text-[#3b2f2f] transition-all flex items-center justify-center gap-3 group shadow-lg"
+                                    >
+                                        <Clock className="w-5 h-5 group-hover:rotate-12 transition-transform" />
+                                        {language === 'en' ? 'Track Order' : 'Acompanhar Pedido'}
+                                    </button>
+                                    <button
+                                        onClick={() => setShowSuccessModal(false)}
+                                        className="w-full py-4 text-gray-500 font-bold hover:text-[#3b2f2f] transition-colors"
+                                    >
+                                        {language === 'en' ? 'Close' : 'Fechar'}
+                                    </button>
+                                </div>
+                            </motion.div>
+                        </div>
+                    )}
+                </AnimatePresence>
 
             <ClientLoginModal
                 isOpen={isLoginModalOpen}

@@ -166,22 +166,34 @@ export const saveOrderToSupabase = async (orderData: any, items: any[]) => {
             }
         }
 
-        // 6. Generate Initial Invoice Record
-        const invoiceData = {
-            order_id: order.id,
-            customer_id: customer.id,
-            customer_name: customer.name,
-            receipt_no: `FAT-${orderData.short_id || Date.now().toString().slice(-6)}`,
-            date: new Date().toISOString().split('T')[0],
-            total_amount: orderData.total_amount,
-            currency: 'MT',
-            document_type: 'Invoice',
-            items: items,
-            status: 'pending',
-            created_at: new Date().toISOString()
-        };
-        const { error: invoiceError } = await supabase.from('receipts').insert([invoiceData]);
-        if (invoiceError) console.error("Invoice generation error", invoiceError);
+        // 6. Generate Initial Document
+        try {
+            const shortIdStr = orderData.short_id || Date.now().toString().slice(-6);
+            const isPaid = orderData.payment_status === 'paid';
+            
+            const docMetadata = {
+                customer_phone: customer.contact_no || orderData.customer_phone || orderData.phone || '',
+                customer_email: customer.email || orderData.customer_email || '',
+                customer_nuit: customer.nuit || orderData.customer_nuit || '',
+                customer_address: customer.address || orderData.customer_address || orderData.delivery_address || '',
+                payment_method: orderData.payment_method || orderData.method || ''
+            };
+
+            await generateReceipt(
+                order.id,
+                shortIdStr,
+                customer.id,
+                customer.name,
+                items,
+                orderData.total_amount,
+                isPaid ? 'Receipt' : 'Invoice',
+                true, // Generate PDF to Drive
+                isPaid, // Create paired document if paid
+                docMetadata
+            );
+        } catch (docError) {
+            console.error("Initial document generation error", docError);
+        }
 
         // 6. Send Branded Notifications
         try {
@@ -259,75 +271,123 @@ export const getProducts = async () => {
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-export const generateReceipt = async (orderId: string, shortId: string, customerId: string, customerName: string, items: any[], totalAmount: number, documentType: 'Receipt' | 'Invoice' = 'Receipt', generatePdfFile: boolean = true) => {
+export const generateReceipt = async (
+    orderId: string, 
+    shortId: string, 
+    customerId: string, 
+    customerName: string, 
+    items: any[], 
+    totalAmount: number, 
+    documentType: 'Receipt' | 'Invoice' = 'Receipt', 
+    generatePdfFile: boolean = true,
+    createPairedDocument: boolean = true,
+    metadata: any = {}
+) => {
     try {
-        const receiptNo = documentType === 'Receipt' ? `REC-${shortId}` : `FAT-${shortId}`;
-        const receiptData = {
+        const primaryNo = documentType === 'Receipt' ? `REC-${shortId}` : `FAT-${shortId}`;
+        const primaryData = {
             order_id: orderId,
             customer_id: customerId,
             customer_name: customerName,
-            receipt_no: receiptNo,
+            receipt_no: primaryNo,
             date: new Date().toISOString().split('T')[0],
             total_amount: totalAmount,
             currency: 'MT',
             document_type: documentType,
             items: items,
-            status: 'paid',
+            status: documentType === 'Receipt' ? 'paid' : 'pending',
             created_at: new Date().toISOString()
         };
-        const { data, error } = await supabase.from('receipts').insert([receiptData]).select().single();
-        if (error) throw error;
+        const { data: primaryResult, error: primaryError } = await supabase.from('receipts').insert([primaryData]).select().single();
+        if (primaryError) throw primaryError;
 
-        // If it's a receipt being generated for an existing invoice, update the invoice status
-        if (documentType === 'Receipt') {
+        // If paired document requested, generate the opposite type
+        if (createPairedDocument) {
+            const pairedType = documentType === 'Receipt' ? 'Invoice' : 'Receipt';
+            const pairedNo = pairedType === 'Receipt' ? `REC-${shortId}` : `FAT-${shortId}`;
+            const pairedData = {
+                ...primaryData,
+                receipt_no: pairedNo,
+                document_type: pairedType,
+                status: pairedType === 'Receipt' ? 'paid' : primaryData.status,
+            };
+            const { error: pairedError } = await supabase.from('receipts').insert([pairedData]);
+            if (pairedError) console.error("Could not insert paired document record", pairedError);
+        }
+
+        // Make sure we update the status of the initial document if the formal receipt is issued
+        if (documentType === 'Receipt' || createPairedDocument) {
             await supabase.from('receipts')
                 .update({ status: 'paid' })
                 .eq('order_id', orderId)
                 .eq('document_type', 'Invoice');
+                
+            if (!orderId.startsWith('MANUAL-')) {
+                await supabase.from('orders')
+                    .update({ payment_status: 'paid' })
+                    .eq('id', orderId);
+            }
         }
 
         // --- Generate PDF & Sync to Drive ---
         if (generatePdfFile) {
             try {
-                const { generateCustomerReceiptPDF } = await import('./pdfGenerator');
-                const doc = await generateCustomerReceiptPDF(
-                    { ...receiptData, short_id: shortId, transaction_id: receiptNo, delivery_type: 'pickup', amount_paid: totalAmount }, 
-                    items, 
-                    documentType
-                );
+                const { generateCustomerReceiptPDF, generateFormalInvoicePDF } = await import('./pdfGenerator');
+                
+                const generateAndUploadPdf = async (type: 'Receipt' | 'Invoice', receiptNo: string, dbData: any) => {
+                    const docProps = { 
+                        ...dbData, 
+                        short_id: shortId, 
+                        transaction_id: receiptNo, 
+                        delivery_type: 'pickup', 
+                        amount_paid: totalAmount,
+                        ...metadata 
+                    };
+                    const doc = type === 'Receipt' 
+                        ? await generateCustomerReceiptPDF(docProps, items) 
+                        : await generateFormalInvoicePDF(docProps, items);
 
-                const pdfBlob = doc.output('blob');
-                const fileName = `${documentType === 'Receipt' ? 'recibos' : 'faturas'}/${receiptNo}.pdf`;
-            
-            // Upload to products bucket
-            const { error: uploadError } = await supabase.storage.from('products').upload(fileName, pdfBlob, {
-                 contentType: 'application/pdf',
-                 upsert: true
-            });
-            
-            if (!uploadError) {
-                 // Sync to drive_files
-                 const folderName = documentType === 'Receipt' ? 'Recibos' : 'Faturas';
-                 const { data: folderInfo } = await supabase.from('drive_folders').select('id').eq('name', folderName).maybeSingle();
-                 
-                 await supabase.from('drive_files').insert({
-                     name: `${receiptNo}.pdf`,
-                     path: fileName,
-                     size: pdfBlob.size,
-                     type: 'application/pdf',
-                     folder_id: folderInfo?.id || null,
-                     uploaded_by: 'system' // System generated
-                 });
-            } else {
-                 console.error("PDF Upload Error:", uploadError);
+                    const pdfBlob = doc.output('blob');
+                    const fileName = `${type === 'Receipt' ? 'recibos' : 'faturas'}/${receiptNo}.pdf`;
+                
+                    const { error: uploadError } = await supabase.storage.from('products').upload(fileName, pdfBlob, {
+                         contentType: 'application/pdf',
+                         upsert: true
+                    });
+                    
+                    if (!uploadError) {
+                         const folderName = type === 'Receipt' ? 'Recibos' : 'Faturas';
+                         const { data: folderInfo } = await supabase.from('drive_folders').select('id').eq('name', folderName).maybeSingle();
+                         
+                         await supabase.from('drive_files').insert({
+                             name: `${receiptNo}.pdf`,
+                             path: fileName,
+                             size: pdfBlob.size,
+                             type: 'application/pdf',
+                             folder_id: folderInfo?.id || null,
+                             uploaded_by: 'system' 
+                         });
+                    } else {
+                         console.error(`PDF Upload Error for ${type}:`, uploadError);
+                    }
+                };
+
+                // Generate primary
+                await generateAndUploadPdf(documentType, primaryNo, primaryData);
+                
+                // Generate paired
+                if (createPairedDocument) {
+                    const pairedType = documentType === 'Receipt' ? 'Invoice' : 'Receipt';
+                    const pairedNo = pairedType === 'Receipt' ? `REC-${shortId}` : `FAT-${shortId}`;
+                    await generateAndUploadPdf(pairedType, pairedNo, primaryData);
+                }
+
+            } catch (pdfErr) {
+                console.error("PDF Generation/Sync Error:", pdfErr);
             }
-        } catch (pdfErr) {
-            console.error("PDF Generation/Sync Error:", pdfErr);
         }
-        }
-        // ------------------------------------
 
-        return { success: true, data };
+        return { success: true, data: primaryResult };
     } catch (error) {
         console.error('Receipt generation error:', error);
         return { success: false, error };
@@ -365,5 +425,26 @@ export const uploadReceiptToDrive = async (pdfBlob: Blob, orderId: string, docum
     } catch (err) {
         console.error("Auto-save sync error:", err);
         return { success: false, error: err };
+    }
+};
+
+export const previewDocumentPDF = async (docData: any) => {
+    try {
+        const { generateCustomerReceiptPDF, generateFormalInvoicePDF } = await import('./pdfGenerator');
+        const docProps = { 
+            ...docData, 
+            short_id: docData.receipt_no.split('-').pop() || '000', 
+            transaction_id: docData.receipt_no, 
+            delivery_type: 'pickup', 
+            amount_paid: docData.total_amount 
+        };
+        const doc = docData.document_type === 'Receipt' 
+            ? await generateCustomerReceiptPDF(docProps, docData.items || []) 
+            : await generateFormalInvoicePDF(docProps, docData.items || []);
+            
+        return doc.output('bloburl');
+    } catch (error) {
+        console.error('Error generating preview PDF:', error);
+        return null;
     }
 };

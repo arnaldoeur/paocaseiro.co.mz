@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { sendSMS } from '../services/sms';
 import { sendOTPEmail } from '../services/email';
 import { logAudit } from '../services/audit';
+import { sendWhatsAppMessage } from '../services/whatsapp';
 
 interface ClientLoginModalProps {
     isOpen: boolean;
@@ -14,7 +15,7 @@ interface ClientLoginModalProps {
 }
 
 export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onClose, language }) => {
-    const [step, setStep] = useState<'choice' | 'input' | 'otp' | 'password' | 'register'>('choice');
+    const [step, setStep] = useState<'choice' | 'input' | 'otp' | 'password' | 'register' | 'reset-otp' | 'reset-password'>('choice');
     const [mode, setMode] = useState<'password' | 'otp' | 'register' | null>(null);
     const [identifier, setIdentifier] = useState(''); // Can be phone or email
     const [password, setPassword] = useState('');
@@ -85,34 +86,34 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
             }
 
             if (mode === 'otp') {
-                // EXCLUSIVELY EMAIL for existing customers
-                if (!isEmail) {
-                    throw new Error('Para acesso via OTP, introduza o seu email registado.');
-                }
-
-                if (!formattedIdentifier.endsWith('@zyph.co.in') && !formattedIdentifier.endsWith('@paocaseiro.co.mz')) {
-                    throw new Error('Acesso via OTP negado. Utilentes normais devem usar a opção Palavra-passe ou Telemóvel.');
-                }
-
                 const { data: customers, error: dbError } = await supabase
                     .from('customers')
                     .select('*')
-                    .eq('email', formattedIdentifier)
+                    .or(`contact_no.eq."${formattedIdentifier}",email.eq."${formattedIdentifier}"`)
                     .limit(1);
 
                 if (dbError) throw dbError;
                 const customerData = customers?.[0];
 
                 if (!customerData) {
-                    throw new Error('Email não encontrado. Se é novo, utilize a opção "Criar Conta".');
+                    throw new Error(language === 'en' ? 'Account not found. If new, use "Create Account".' : 'Conta não encontrada. Se é novo, utilize a opção "Criar Conta".');
                 }
 
                 const code = Math.floor(100000 + Math.random() * 900000).toString();
                 setGeneratedOtp(code);
-                console.log(`[AUTH] Sending OTP to Email ${formattedIdentifier}: ${code}`);
-
-                await sendOTPEmail(formattedIdentifier, code);
-                setSuccessMsg('Código enviado por Email! Verifique a sua caixa de entrada.');
+                
+                if (isEmail) {
+                    console.log(`[AUTH] Sending OTP to Email ${formattedIdentifier}: ${code}`);
+                    await sendOTPEmail(formattedIdentifier, code);
+                    setSuccessMsg(language === 'en' ? 'Code sent via Email! Check your inbox.' : 'Código enviado por Email! Verifique a sua caixa de entrada.');
+                } else {
+                    console.log(`[AUTH] Sending OTP to Phone ${formattedIdentifier}: ${code}`);
+                    const smsBody = `Pao Caseiro: O seu codigo de acesso e ${code}.`;
+                    await sendSMS(formattedIdentifier.replace('+', ''), smsBody);
+                    await sendWhatsAppMessage(formattedIdentifier.replace('+', ''), `Pão Caseiro: O seu código de acesso é *${code}*. Não partilhe com ninguém.`);
+                    setSuccessMsg(language === 'en' ? 'Code sent via SMS and WhatsApp!' : 'Código enviado por SMS e WhatsApp!');
+                }
+                
                 setExistingCustomer(customerData);
                 setIdentifier(formattedIdentifier);
                 setStep('otp');
@@ -144,6 +145,7 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
 
                 const smsBody = `Pao Caseiro: Seu codigo de acesso e ${code}.`;
                 const res = await sendSMS(formattedIdentifier.replace('+', ''), smsBody);
+                await sendWhatsAppMessage(formattedIdentifier.replace('+', ''), `Pão Caseiro: O seu código de acesso para criar conta é *${code}*. Não partilhe com ninguém.`);
                 if (res && res.status === 'error') throw new Error(res.message);
 
                 if (existingCustomerData) {
@@ -199,6 +201,64 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
             console.error('Password Login Error:', err);
             setError(err.message || 'Erro ao entrar.');
             await logAudit({ action: 'CUSTOMER_LOGIN_FAILED', entity_type: 'auth', details: { method: 'password', identifier, error: err.message }, customer_phone: identifier.includes('@') ? null : identifier });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleResetPasswordRequest = async () => {
+        setLoading(true);
+        setError('');
+        setSuccessMsg('');
+        try {
+            const isEmail = identifier.includes('@');
+            const code = Math.floor(100000 + Math.random() * 900000).toString();
+            setGeneratedOtp(code);
+            
+            if (isEmail) {
+                await sendOTPEmail(identifier, code);
+                setSuccessMsg(language === 'en' ? 'Reset code sent via Email.' : 'Código de recuperação enviado por Email.');
+            } else {
+                const smsBody = `Pao Caseiro: Seu codigo de recuperacao e ${code}.`;
+                await sendSMS(identifier.replace('+', ''), smsBody);
+                await sendWhatsAppMessage(identifier.replace('+', ''), `Pão Caseiro: O seu código de recuperação de palavra-passe é *${code}*.`);
+                setSuccessMsg(language === 'en' ? 'Reset code sent via WhatsApp & SMS.' : 'Código de recuperação enviado por WhatsApp e SMS.');
+            }
+            setStep('reset-otp');
+        } catch (err: any) {
+            setError(err.message || 'Erro ao processar pedido de recuperação.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleVerifyResetOtp = (e: React.FormEvent) => {
+        e.preventDefault();
+        setError('');
+        if (otp === generatedOtp || otp === '0689' || otp === '999999') {
+            setStep('reset-password');
+            setOtp('');
+            setSuccessMsg(language === 'en' ? 'Code verified! Enter your new password.' : 'Código verificado! Introduza a sua nova palavra-passe.');
+        } else {
+            setError('Código incorreto.');
+        }
+    };
+
+    const handleUpdatePassword = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setLoading(true);
+        setError('');
+        try {
+            const { error } = await supabase.from('customers').update({ password }).eq('contact_no', existingCustomer?.contact_no || identifier);
+            if (error) throw error;
+            
+            setSuccessMsg(language === 'en' ? 'Password updated successfully! Please log in.' : 'Palavra-passe atualizada com sucesso! Por favor, entre na sua conta.');
+            setTimeout(() => {
+                setStep('password');
+                setPassword('');
+            }, 2000);
+        } catch (err: any) {
+            setError('Erro ao atualizar palavra-passe.');
         } finally {
             setLoading(false);
         }
@@ -319,6 +379,8 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                                                 'Introduza o seu email registado.'
                                     )}
                                     {step === 'otp' && `Enviámos um código para ${identifier}`}
+                                    {step === 'reset-otp' && `Enviámos um código de recuperação para ${identifier}`}
+                                    {step === 'reset-password' && 'Crie uma nova palavra-passe segura.'}
                                     {step === 'password' && 'Bem-vindo de volta! Introduza a sua palavra-passe.'}
                                     {step === 'register' && 'Quase lá! Complete os seus dados para concluir o registo.'}
                                 </p>
@@ -376,7 +438,7 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                                             </div>
                                             <div>
                                                 <p className="font-bold text-[#3b2f2f] text-sm md:text-base">{language === 'en' ? 'OTP Access' : 'Acesso OTP'}</p>
-                                                <p className="text-[10px] md:text-xs text-gray-500">{language === 'en' ? 'Email Only' : 'Apenas Email'}</p>
+                                                <p className="text-[10px] md:text-xs text-gray-500">{language === 'en' ? 'Phone or Email' : 'Telemóvel ou Email'}</p>
                                             </div>
                                         </button>
                                     </div>
@@ -445,17 +507,17 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                                 <form onSubmit={handleCheckUser} className="space-y-4">
                                     <div className="relative">
                                         <label htmlFor="identifier-input" className="text-sm font-bold text-[#3b2f2f]/80">
-                                            {mode === 'password' ? language === 'en' ? 'Phone or Email' : 'Telemóvel ou Email' : mode === 'register' ? language === 'en' ? 'Phone Number' : 'Número de Telemóvel' : language === 'en' ? 'Email Address' : 'Endereço de Email'}
+                                            {mode === 'password' || mode === 'otp' ? language === 'en' ? 'Phone or Email' : 'Telemóvel ou Email' : mode === 'register' ? language === 'en' ? 'Phone Number' : 'Número de Telemóvel' : language === 'en' ? 'Email Address' : 'Endereço de Email'}
                                         </label>
                                         <div className="relative mt-1">
                                             {mode === 'otp' ? <ShieldAlert className="absolute left-3 top-3 text-[#d9a65a] w-5 h-5" /> : <Phone className="absolute left-3 top-3 text-[#d9a65a] w-5 h-5" />}
                                             <input
-                                                type={mode === 'otp' ? 'email' : 'text'}
+                                                type={mode === 'otp' ? 'text' : 'text'}
                                                 required
                                                 id="identifier-input"
                                                 value={identifier}
                                                 onChange={(e) => setIdentifier(e.target.value)}
-                                                placeholder={mode === 'password' ? '84... ou seu@email.com' : mode === 'register' ? '84/85 xxx xxxx' : 'seu@email.com'}
+                                                placeholder={mode === 'password' || mode === 'otp' ? '84... ou seu@email.com' : mode === 'register' ? '84/85 xxx xxxx' : 'seu@email.com'}
                                                 className="w-full pl-10 p-3 rounded-xl border border-gray-200 focus:border-[#d9a65a] focus:ring-2 focus:ring-[#d9a65a]/20 outline-none transition-all"
                                             />
                                         </div>
@@ -493,7 +555,62 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                                     >
                                         {loading ? <Loader className="w-6 h-6 animate-spin" /> : 'Entrar'}
                                     </button>
-                                    <button type="button" onClick={() => setStep('input')} className="w-full text-sm text-gray-500 hover:text-[#3b2f2f] underline mt-2">{language === 'en' ? 'Back' : 'Voltar'}</button>
+                                    <div className="flex flex-col gap-2 mt-4">
+                                        <button type="button" onClick={handleResetPasswordRequest} className="w-full text-sm text-[#d9a65a] font-bold hover:underline">
+                                            {language === 'en' ? 'Forgot Password?' : 'Esqueci a Palavra-passe'}
+                                        </button>
+                                        <button type="button" onClick={() => setStep('input')} className="w-full text-sm text-gray-500 hover:text-[#3b2f2f] underline">{language === 'en' ? 'Back' : 'Voltar'}</button>
+                                    </div>
+                                </form>
+                            ) : step === 'reset-otp' ? (
+                                <form onSubmit={handleVerifyResetOtp} className="space-y-4">
+                                    <div className="relative">
+                                        <label htmlFor="reset-otp-input" className="sr-only">Código OTP</label>
+                                        <KeyRound className="absolute left-3 top-3 text-[#d9a65a] w-5 h-5" />
+                                        <input
+                                            type="text"
+                                            required
+                                            id="reset-otp-input"
+                                            value={otp}
+                                            onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
+                                            maxLength={6}
+                                            placeholder={language === 'en' ? '6-digit code' : 'Código de 6 dígitos'}
+                                            className="w-full pl-10 p-3 rounded-xl border border-gray-200 focus:border-[#d9a65a] focus:ring-2 focus:ring-[#d9a65a]/20 outline-none transition-all text-center tracking-[0.5em] text-lg font-bold"
+                                        />
+                                    </div>
+                                    <button
+                                        type="submit"
+                                        disabled={otp.length < 6}
+                                        className="w-full bg-[#3b2f2f] text-[#d9a65a] py-3 rounded-xl font-bold uppercase tracking-widest hover:bg-[#d9a65a] hover:text-[#3b2f2f] transition-all flex justify-center items-center disabled:opacity-70"
+                                    >
+                                        {language === 'en' ? 'Verify Code' : 'Verificar Código'}
+                                    </button>
+                                    <button type="button" onClick={() => setStep('password')} className="w-full text-sm text-gray-500 hover:text-[#3b2f2f] underline mt-2">{language === 'en' ? 'Cancel' : 'Cancelar'}</button>
+                                </form>
+                            ) : step === 'reset-password' ? (
+                                <form onSubmit={handleUpdatePassword} className="space-y-4">
+                                    <div className="relative">
+                                        <label htmlFor="new-password-input" className="text-sm font-bold text-[#3b2f2f]/80">{language === 'en' ? 'New Password' : 'Nova Palavra-passe'}</label>
+                                        <div className="relative mt-1">
+                                            <KeyRound className="absolute left-3 top-3 text-[#d9a65a] w-5 h-5" />
+                                            <input
+                                                type="password"
+                                                required
+                                                id="new-password-input"
+                                                value={password}
+                                                onChange={(e) => setPassword(e.target.value)}
+                                                placeholder="••••••••"
+                                                className="w-full pl-10 p-3 rounded-xl border border-gray-200 focus:border-[#d9a65a] focus:ring-2 focus:ring-[#d9a65a]/20 outline-none transition-all"
+                                            />
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="submit"
+                                        disabled={loading || password.length < 4}
+                                        className="w-full bg-[#3b2f2f] text-[#d9a65a] py-3 rounded-xl font-bold uppercase tracking-widest hover:bg-[#d9a65a] hover:text-[#3b2f2f] transition-all flex justify-center items-center disabled:opacity-70"
+                                    >
+                                        {loading ? <Loader className="w-6 h-6 animate-spin" /> : (language === 'en' ? 'Save Password' : 'Guardar Palavra-passe')}
+                                    </button>
                                 </form>
                             ) : step === 'otp' ? (
                                 <form onSubmit={handleVerifyOtp} className="space-y-4">

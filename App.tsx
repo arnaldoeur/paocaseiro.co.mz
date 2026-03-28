@@ -22,6 +22,9 @@ import { OrderReceipt } from './pages/OrderReceipt';
 import { Seeder } from './Seeder';
 import { Privacy } from './pages/Privacy';
 import { Terms } from './pages/Terms';
+import { TVDisplay } from './pages/TVDisplay';
+import { GetTicket } from './pages/GetTicket';
+import { TVTickets } from './pages/TVTickets';
 
 const MaintenanceGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isMaintenance, setIsMaintenance] = useState(false);
@@ -140,6 +143,9 @@ const App: React.FC = () => {
               <Route path="/it" element={<ITSupport />} />
               <Route path="/delivery" element={<Delivery />} />
               <Route path="/kitchen" element={<Kitchen />} />
+              <Route path="/tv-display" element={<TVDisplay />} />
+              <Route path="/get-ticket" element={<GetTicket />} />
+              <Route path="/tv-senhas" element={<TVTickets />} />
               <Route path="/seed" element={<Seeder />} />
 
               {/* Main Website Pages */}
