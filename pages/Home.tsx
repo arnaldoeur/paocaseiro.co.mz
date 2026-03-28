@@ -4,6 +4,7 @@ import {
     Play, Wheat, Coffee, Cake, Croissant,
     MapPin, ZoomIn, ChevronLeft, ChevronRight, X, Phone, Mail, ShoppingBag
 } from 'lucide-react';
+import { LandingLaunchPopup } from '../components/LandingLaunchPopup';
 import { translations, Language } from '../translations';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { createClient } from '@supabase/supabase-js';
@@ -703,7 +704,6 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                 </div>
             </section >
 
-            {/* Lightbox Modal */}
             <AnimatePresence>
                 {
                     selectedIndex !== null && (
@@ -759,6 +759,8 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                     )
                 }
             </AnimatePresence >
+
+            <LandingLaunchPopup language={language} />
         </>
     );
 };

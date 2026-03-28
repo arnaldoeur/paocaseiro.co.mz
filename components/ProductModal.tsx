@@ -31,6 +31,7 @@ interface ProductModalProps {
     product: Product | null;
     language: Language;
     onAddToCart: (item: any) => void;
+    isAfterLaunch?: boolean;
 }
 
 export const ProductModal: React.FC<ProductModalProps> = ({
@@ -39,6 +40,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
     product,
     language,
     onAddToCart,
+    isAfterLaunch = true
 }) => {
     const [quantity, setQuantity] = useState(1);
     const [selectedVariation, setSelectedVariation] = useState<Variation | null>(null);
@@ -258,6 +260,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
 
                                 {/* Footer Actions - Fixed at Bottom */}
                                 <div className="absolute xl:relative xl:bottom-0 bottom-0 left-0 w-full p-6 border-t border-gray-100 bg-white">
+                                {isAfterLaunch ? (
                                     <div className="flex items-stretch gap-4 h-16">
                                         {/* Quantity */}
                                         <div className="flex items-center bg-[#f7f1eb] rounded-xl px-1 shadow-sm border border-[#e5dcd3]">
@@ -306,6 +309,21 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                                             )}
                                         </motion.button>
                                     </div>
+                                ) : (
+                                    <div className="bg-[#3b2f2f] text-[#d9a65a] rounded-xl py-4 px-6 flex items-center justify-center gap-3 shadow-lg border border-[#d9a65a]/20">
+                                        <div className="w-10 h-10 bg-[#d9a65a] rounded-full flex items-center justify-center text-[#3b2f2f]">
+                                            <ShoppingBag size={20} />
+                                        </div>
+                                        <div>
+                                            <p className="font-bold text-sm uppercase tracking-wider">
+                                                {language === 'pt' ? 'Encomendas abrem Segunda-feira' : 'Orders open Monday'}
+                                            </p>
+                                            <p className="text-[#f7f1eb]/60 text-[10px]">
+                                                {language === 'pt' ? 'Aproveite para escolher os seus favoritos!' : 'Take your time picking your favorites!'}
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
                                 </div>
                             </div>
                         </motion.div>

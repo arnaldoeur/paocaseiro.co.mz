@@ -124,14 +124,16 @@ export const verifyPayment = async (txId: string): Promise<{ success: boolean; s
         const result = await response.json();
         console.log('PAYSUITE VERIFY RAW:', result);
 
-        const statusString = result.data?.status?.toLowerCase() || result.status?.toLowerCase() || '';
+        // Normalize state strings (PaySuite can return "APPROVED", "SUCCESSFUL", "PAID", "COMPLETED")
+        const rawStatus = result.data?.status || result.status || '';
+        const statusString = rawStatus.toString().toUpperCase();
 
-        // Let's also check if there's a boolean successful somewhere
-        const isSuccess = statusString === 'successful' || statusString === 'paid' || statusString === 'completed' || result.success === true;
+        const successStates = ['SUCCESSFUL', 'PAID', 'COMPLETED', 'APPROVED', 'SUCCESS'];
+        const isSuccess = successStates.includes(statusString) || result.success === true;
 
         if (response.ok && isSuccess) {
             return { success: true, status: 'successful' };
-        } else if (statusString === 'failed' || statusString === 'cancelled') {
+        } else if (statusString === 'FAILED' || statusString === 'CANCELLED') {
             return { success: false, status: 'failed' };
         }
 

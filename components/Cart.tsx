@@ -319,6 +319,26 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
     
     const remainingBalance = finalTotal - amountToPay;
 
+    // Manual Verification Helper
+    const [isVerifyingManual, setIsVerifyingManual] = useState(false);
+    const handleManualVerify = async () => {
+        if (!currentTxId) return;
+        setIsVerifyingManual(true);
+        try {
+            const status = await verifyPayment(currentTxId);
+            if (status.success) {
+                finishOrder();
+                setShowSuccessModal(true);
+            } else {
+                setError('Pagamento ainda não detectado. Se já pagou, aguarde 30 segundos e tente novamente.');
+            }
+        } catch (e) {
+            setError('Erro ao verificar pagamento. Tente novamente.');
+        } finally {
+            setIsVerifyingManual(false);
+        }
+    };
+
     const handleNextStep = async () => {
         if (step === 'cart') {
             // Check Shop Hours
@@ -572,18 +592,16 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
             let attempts = 0;
             interval = setInterval(async () => {
                 attempts++;
-                if (attempts > 21) { // 1m45s timeout (21 * 5s)
+                // If the user is on receipt step, stop polling
+                if (step === 'receipt') {
                     clearInterval(interval);
-                    setStep('payment');
-                    const timeoutMsg = 'Tempo de espera excedido (1m45s). Se não recebeu o PIN, clique novamente para receber nova notificação de pagamento.';
-                    setError(timeoutMsg);
-                    await logAudit({
-                        action: 'PAYMENT_FAILED',
-                        entity_type: 'order',
-                        entity_id: currentOrderId || 'unknown',
-                        details: { reason: 'Timeout (1m45s)', amount: amountToPay, tx_id: currentTxId, customer: details.contact_no },
-                        customer_phone: details.phone
-                    });
+                    return;
+                }
+
+                if (attempts > 30) { // 2m30s timeout (30 * 5s)
+                    clearInterval(interval);
+                    // Don't auto-revert to payment step if we're still processing, 
+                    // let the user decide via manual button or just wait.
                     return;
                 }
 
@@ -593,18 +611,11 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                         clearInterval(interval);
                         finishOrder();
                         setShowSuccessModal(true);
-                    } else if (status.status === 'failed') {
+                    } else if (status.status === 'FAILED' || status.status === 'CANCELLED') {
                         clearInterval(interval);
-                        setError('Pagamento falhou ou foi cancelado.');
+                        setError('Pagamento falhou ou foi cancelado na PaySuite.');
                         setPaymentUrl(null);
                         setStep('payment');
-                        await logAudit({
-                            action: 'PAYMENT_FAILED',
-                            entity_type: 'order',
-                            entity_id: currentOrderId || 'unknown',
-                            details: { reason: 'Status: failed/cancelled', amount: amountToPay, tx_id: currentTxId, customer: details.contact_no },
-                            customer_phone: details.phone
-                        });
                     }
                 } catch (e) {
                     console.error("Polling error", e);

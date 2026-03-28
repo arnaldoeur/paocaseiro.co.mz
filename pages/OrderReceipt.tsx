@@ -132,9 +132,28 @@ export const OrderReceipt: React.FC = () => {
                     >
                         <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
                     </button>
+                    
                     <div className="flex gap-2">
-                        <button onClick={() => window.print()} title="Imprimir Recibo" className="p-3 bg-white border border-gray-100 text-gray-400 hover:text-[#d9a65a] hover:border-[#d9a65a] rounded-2xl transition-all shadow-sm group">
+                        {/* Share Button */}
+                        <button 
+                            onClick={() => {
+                                const text = `Olá! Aqui está o meu recibo do Pão Caseiro (Pedido #${order.short_id}).\n\nConsulte os detalhes em: ${window.location.href}`;
+                                window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+                            }}
+                            title="Partilhar no WhatsApp" 
+                            className="p-3 bg-[#25D366]/10 text-[#25D366] border border-[#25D366]/20 hover:bg-[#25D366] hover:text-white rounded-2xl transition-all shadow-sm flex items-center gap-2 group"
+                        >
+                            <Phone size={18} />
+                            <span className="text-[10px] font-black uppercase tracking-widest hidden sm:inline">Partilhar</span>
+                        </button>
+
+                        <button 
+                            onClick={() => window.print()} 
+                            title="Imprimir / Guardar PDF" 
+                            className="p-3 bg-white border border-gray-100 text-gray-400 hover:text-[#d9a65a] hover:border-[#d9a65a] rounded-2xl transition-all shadow-sm flex items-center gap-2 group"
+                        >
                             <Printer size={20} />
+                            <span className="text-[10px] font-black uppercase tracking-widest hidden sm:inline">Baixar PDF</span>
                         </button>
                     </div>
                 </div>

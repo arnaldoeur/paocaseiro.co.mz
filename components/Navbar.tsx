@@ -94,25 +94,32 @@ export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
     };
   }, []);
 
-  const handleNavigation = (id: string) => {
-    setMobileMenuOpen(false);
+    const handleNavigation = (id: string) => {
+      setMobileMenuOpen(false);
 
-    if (id === 'blog') {
-      navigate('/blog');
-      return;
-    }
-
-    if (location.pathname !== '/') {
-      navigate('/', { state: { scrollTo: id } });
-    } else {
-      const element = document.getElementById(id);
-      if (element) {
-        element.scrollIntoView({ behavior: 'smooth' });
-      } else {
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+      if (id === 'blog') {
+        navigate('/blog');
+        return;
       }
-    }
-  };
+
+      if (location.pathname !== '/') {
+        navigate('/', { state: { scrollTo: id } });
+      } else {
+        const element = document.getElementById(id);
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth' });
+        } else {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+      }
+    };
+
+    // External Trigger for Login Modal
+    React.useEffect(() => {
+      const handleOpenLogin = () => setIsLoginModalOpen(true);
+      window.addEventListener('open_pc_login', handleOpenLogin);
+      return () => window.removeEventListener('open_pc_login', handleOpenLogin);
+    }, []);
 
   const Logo = ({ className = "h-12", variant = 'light' }: { className?: string, variant?: 'light' | 'dark' }) => (
     <img

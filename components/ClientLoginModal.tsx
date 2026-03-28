@@ -370,7 +370,9 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
 
                         <div className="p-8 overflow-y-auto">
                             <div className="text-center mb-8">
-                                <h2 className="font-serif text-3xl text-[#3b2f2f] mb-2">{language === 'en' ? 'My Account' : 'Minha Conta'}</h2>
+                                <h2 className="font-serif text-3xl text-[#3b2f2f] mb-2">
+                                    {step === 'register' ? (language === 'en' ? 'Create Account' : 'Criar Conta') : (language === 'en' ? 'My Account' : 'Minha Conta')}
+                                </h2>
                                 <p className="text-gray-500">
                                     {step === 'choice' && 'Como deseja aceder à sua conta?'}
                                     {step === 'input' && (
@@ -404,6 +406,19 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                                 <div className="space-y-6">
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                         <button
+                                            onClick={() => { setMode('register'); setStep('input'); }}
+                                            className="flex flex-col items-center gap-3 p-6 rounded-2xl border-2 border-[#d9a65a] bg-[#f7f1eb] hover:bg-[#d9a65a]/10 transition-all group text-center shadow-lg transform scale-105 z-10"
+                                        >
+                                            <div className="w-12 h-12 rounded-full bg-[#d9a65a] flex items-center justify-center text-[#3b2f2f] transition-colors">
+                                                <UserPlus className="w-6 h-6" />
+                                            </div>
+                                            <div>
+                                                <p className="font-bold text-[#3b2f2f] text-sm md:text-base">{language === 'en' ? 'Create Account' : 'Criar Conta'}</p>
+                                                <p className="text-[10px] md:text-xs text-gray-500">{language === 'en' ? 'Get Launch Discounts' : 'Ganhe Descontos de Lançamento'}</p>
+                                            </div>
+                                        </button>
+
+                                        <button
                                             onClick={() => { setMode('password'); setStep('input'); }}
                                             className="flex flex-col items-center gap-3 p-6 rounded-2xl border border-gray-100 hover:border-[#d9a65a] hover:bg-[#f7f1eb]/50 transition-all group text-center"
                                         >
@@ -412,20 +427,7 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                                             </div>
                                             <div>
                                                 <p className="font-bold text-[#3b2f2f] text-sm md:text-base">{language === 'en' ? 'Password' : 'Palavra-passe'}</p>
-                                                <p className="text-[10px] md:text-xs text-gray-500">{language === 'en' ? 'Phone or Email' : language === 'en' ? 'Phone or Email' : 'Telemóvel ou Email'}</p>
-                                            </div>
-                                        </button>
-
-                                        <button
-                                            onClick={() => { setMode('register'); setStep('input'); }}
-                                            className="flex flex-col items-center gap-3 p-6 rounded-2xl border border-gray-100 hover:border-[#d9a65a] hover:bg-[#f7f1eb]/50 transition-all group text-center"
-                                        >
-                                            <div className="w-12 h-12 rounded-full bg-[#f7f1eb] flex items-center justify-center group-hover:bg-[#d9a65a]/20 transition-colors">
-                                                <UserPlus className="w-6 h-6 text-[#d9a65a]" />
-                                            </div>
-                                            <div>
-                                                <p className="font-bold text-[#3b2f2f] text-sm md:text-base">{language === 'en' ? 'Create Account' : 'Criar Conta'}</p>
-                                                <p className="text-[10px] md:text-xs text-gray-500">M-Pesa/E-Mola</p>
+                                                <p className="text-[10px] md:text-xs text-gray-500">{language === 'en' ? 'Phone or Email' : 'Telemóvel ou Email'}</p>
                                             </div>
                                         </button>
 

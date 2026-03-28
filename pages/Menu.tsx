@@ -7,6 +7,10 @@ import { ProductModal } from '../components/ProductModal';
 import { ScheduleOrderModal } from '../components/ScheduleOrderModal';
 import { UpsellModal } from '../components/UpsellModal';
 import { formatProductName, getEnglishProductName, getEnglishProductDesc } from '../services/stringUtils';
+import { ComingSoonOverlay } from '../components/ComingSoonOverlay';
+
+// Launch Date in CAT (Mozambique Time): Monday, March 30th, 2026 at 00:00
+const LAUNCH_DATE = new Date('2026-03-30T00:00:00+02:00');
 
 
 interface MenuProps {
@@ -30,6 +34,19 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
     const [isUpsellModalOpen, setIsUpsellModalOpen] = useState(false);
+    
+    // Launch States
+    const [currentTime, setCurrentTime] = useState(new Date());
+    const [hasDismissedOverlay, setHasDismissedOverlay] = useState(false);
+
+    // Auto-update time
+    useEffect(() => {
+        const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+        return () => clearInterval(timer);
+    }, []);
+
+    const isAfterLaunch = currentTime >= LAUNCH_DATE;
+    const showOverlay = !isAfterLaunch && !hasDismissedOverlay;
 
     // Custom Products State
     const [menuSections, setMenuSections] = useState(translations[language].menu.sections);
@@ -287,7 +304,16 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
     const foodPattern = `data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cpath d='M30 20c-2.2-2.2-5.8-2.2-8 0s-2.2 5.8 0 8l8 8 8-8c2.2-2.2 2.2-5.8 0-8s-5.8-2.2-8 0z' stroke='%23d9a65a' stroke-opacity='0.4' stroke-width='1.5'/%3E%3Cpath d='M10 45c0-4.4 3.6-8 8-8s8 3.6 8 8v4H10v-4z M14 37v-3 M22 37v-3' stroke='%23d9a65a' stroke-opacity='0.4' stroke-width='1.5'/%3E%3Ccircle cx='50' cy='10' r='5' stroke='%23d9a65a' stroke-opacity='0.4' stroke-width='1.5'/%3E%3C/g%3E%3C/svg%3E`;
 
     return (
-        <div className="min-h-screen bg-[#f7f1eb] pb-20 pt-20 relative">
+        <div className={`min-h-screen bg-[#f7f1eb] pb-20 pt-20 relative ${showOverlay ? 'overflow-hidden max-h-screen' : ''}`}>
+            <AnimatePresence>
+                {showOverlay && (
+                    <ComingSoonOverlay 
+                        key="prelaunch" 
+                        onClose={() => setHasDismissedOverlay(true)} 
+                    />
+                )}
+            </AnimatePresence>
+
             <div className="absolute inset-0 z-0 opacity-10 food-pattern"></div>
 
             {/* Header */}
@@ -301,7 +327,6 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
                         {t.menu.subtitle}
                     </p>
 
-                    {/* Search Bar & Schedule Quick Link */}
                     <div className="max-w-xl mx-auto space-y-4">
                         <div className="relative">
                             <input
@@ -316,13 +341,24 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
                             </div>
                         </div>
 
-                        <button
-                            onClick={() => setIsScheduleModalOpen(true)}
-                            className="text-[#d9a65a] text-sm font-bold flex items-center justify-center gap-2 mx-auto hover:underline bg-white/5 py-2 px-4 rounded-full border border-[#d9a65a]/20"
-                        >
-                            <Calendar size={16} />
-                            {language === 'pt' ? 'Prefere agendar para outro dia? Clique aqui' : 'Prefer to schedule for another day? Click here'}
-                        </button>
+                        {!isAfterLaunch ? (
+                             <div className="bg-[#d9a65a]/20 backdrop-blur-sm border border-[#d9a65a]/30 text-[#d9a65a] py-3 px-6 rounded-2xl flex items-center justify-center gap-3 animate-pulse">
+                                <Info size={20} />
+                                <span className="font-bold text-sm">
+                                    {language === 'pt' 
+                                        ? 'MODO DE ANTEVISÃO: Navegue livremente, mas as encomendas abrem apenas na Segunda-feira às 00:00.' 
+                                        : 'PREVIEW MODE: Browse the menu freely. Ordering opens Monday at 00:00.'}
+                                </span>
+                            </div>
+                        ) : (
+                            <button
+                                onClick={() => setIsScheduleModalOpen(true)}
+                                className="text-[#d9a65a] text-sm font-bold flex items-center justify-center gap-2 mx-auto hover:underline bg-white/5 py-2 px-4 rounded-full border border-[#d9a65a]/20"
+                            >
+                                <Calendar size={16} />
+                                {language === 'pt' ? 'Prefere agendar para outro dia? Clique aqui' : 'Prefer to schedule for another day? Click here'}
+                            </button>
+                        )}
                     </div>
                 </div>
             </header>
@@ -334,12 +370,30 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
                     const now = new Date();
                     const currentHour = now.getHours();
                     const currentMinute = now.getMinutes();
-                    const currentTime = currentHour * 60 + currentMinute;
+                    const currentTimeVal = currentHour * 60 + currentMinute;
 
                     const openTime = 6 * 60; // 06:00
                     const closeTime = 22 * 60; // 22:00
 
-                    const isOpen = (currentTime >= openTime && currentTime < closeTime) || localStorage.getItem('pc_bypass_hours') === 'true' || true; // [BYPASS] Force open for testing
+                    const isOpen = (currentTimeVal >= openTime && currentTimeVal < closeTime);
+
+                    if (!isAfterLaunch) {
+                        return (
+                            <div className="bg-[#3b2f2f] border-l-4 border-[#d9a65a] p-6 mb-8 rounded-r shadow-md flex flex-col items-center text-center">
+                                <Calendar className="w-8 h-8 text-[#d9a65a] mb-2" />
+                                <div>
+                                    <h3 className="font-bold text-[#d9a65a] text-xl mb-2">
+                                        {language === 'pt' ? 'Preparando o nosso lançamento' : 'Preparing for our debut'}
+                                    </h3>
+                                    <p className="text-[#f7f1eb]/80 text-base md:text-lg max-w-2xl">
+                                        {language === 'pt'
+                                            ? 'Estamos quase prontos para lhe servir! Sinta-se à vontade para explorar as nossas delícias antecipadamente.'
+                                            : 'We are almost ready to serve you! Feel free to explore our delights in advance.'}
+                                    </p>
+                                </div>
+                            </div>
+                        );
+                    }
 
                     if (!isOpen) {
                         return (
@@ -527,7 +581,7 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
                                                             : `${item.price} MT`}
                                                         {item.unit && item.unit !== 'un' && <span className="text-sm font-normal text-gray-400 ml-1">/ {item.unit}</span>}
                                                     </span>
-                                                    {item.isAvailable && (
+                                                    {item.isAvailable && isAfterLaunch && (
                                                         <button
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
@@ -538,6 +592,11 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
                                                         >
                                                             <Plus size={18} />
                                                         </button>
+                                                    )}
+                                                    {item.isAvailable && !isAfterLaunch && (
+                                                        <div className="bg-[#3b2f2f]/10 text-gray-500 px-3 py-1 rounded-full text-[10px] font-bold uppercase border border-gray-200">
+                                                            {language === 'pt' ? 'Brevemente' : 'Soon'}
+                                                        </div>
                                                     )}
                                                 </div>
                                             </div>
@@ -560,6 +619,7 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
                             onClose={handleCloseModal}
                             onAddToCart={handleAddToCartFromModal}
                             language={language}
+                            isAfterLaunch={isAfterLaunch}
                         />
                     )
                 }

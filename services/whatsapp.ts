@@ -3,8 +3,8 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 const EVOLUTION_API_URL = import.meta.env.VITE_WHATSAPP_API_URL || 'https://wa.zyphtech.com';
-const INSTANCE_NAME = import.meta.env.VITE_WHATSAPP_INSTANCE_NAME || 'PAOCASEIRO25';
-const API_KEY = import.meta.env.VITE_WHATSAPP_API_KEY || '429683C4C977415CAAFCCE10F7D57E11';
+const INSTANCE_NAME = import.meta.env.VITE_WHATSAPP_INSTANCE_NAME || 'Zyph Tech, Lda';
+const API_KEY = import.meta.env.VITE_WHATSAPP_API_KEY || '24724DC5AA2F-4CBF-9013-9C645CF4E565';
 
 /**
  * Format the phone number to E.164 required by Evolution API (e.g. 25884xxxxxxx)
