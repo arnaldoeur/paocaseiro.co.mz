@@ -100,7 +100,6 @@ export const QueueManager: React.FC = () => {
             if (currentlyCalling) {
                 // If a ticket is currently being called, wait 30s then mark it as complete
                 timer = setTimeout(async () => {
-                    console.log("DEBUG: Auto-completing ticket", currentlyCalling.id);
                     try {
                         await queueService.completeTicket(currentlyCalling.id);
                     } catch (err) {
@@ -110,7 +109,6 @@ export const QueueManager: React.FC = () => {
             } else if (waitingTickets.length > 0) {
                 // If no ticket is being called but others are waiting, wait 3s then call next
                 timer = setTimeout(async () => {
-                    console.log("DEBUG: Auto-calling next ticket");
                     try {
                         await queueService.callNext(counter);
                     } catch (err) {
