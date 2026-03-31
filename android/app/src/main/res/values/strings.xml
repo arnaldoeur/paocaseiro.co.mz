@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Pão Caseiro</string>
+    <string name="title_activity_main">Pão Caseiro</string>
+    <string name="package_name">mz.co.paocaseiro</string>
+    <string name="custom_url_scheme">mz.co.paocaseiro</string>
+</resources>

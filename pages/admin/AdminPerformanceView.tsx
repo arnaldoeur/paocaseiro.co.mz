@@ -36,12 +36,19 @@ export const AdminPerformanceView: React.FC = () => {
             // 1. Fetch Today's Orders
             const today = new Date();
             today.setHours(0,0,0,0);
-            const { data: ordersData } = await supabase.from('orders').select('user_id, status, created_at, updated_at').gte('created_at', today.toISOString());
+            const { data: ordersData } = await supabase
+                .from('orders')
+                .select('staff_id, status, created_at, updated_at')
+                .gte('created_at', today.toISOString());
             
-            // 2. Fetch Active Team Checkins
-            const { data: sessionsData } = await supabase.from('team_checkins').select('*').order('check_in_at', { ascending: false });
-            const activeSessions = (sessionsData || []).filter((s:any) => !s.check_out_at);
-            const activeStaffIds = new Set(activeSessions.map((s:any) => s.member_id));
+            // 2. Fetch Active Team Sessions
+            const { data: sessionsData } = await supabase
+                .from('employee_sessions')
+                .select('*')
+                .order('check_in', { ascending: false });
+            
+            const activeSessions = (sessionsData || []).filter((s:any) => !s.check_out);
+            const activeStaffIds = new Set(activeSessions.map((s:any) => s.employee_id));
 
             // Calculate Order Times
             let totalOrderTime = 0;
@@ -60,12 +67,12 @@ export const AdminPerformanceView: React.FC = () => {
 
             // 3. Map Staff Data
             const staffWithMetrics = staffList.map((u:any) => {
-                const session = activeSessions.find((s:any) => s.member_id === u.id);
-                const ordersByMe = (ordersData||[]).filter((o:any) => o.user_id === u.id).length;
+                const session = activeSessions.find((s:any) => s.employee_id === u.id);
+                const ordersByMe = (ordersData||[]).filter((o:any) => o.staff_id === u.id).length;
                 let currentDuration = '---';
                 let checkInTime = '---';
                 if(session) {
-                    const cIn = new Date(session.check_in_at);
+                    const cIn = new Date(session.check_in);
                     checkInTime = cIn.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
                     const diffMs = Date.now() - cIn.getTime();
                     const diffHrs = Math.floor(diffMs / 3600000);
@@ -85,14 +92,14 @@ export const AdminPerformanceView: React.FC = () => {
 
             // 4. Calculate Stats
             let todayHours = 0;
-            const todaySessions = (sessionsData || []).filter((s:any) => new Date(s.check_in_at) >= today);
+            const todaySessions = (sessionsData || []).filter((s:any) => new Date(s.check_in) >= today);
             todaySessions.forEach((s:any) => {
-                const start = new Date(s.check_in_at).getTime();
-                if(!s.check_out_at) {
-                    todayHours += (Date.now() - start) / 3600000;
+                if (s.total_hours) {
+                    todayHours += parseFloat(s.total_hours.toString());
                 } else {
-                    const end = new Date(s.check_out_at).getTime();
-                    todayHours += (end - start) / 3600000;
+                    const start = new Date(s.check_in).getTime();
+                    const stop = s.check_out ? new Date(s.check_out).getTime() : Date.now();
+                    todayHours += (stop - start) / 3600000;
                 }
             });
 
@@ -120,7 +127,15 @@ export const AdminPerformanceView: React.FC = () => {
                 let hrs = 0;
                 (sessionsData || []).forEach((s:any) => {
                     const sDate = new Date(s.check_in);
-                    if(sDate >= dayStart && sDate <= dayEnd) hrs += (s.total_hours || 0);
+                    if(sDate >= dayStart && sDate <= dayEnd) {
+                        if (s.total_hours) {
+                            hrs += parseFloat(s.total_hours.toString());
+                        } else {
+                            const start = new Date(s.check_in).getTime();
+                            const stop = s.check_out ? new Date(s.check_out).getTime() : Date.now();
+                            hrs += (stop - start) / 3600000;
+                        }
+                    }
                 });
                 return Math.round(hrs);
             });

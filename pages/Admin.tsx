@@ -718,16 +718,16 @@ export const Admin: React.FC = () => {
             const { data: orderResult, error: orderError } = await supabase.from('orders').insert([orderData]).select().single();
             if (orderError) throw orderError;
 
-            // NEW: Log System Event
+            // NEW: Log System Event with actionable link
             try {
                 const { NotificationService } = await import('../services/NotificationService');
-                await NotificationService.logSystemEvent(
-                    'Venda POS Manual',
-                    `Nova venda manual #${orderResult.short_id || orderResult.id.slice(0,6)} de ${orderData.customer_name}. Total: ${orderData.total_amount} MT`,
-                    'ORDER',
-                    'success',
-                    orderResult.customer_id
-                );
+                await NotificationService.createNotification({
+                    type: 'order',
+                    title: '🛒 Venda POS',
+                    message: `Pedido #${orderResult.short_id || orderResult.id.slice(0,6)} — ${orderData.customer_name} — ${orderData.total_amount} MT (${finalMethodStr})`,
+                    entity_id: orderResult.id,
+                    link: `/admin?view=encomendas`
+                });
             } catch (logErr) {
                 console.error("Manual order system logging failed:", logErr);
             }
@@ -1936,45 +1936,46 @@ export const Admin: React.FC = () => {
             const today = new Date();
             today.setHours(0, 0, 0, 0);
 
-            // 1. Load active checkins
-            const { data: checkins, error: checkinError } = await supabase
-                .from('team_checkins')
-                .select(`
-                    *,
-                    member:team_members(name, role)
-                `)
-                .is('check_out_at', null);
+            // 1. Load active sessions (check-out is null)
+            const { data: sessions, error: sessionsError } = await supabase
+                .from('employee_sessions')
+                .select('*')
+                .is('check_out', null);
 
-            if (checkinError) throw checkinError;
+            if (sessionsError) throw sessionsError;
 
             // 2. Load today's completed orders
             const { data: todayOrders, error: orderError } = await supabase
                 .from('orders')
-                .select('id, total_amount, status')
+                .select('id, total_amount, status, staff_id')
                 .in('status', ['completed', 'paid', 'kitchen', 'shipped'])
                 .gte('created_at', today.toISOString());
 
             if (orderError) throw orderError;
 
-            // Fetch ALL checkins today to sum exact hours worked
-            const { data: allTodayCheckins } = await supabase
-                .from('team_checkins')
+            // 3. Fetch ALL sessions today to sum exact hours worked
+            const { data: allTodaySessions } = await supabase
+                .from('employee_sessions')
                 .select('*')
-                .gte('check_in_at', today.toISOString());
+                .gte('check_in', today.toISOString());
             
             let totalHoursCalculated = 0;
-            if (allTodayCheckins) {
-                allTodayCheckins.forEach(c => {
-                    const start = new Date(c.check_in_at).getTime();
-                    const stop = c.check_out_at ? new Date(c.check_out_at).getTime() : new Date().getTime();
-                    totalHoursCalculated += (stop - start) / 3600000;
+            if (allTodaySessions) {
+                allTodaySessions.forEach(s => {
+                    if (s.total_hours) {
+                        totalHoursCalculated += parseFloat(s.total_hours.toString());
+                    } else {
+                        const start = new Date(s.check_in).getTime();
+                        const stop = s.check_out ? new Date(s.check_out).getTime() : new Date().getTime();
+                        totalHoursCalculated += (stop - start) / 3600000;
+                    }
                 });
             }
 
-            const activeStaffCount = checkins?.length || 0;
+            const activeStaffCount = sessions?.length || 0;
             const ordersCount = todayOrders?.length || 0;
             
-            // Calculate productivity score: based on orders processed per hour
+            // Calculate productivity score
             const score = totalHoursCalculated > 0 ? Math.min(Math.round((ordersCount / totalHoursCalculated) * 50), 100) : 0;
 
             setPerformanceMetrics({
@@ -1984,11 +1985,12 @@ export const Admin: React.FC = () => {
                 productivityScore: score
             });
 
-            setTeamCheckins(checkins || []);
+            // Map sessions to old state for backward compatibility if needed in UI
+            setTeamCheckins(sessions || []);
 
             // 4. Check if current user is checked in
             if (userId) {
-                const isUserIn = checkins?.some(c => c.member_id === userId) || false;
+                const isUserIn = sessions?.some(s => s.employee_id === userId) || false;
                 setIsUserCheckedIn(isUserIn);
             }
 
@@ -2038,9 +2040,11 @@ export const Admin: React.FC = () => {
         if (!userId) return alert("Erro: Utilizador não identificado.");
         try {
             setIsSubmitting(true);
-            const { error } = await supabase.from('team_checkins').insert([{
-                member_id: userId,
-                check_in_at: new Date().toISOString()
+            const { error } = await supabase.from('employee_sessions').insert([{
+                employee_id: userId,
+                employee_name: username || 'Admin',
+                check_in: new Date().toISOString(),
+                status: 'active'
             }]);
             if (error) throw error;
             alert("Check-in realizado com sucesso! Bom trabalho.");
@@ -2056,13 +2060,39 @@ export const Admin: React.FC = () => {
         if (!userId) return alert("Erro: Utilizador não identificado.");
         try {
             setIsSubmitting(true);
-            const { error } = await supabase
-                .from('team_checkins')
-                .update({ check_out_at: new Date().toISOString() })
-                .eq('member_id', userId)
-                .is('check_out_at', null);
+            
+            // 1. Get the current active session
+            const { data: currentSession, error: fetchError } = await supabase
+                .from('employee_sessions')
+                .select('*')
+                .eq('employee_id', userId)
+                .is('check_out', null)
+                .maybeSingle();
 
-            if (error) throw error;
+            if (fetchError) throw fetchError;
+            if (!currentSession) {
+                alert("Nenhuma sessão activa encontrada.");
+                setIsUserCheckedIn(false);
+                return;
+            }
+
+            // 2. Calculate hours
+            const start = new Date(currentSession.check_in).getTime();
+            const end = new Date().getTime();
+            const totalHours = (end - start) / 3600000;
+
+            // 3. Update the session
+            const { error: updateError } = await supabase
+                .from('employee_sessions')
+                .update({ 
+                    check_out: new Date().toISOString(),
+                    status: 'completed',
+                    total_hours: totalHours.toFixed(2)
+                })
+                .eq('id', currentSession.id);
+
+            if (updateError) throw updateError;
+            
             alert("Check-out realizado. Até à próxima!");
             loadPerformanceMetrics();
         } catch (e: any) {
@@ -7026,7 +7056,7 @@ export const Admin: React.FC = () => {
                                         <tbody className="text-[#3b2f2f]">
                                             {lastOrderItems.map((item, idx) => (
                                                 <tr key={idx} className="border-b border-gray-100">
-                                                    <td className="py-3 pr-2">{item.product_name}</td>
+                                                    <td className="py-3 pr-2">{item.product_name || item.name || <span className="text-gray-300 italic">Artigo</span>}</td>
                                                     <td className="py-3 text-center">{item.quantity}</td>
                                                     <td className="py-3 text-right font-bold w-20">{(item.price * item.quantity).toLocaleString()} MT</td>
                                                 </tr>
@@ -7057,13 +7087,14 @@ export const Admin: React.FC = () => {
 
                                     <div className="mt-8 pt-8 border-t-2 border-dotted border-gray-300 text-center text-xs text-gray-400 space-y-1">
                                         <p>Obrigado pela preferência!</p>
-                                        <p className="font-serif italic text-[#d9a65a] text-sm py-2">"O sabor que aquece o coração"</p>
+                                        <p className="font-serif italic text-[#d9a65a] text-sm py-2">"{companyInfo?.motto || 'O sabor que aquece o coração'}"</p>
                                         <div className="text-[10px] text-gray-500 font-black uppercase tracking-widest space-y-1">
-                                            <p className="text-[#3b2f2f]">Pão Caseiro</p>
-                                            <p>Lichinga, Av. Acordo de Lusaka</p>
-                                            <p>+258 87 914 6662 | +258 84 814 6662</p>
-                                            <p>geral@paocaseiro.co.mz</p>
-                                            <p>www.paocaseiro.co.mz</p>
+                                            <p className="text-[#3b2f2f]">{companyInfo?.name || 'Pão Caseiro'}</p>
+                                            <p>{companyInfo?.address || 'Lichinga, Av. Acordo de Lusaka'}</p>
+                                            <p>{companyInfo?.phone || '+258 87 914 6662 | +258 84 814 6662'}</p>
+                                            <p>{companyInfo?.email || 'geral@paocaseiro.co.mz'}</p>
+                                            {companyInfo?.nuit && <p>NUIT: {companyInfo.nuit}</p>}
+                                            <p>{companyInfo?.website || 'www.paocaseiro.co.mz'}</p>
                                         </div>
                                     </div>
                                 </div>

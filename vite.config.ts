@@ -86,6 +86,7 @@ export default defineConfig(({ mode }) => {
         },
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,json}'],
+          maximumFileSizeToCacheInBytes: 5242880, // 5 MiB
           runtimeCaching: [
             {
               urlPattern: /^https:\/\/bqiegszufcqimlvucrpm\.supabase\.co\/.*/i,
@@ -114,6 +115,25 @@ export default defineConfig(({ mode }) => {
       alias: {
         '@': path.resolve(__dirname, '.'),
       }
+    },
+    build: {
+      outDir: 'dist',
+      minify: 'esbuild',
+      sourcemap: false,
+      chunkSizeWarningLimit: 1000,
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            vendor: ['react', 'react-dom', 'react-router-dom'],
+            charts: ['echarts', 'echarts-for-react'],
+            maps: ['leaflet', 'react-leaflet'],
+            ui: ['framer-motion', 'lucide-react']
+          }
+        }
+      }
+    },
+    esbuild: {
+      drop: mode === 'production' ? ['console', 'debugger'] : []
     },
     base: '/'
   };

@@ -1,0 +1,3 @@
+User, User-Agent: *
+Allow: /
+Sitemap: https://paocaseiro.co.mz/sitemap.xml

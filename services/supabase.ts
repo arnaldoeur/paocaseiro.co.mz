@@ -71,6 +71,33 @@ export const refreshSupabaseClient = () => {
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
+export const getCompanySettings = async () => {
+    try {
+        const { data, error } = await supabase.from('settings').select('*');
+        if (error) throw error;
+        
+        const settingsMap: any = {};
+        data?.forEach((s: any) => settingsMap[s.key] = s.value);
+        
+        return {
+            name: settingsMap['company_name'] || settingsMap['branding_name'] || 'Pão Caseiro',
+            legalName: settingsMap['company_legal_name'] || 'Pão Caseiro, Lda',
+            logo: settingsMap['branding_logo'] || '',
+            address: settingsMap['company_address'] || settingsMap['branding_address'] || 'Lichinga, Av. Acordo de Lusaka',
+            phone: settingsMap['company_phone'] || settingsMap['branding_phone'] || '+258 87 914 6662',
+            email: settingsMap['company_email'] || settingsMap['branding_email_user'] || 'geral@paocaseiro.co.mz',
+            website: settingsMap['company_website'] || 'www.paocaseiro.co.mz',
+            nuit: settingsMap['company_nuit'] || '400000000',
+            regNo: settingsMap['company_reg_no'] || '',
+            slogan: settingsMap['company_slogan'] || 'O Sabor da Tradição',
+            motto: settingsMap['company_motto'] || 'O sabor que aquece o coração'
+        } as any;
+    } catch (e) {
+        console.error("Error fetching company settings:", e);
+        return null;
+    }
+};
+
 export const generateReceipt = async (
     orderId: string, 
     shortId: string, 
@@ -81,7 +108,8 @@ export const generateReceipt = async (
     documentType: 'Receipt' | 'Invoice' = 'Receipt', 
     generatePdfFile: boolean = true,
     createPairedDocument: boolean = true,
-    metadata: any = {}
+    metadata: any = {},
+    customCompanyInfo: any = null
 ) => {
     try {
         const primaryNo = documentType === 'Receipt' ? `REC-${shortId}` : `FAT-${shortId}`;
@@ -131,6 +159,8 @@ export const generateReceipt = async (
             try {
                 const { generateCustomerReceiptPDF, generateFormalInvoicePDF } = await import('./pdfGenerator');
                 
+                const companyInfo = customCompanyInfo || await getCompanySettings();
+                
                 const generateAndUploadPdf = async (type: 'Receipt' | 'Invoice', receiptNo: string, dbData: any) => {
                     const docProps = { 
                         ...dbData, 
@@ -141,8 +171,8 @@ export const generateReceipt = async (
                         ...metadata 
                     };
                     const doc = type === 'Receipt' 
-                        ? await generateCustomerReceiptPDF(docProps, items) 
-                        : await generateFormalInvoicePDF(docProps, items);
+                        ? await generateCustomerReceiptPDF(docProps, items, companyInfo) 
+                        : await generateFormalInvoicePDF(docProps, items, companyInfo);
 
                     const pdfBlob = doc.output('blob');
                     const fileName = `${type === 'Receipt' ? 'recibos' : 'faturas'}/${receiptNo}.pdf`;
@@ -223,8 +253,9 @@ export const uploadReceiptToDrive = async (pdfBlob: Blob, orderId: string, docum
     }
 };
 
-export const previewDocumentPDF = async (docData: any) => {
+export const previewDocumentPDF = async (docData: any, customCompanyInfo: any = null) => {
     try {
+        const companyInfo = customCompanyInfo || await getCompanySettings();
         const { generateCustomerReceiptPDF, generateFormalInvoicePDF } = await import('./pdfGenerator');
         const docProps = { 
             ...docData, 
@@ -234,8 +265,8 @@ export const previewDocumentPDF = async (docData: any) => {
             amount_paid: docData.total_amount 
         };
         const doc = docData.document_type === 'Receipt' 
-            ? await generateCustomerReceiptPDF(docProps, docData.items || []) 
-            : await generateFormalInvoicePDF(docProps, docData.items || []);
+            ? await generateCustomerReceiptPDF(docProps, docData.items || [], companyInfo) 
+            : await generateFormalInvoicePDF(docProps, docData.items || [], companyInfo);
             
         return doc.output('bloburl');
     } catch (error) {
@@ -399,6 +430,9 @@ async function processOrderBackgroundTasks(
     shortIdStr: string, 
     isPaid: boolean
 ) {
+    // Fetch common settings once for consistency
+    const companyInfo = await getCompanySettings();
+
     // 1. Generate Initial Document
     try {
         const docMetadata = {
@@ -419,7 +453,8 @@ async function processOrderBackgroundTasks(
             isPaid ? 'Receipt' : 'Invoice',
             true, // Generate PDF to Drive
             isPaid, // Create paired document if paid
-            docMetadata
+            docMetadata,
+            companyInfo
         );
     } catch (docError) {
         console.error("Initial document generation error", docError);
@@ -451,8 +486,8 @@ async function processOrderBackgroundTasks(
         notifyKitchenNewOrderWhatsApp(fullOrder, items).catch(e => console.error("Kitchen WhatsApp notification failed", e));
         notifyAdminNewOrderWhatsApp(fullOrder, items).catch(e => console.error("Admin WhatsApp notification failed", e));
 
-        // WhatsApp Notification / Receipt to Customer
-        notifyCustomerNewOrderWhatsApp(fullOrder, items).catch(e => console.error("Customer WhatsApp notification failed", e));
+        // WhatsApp Notification / Receipt to Customer - Pass companyInfo
+        notifyCustomerNewOrderWhatsApp(fullOrder, items, companyInfo).catch(e => console.error("Customer WhatsApp notification failed", e));
 
         // SMS Confirmation
         const smsOrder = {

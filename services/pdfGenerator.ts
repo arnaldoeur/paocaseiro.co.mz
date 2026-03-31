@@ -1,6 +1,34 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
+export interface CompanySettings {
+    name: string;
+    legalName: string;
+    logo: string;
+    address: string;
+    phone: string;
+    email: string;
+    website: string;
+    nuit: string;
+    regNo: string;
+    slogan: string;
+    motto: string;
+}
+
+const DEFAULT_COMPANY_INFO: CompanySettings = {
+    name: 'Pão Caseiro',
+    legalName: 'Pão Caseiro, Lda',
+    logo: '',
+    address: 'Lichinga, Av. Acordo de Lusaka',
+    phone: '+258 87 914 6662',
+    email: 'geral@paocaseiro.co.mz',
+    website: 'www.paocaseiro.co.mz',
+    nuit: '',
+    regNo: '',
+    slogan: 'O Sabor da Tradição',
+    motto: 'O sabor que aquece o coração'
+};
+
 const getBase64ImageFromUrl = async (url: string): Promise<string> => {
     if (!url) return '';
     if (url.startsWith('data:')) return url;
@@ -83,7 +111,7 @@ function numeroPorExtenso(num: number): string {
 /**
  * RECIBO (Receipt) - Mobile-friendly Beautiful Model matches POS App Print
  */
-export const generateCustomerReceiptPDF = async (order: any, items: any[], _docType?: string) => {
+export const generateCustomerReceiptPDF = async (order: any, items: any[], companyInfo: CompanySettings = DEFAULT_COMPANY_INFO) => {
     let currentY = 10;
     // Add more buffer height to account for the extra spaces, margins and multi-line customer info
     const estimatedHeight = 220 + (items.length * 15) + 60; 
@@ -97,23 +125,23 @@ export const generateCustomerReceiptPDF = async (order: any, items: any[], _docT
 
     // 1. Logo
     try {
-        const logoUrl = typeof window !== 'undefined' ? `${window.location.origin}/images/logo_receipt.png` : '/images/logo_receipt.png';
+        const logoUrl = companyInfo.logo || (typeof window !== 'undefined' ? `${window.location.origin}/images/logo_receipt.png` : '/images/logo_receipt.png');
         const logoBase64 = await getBase64ImageFromUrl(logoUrl);
         if (logoBase64) {
             pdf.addImage(logoBase64, 'PNG', (pageWidth - 30) / 2, currentY, 30, 30);
             currentY += 32;
         } else {
-            currentY += 20;
+            currentY += 15;
         }
     } catch (e) {
-        currentY += 20;
+        currentY += 15;
     }
 
     // Subtitle
     pdf.setFontSize(8);
     pdf.setFont('helvetica', 'bold');
     pdf.setTextColor(150, 150, 150);
-    pdf.text("PADARIA, PASTELARIA E CAFÉ", pageWidth / 2, currentY, { align: 'center' });
+    pdf.text(companyInfo.slogan?.toUpperCase() || "PADARIA, PASTELARIA E CAFÉ", pageWidth / 2, currentY, { align: 'center' });
     currentY += 5;
 
     // Gold line
@@ -321,33 +349,49 @@ export const generateCustomerReceiptPDF = async (order: any, items: any[], _docT
     pdf.setLineDashPattern([1, 1], 0);
     pdf.line(margin, currentY, pageWidth - margin, currentY);
     pdf.setLineDashPattern([], 0);
-    currentY += 6;
 
-    // Footer - Adicionada margem superior para isolar das contas
-    currentY += 25;
+    // ── FOOTER fixed to bottom of page ──────────────────────────────────────
+    // Always render at a fixed Y from the page bottom, so it never overflows.
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    let footerY = pageHeight - 52; // Start footer 52mm from bottom
+
     pdf.setFont('helvetica', 'normal');
     pdf.setFontSize(7);
     pdf.setTextColor(150, 150, 150);
-    pdf.text("Obrigado pela preferência!", pageWidth / 2, currentY, { align: 'center' });
-    currentY += 4;
-    pdf.text("Documento Processado por Computador", pageWidth / 2, currentY, { align: 'center' });
-    currentY += 6;
+    pdf.text("Obrigado pela preferência!", pageWidth / 2, footerY, { align: 'center' });
+    footerY += 4;
+    pdf.text("Documento Processado por Computador", pageWidth / 2, footerY, { align: 'center' });
+    footerY += 7;
+
     pdf.setFont('helvetica', 'italic');
     pdf.setTextColor(217, 166, 90);
-    pdf.text('"O sabor que aquece o coração"', pageWidth / 2, currentY, { align: 'center' });
-    currentY += 5;
+    pdf.text(`"${companyInfo.motto || 'O sabor que aquece o coração'}"`, pageWidth / 2, footerY, { align: 'center' });
+    footerY += 6;
+
     pdf.setFont('helvetica', 'bold');
-    pdf.setTextColor(150, 150, 150);
-    pdf.text("Pão Caseiro", pageWidth / 2, currentY, { align: 'center' });
-    currentY += 4;
+    pdf.setFontSize(7.5);
+    pdf.setTextColor(80, 80, 80);
+    pdf.text(companyInfo.legalName || companyInfo.name || 'Pão Caseiro', pageWidth / 2, footerY, { align: 'center' });
+    footerY += 5;
+
     pdf.setFont('helvetica', 'normal');
-    pdf.text("Lichinga, Av. Acordo de Lusaka", pageWidth / 2, currentY, { align: 'center' });
-    currentY += 3;
-    pdf.text("+258 87 914 6662 | +258 84 814 6662", pageWidth / 2, currentY, { align: 'center' });
-    currentY += 3;
-    pdf.text("geral@paocaseiro.co.mz", pageWidth / 2, currentY, { align: 'center' });
-    currentY += 3;
-    pdf.text("www.paocaseiro.co.mz", pageWidth / 2, currentY, { align: 'center' });
+    pdf.setFontSize(6.5);
+    pdf.setTextColor(120, 120, 120);
+    const splitAddrR = pdf.splitTextToSize(companyInfo.address || 'Lichinga, Av. Acordo de Lusaka', pageWidth - 30);
+    pdf.text(splitAddrR, pageWidth / 2, footerY, { align: 'center' });
+    footerY += (splitAddrR.length * 3.5) + 1;
+
+    pdf.text(`Tel: ${companyInfo.phone || '+258 87 914 6662'} | ${companyInfo.email || 'geral@paocaseiro.co.mz'}`, pageWidth / 2, footerY, { align: 'center' });
+    footerY += 4;
+
+    if (companyInfo.nuit) {
+        pdf.setFont('helvetica', 'bold');
+        pdf.text(`NUIT: ${companyInfo.nuit}`, pageWidth / 2, footerY, { align: 'center' });
+        footerY += 4;
+        pdf.setFont('helvetica', 'normal');
+    }
+
+    pdf.text(companyInfo.website || 'www.paocaseiro.co.mz', pageWidth / 2, footerY, { align: 'center' });
 
     return pdf;
 };
@@ -356,7 +400,7 @@ export const generateCustomerReceiptPDF = async (order: any, items: any[], _docT
  * FATURA (Invoice) - Colorful Branded Model with NUIT & Complete Data
  * As requested, the colorful model is used for Faturas, with all details.
  */
-export const generateFormalInvoicePDF = async (order: any, items: any[], _docType?: string) => {
+export const generateFormalInvoicePDF = async (order: any, items: any[], companyInfo: CompanySettings = DEFAULT_COMPANY_INFO) => {
     const pdf = new jsPDF('p', 'mm', 'a4');
     const pageWidth = pdf.internal.pageSize.getWidth();
     // const pageHeight = pdf.internal.pageSize.getHeight();
@@ -365,7 +409,7 @@ export const generateFormalInvoicePDF = async (order: any, items: any[], _docTyp
 
     // 1. Logo
     try {
-        const logoUrl = typeof window !== 'undefined' ? `${window.location.origin}/images/logo_receipt.png` : '/images/logo_receipt.png';
+        const logoUrl = companyInfo.logo || (typeof window !== 'undefined' ? `${window.location.origin}/images/logo_receipt.png` : '/images/logo_receipt.png');
         const logoBase64 = await getBase64ImageFromUrl(logoUrl);
         if (logoBase64) {
             pdf.addImage(logoBase64, 'PNG', (pageWidth - 50) / 2, currentY, 50, 50);
@@ -381,20 +425,25 @@ export const generateFormalInvoicePDF = async (order: any, items: any[], _docTyp
     pdf.setFont('helvetica', 'bold');
     pdf.setFontSize(16);
     pdf.setTextColor(217, 166, 90); // #d9a65a
-    const subtitle = "PADARIA E PASTELARIA PÃO CASEIRO";
+    const subtitle = companyInfo.legalName?.toUpperCase() || companyInfo.name?.toUpperCase() || "PADARIA E PASTELARIA PÃO CASEIRO";
     pdf.text(subtitle, pageWidth / 2, currentY, { align: 'center' });
     currentY += 8;
 
     pdf.setFont('helvetica', 'normal');
     pdf.setFontSize(10);
     pdf.setTextColor(100, 100, 100);
-    pdf.text("Lichinga, Av. Acordo de Lusaka", pageWidth / 2, currentY, { align: 'center' });
+    pdf.text(companyInfo.address || "Lichinga, Av. Acordo de Lusaka", pageWidth / 2, currentY, { align: 'center' });
     currentY += 5;
-    pdf.text("Telf: +258 87 9146 662 | Email: geral@paocaseiro.co.mz", pageWidth / 2, currentY, { align: 'center' });
+    pdf.text(`Telf: ${companyInfo.phone || '+258 87 9146 662'} | Email: ${companyInfo.email || 'geral@paocaseiro.co.mz'}`, pageWidth / 2, currentY, { align: 'center' });
     currentY += 5;
-    pdf.setFont('helvetica', 'bold');
-    pdf.text("NUIT: 400000000", pageWidth / 2, currentY, { align: 'center' }); // Example/Placeholder
-    currentY += 8;
+
+    if (companyInfo.nuit) {
+        pdf.setFont('helvetica', 'bold');
+        pdf.text(`NUIT: ${companyInfo.nuit}`, pageWidth / 2, currentY, { align: 'center' });
+        currentY += 8;
+    } else {
+        currentY += 4;
+    }
 
     // 3. Line separator
     pdf.setDrawColor(217, 166, 90);
@@ -590,28 +639,58 @@ export const generateFormalInvoicePDF = async (order: any, items: any[], _docTyp
         pdf.text(`Método de Pagamento: ${paymentMethodMapA4[rawPaymentMethodA4] || rawPaymentMethodA4}`, 15, currentY);
     }
     
-    currentY += 15;
+    currentY += 12;
 
     // Dotted separator
     pdf.setLineDashPattern([2, 2], 0);
     pdf.setDrawColor(200, 200, 200);
     pdf.line(15, currentY, pageWidth - 15, currentY);
-    pdf.setLineDashPattern([], 0); // reset
-    currentY += 25; // Significant margin for footer spacing
+    pdf.setLineDashPattern([], 0);
 
-    // Footer
+    // ── FOOTER fixed to bottom of A4 page ────────────────────────────────────
+    const pageHeightA4 = pdf.internal.pageSize.getHeight();
+    let footerYA4 = pageHeightA4 - 58; // Start 58mm from bottom
+
     pdf.setFont('helvetica', 'normal');
     pdf.setFontSize(10);
     pdf.setTextColor(150, 150, 150);
-    pdf.text("Obrigado pela preferência!", pageWidth / 2, currentY, { align: 'center' });
-    currentY += 6;
-    pdf.text("Documento Processado por Computador", pageWidth / 2, currentY, { align: 'center' });
-    currentY += 8;
-    
+    pdf.text("Obrigado pela preferência!", pageWidth / 2, footerYA4, { align: 'center' });
+    footerYA4 += 6;
+    pdf.text("Documento Processado por Computador", pageWidth / 2, footerYA4, { align: 'center' });
+    footerYA4 += 9;
+
     pdf.setFont('helvetica', 'italic');
+    pdf.setFontSize(11);
     pdf.setTextColor(217, 166, 90);
-    pdf.text('"O sabor que aquece o coração"', pageWidth / 2, currentY, { align: 'center' });
-    currentY += 6;
+    pdf.text(`"${companyInfo.motto || 'O sabor que aquece o coração'}"`, pageWidth / 2, footerYA4, { align: 'center' });
+    footerYA4 += 8;
+
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(10);
+    pdf.setTextColor(80, 80, 80);
+    pdf.text((companyInfo.legalName || companyInfo.name || 'Pão Caseiro').toUpperCase(), pageWidth / 2, footerYA4, { align: 'center' });
+    footerYA4 += 6;
+
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(9);
+    pdf.setTextColor(120, 120, 120);
+    const splitAddrA4 = pdf.splitTextToSize(companyInfo.address || 'Lichinga, Av. Acordo de Lusaka', pageWidth - 40);
+    pdf.text(splitAddrA4, pageWidth / 2, footerYA4, { align: 'center' });
+    footerYA4 += (splitAddrA4.length * 5) + 1;
+
+    pdf.text(`Tel: ${companyInfo.phone || '+258 87 914 6662'} | Email: ${companyInfo.email || 'geral@paocaseiro.co.mz'}`, pageWidth / 2, footerYA4, { align: 'center' });
+    footerYA4 += 6;
+
+    if (companyInfo.nuit) {
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(10);
+        pdf.text(`NUIT: ${companyInfo.nuit}`, pageWidth / 2, footerYA4, { align: 'center' });
+        footerYA4 += 6;
+        pdf.setFont('helvetica', 'normal');
+    }
+
+    pdf.setFontSize(9);
+    pdf.text(companyInfo.website || 'www.paocaseiro.co.mz', pageWidth / 2, footerYA4, { align: 'center' });
 
     return pdf;
 };

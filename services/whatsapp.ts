@@ -191,7 +191,7 @@ export const notifyCustomerDelayWhatsApp = async (order: any, delayMinutes: stri
     return await sendWhatsAppMessage(customerPhone, message);
 };
 
-export const notifyCustomerNewOrderWhatsApp = async (order: any, items: any[]) => {
+export const notifyCustomerNewOrderWhatsApp = async (order: any, items: any[], customCompanyInfo: any = null) => {
     const customerPhone = order.customer_phone || order.phone || order.customer?.phone;
     if (!customerPhone) return { success: false, error: 'No customer phone provided' };
 
@@ -210,7 +210,19 @@ export const notifyCustomerNewOrderWhatsApp = async (order: any, items: any[]) =
 
     try {
         const { generateFormalInvoicePDF } = await import('./pdfGenerator');
-        const doc = await generateFormalInvoicePDF(order, items);
+        
+        let companyInfo = customCompanyInfo;
+        if (!companyInfo) {
+            try {
+                // Dynamic import to avoid circular dependency
+                const { getCompanySettings } = await import('./supabase');
+                companyInfo = await getCompanySettings();
+            } catch (err) {
+                console.error("Failed to fetch settings for WhatsApp:", err);
+            }
+        }
+
+        const doc = await generateFormalInvoicePDF(order, items, companyInfo);
         const pdfBase64 = doc.output('datauristring').split(',')[1];
         
         return await sendWhatsAppMedia(
