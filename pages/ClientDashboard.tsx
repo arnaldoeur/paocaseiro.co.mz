@@ -10,6 +10,7 @@ import { sendSMS } from '../services/sms';
 import { logAudit } from '../services/audit';
 import { getEnglishProductName } from '../services/stringUtils';
 import { notifyAdminSystemsAlert } from '../services/whatsapp';
+import { NotificationService } from '../services/NotificationService';
 export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) => {
     const t = translations[language].clientDashboard;
     const [user, setUser] = useState<any>(null);
@@ -26,6 +27,10 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
     const [activeTicket, setActiveTicket] = useState<any>(null);
     const [ticketLoading, setTicketLoading] = useState(false);
     const [peopleAhead, setPeopleAhead] = useState(0);
+    const [searchOrderCode, setSearchOrderCode] = useState('');
+    const [searchedOrders, setSearchedOrders] = useState<any[]>([]);
+    const [isSearchingOrder, setIsSearchingOrder] = useState(false);
+    const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
 
     useEffect(() => {
         window.scrollTo(0, 0);
@@ -225,7 +230,21 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
 
             if (error) throw error;
             if (data && data.length > 0) {
-                setActiveTicket(data[0]);
+                const newTicket = data[0];
+                setActiveTicket(newTicket);
+
+                // NEW: Log System Event for Admin Center
+                try {
+                    await NotificationService.logSystemEvent(
+                        'Nova Senha Digital',
+                        `Senha #${newTicket.ticket_number} (${priority ? 'Prioritária' : 'Normal'}) gerada via App para ${user?.phone || 'Cliente'}.`,
+                        'TICKET',
+                        'info',
+                        user?.id
+                    );
+                } catch (logErr) {
+                    console.error("Digital ticket system logging failed:", logErr);
+                }
             }
         } catch (error: any) {
             alert(language === 'en' ? 'Error requesting ticket: ' + error.message : 'Erro ao solicitar senha: ' + error.message);
@@ -432,16 +451,17 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
         alert(language === 'en' ? 'Items added to cart!' : 'Itens adicionados ao carrinho!');
     };
 
-    const handleSupportOrder = (orderId: string) => {
-        const shortId = orderId.slice(-6).toUpperCase();
-        setSupportMsg(language === 'en' 
-            ? `Hello Pão Caseiro Team,\nI need support with my order #${shortId} from ${new Date().toLocaleDateString('en-US')}.\n\n[Describe the problem here...]`
-            : `Olá Equipa Pão Caseiro,\nPreciso de suporte com a minha encomenda #${shortId} do dia ${new Date().toLocaleDateString('pt-PT')}.\n\n[Descreva aqui o problema...]`);
-
-        const supportSection = document.getElementById('support-section');
-        if (supportSection) {
-            supportSection.scrollIntoView({ behavior: 'smooth' });
-        }
+    const handleSupportOrder = (orderId: string, status: string, shortId?: string) => {
+        const orderRef = shortId || orderId.slice(-6).toUpperCase();
+        const msg = language === 'en' 
+            ? encodeURIComponent(`Hello! I need help with my order #${orderRef}. Current status: ${status}.`)
+            : encodeURIComponent(`Olá! Preciso de ajuda com a minha encomenda #${orderRef}. Estado atual: ${status}.`);
+            
+        // Pre-fill the form just in case
+        setSupportMsg(language === 'en' ? `Order #${orderRef} Support` : `Suporte Encomenda #${orderRef}`);
+        
+        // Open WhatsApp direct
+        window.open(`https://wa.me/258879146662?text=${msg}`, '_blank');
     };
 
     const handleCancelOrder = async (order: any) => {
@@ -516,8 +536,28 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
             await sendSMS(adminPhone, smsMessage)
                 .catch(e => console.error("Support SMS failed:", e));
                 
-            await notifyAdminSystemsAlert(`Pedido de Suporte`, `Cliente: ${customerData?.name || 'Desconhecido'}\nTelefone: ${user?.phone || 'N/A'}\n\nMensagem:\n${supportMsg}`)
+            await notifyAdminSystemsAlert(`Pedido de Suporte (WA)`, `Cliente: ${customerData?.name || 'Desconhecido'}\nTelefone: ${user?.phone || 'N/A'}\n\nMensagem:\n${supportMsg}`)
                 .catch(e => console.error("Support WhatsApp Alert failed:", e));
+
+            // 4. Open WhatsApp link in new tab
+            const supportNumber = '258879146662';
+            const clientName = customerData?.name || user?.phone || 'Cliente';
+            const clientPhone = user?.phone || 'N/A';
+            const fullMessage = (language === 'en' 
+                ? `Hello Pão Caseiro Support!\n\n*Client:* ${clientName}\n*Phone:* ${clientPhone}\n\n*Issue/Message:*\n${supportMsg}`
+                : `Olá Suporte Pão Caseiro!\n\n*Cliente:* ${clientName}\n*Telefone:* ${clientPhone}\n\n*Assunto/Mensagem:*\n${supportMsg}`);
+            
+            const waUrl = `https://wa.me/${supportNumber}?text=${encodeURIComponent(fullMessage)}`;
+            window.open(waUrl, '_blank');
+
+            // 5. Log as System Event for Admin Center
+            await NotificationService.logSystemEvent(
+                language === 'en' ? 'New Support Request' : 'Novo Pedido de Suporte',
+                `Cliente: ${clientName}\nTelefone: ${clientPhone}\n\nMensagem: ${supportMsg}`,
+                'SUPPORT',
+                'info',
+                user?.id
+            );
 
             setSupportStatus('success');
             setSupportMsg('');
@@ -542,121 +582,316 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
         }
     };
 
-    const ActiveOrderTracking: React.FC<{ orders: any[] }> = ({ orders }) => {
+    const getStatusBg = (status: string) => {
+        switch (status?.toLowerCase()) {
+            case 'pending': return 'bg-gray-100 text-gray-500';
+            case 'confirmed': return 'bg-blue-50 text-blue-500';
+            case 'kitchen': return 'bg-amber-50 text-amber-600';
+            case 'ready': return 'bg-green-50 text-green-600';
+            case 'delivering': return 'bg-green-600 text-white';
+            case 'completed': return 'bg-gray-50 text-gray-400';
+            case 'cancelled': return 'bg-red-50 text-red-500';
+            default: return 'bg-gray-100 text-gray-500';
+        }
+    };
+
+    const getStatusIconDashboard = (status: string) => {
+        switch (status?.toLowerCase()) {
+            case 'pending': return <Clock className="w-6 h-6" />;
+            case 'confirmed': return <CheckCircle className="w-6 h-6" />;
+            case 'kitchen': return <PenBox className="w-6 h-6" />;
+            case 'ready': return <ShoppingBag className="w-6 h-6" />;
+            case 'delivering': return <Smartphone className="w-6 h-6" />;
+            case 'completed': return <CheckCircle className="w-6 h-6" />;
+            case 'cancelled': return <XCircle className="w-6 h-6" />;
+            default: return <Clock className="w-6 h-6" />;
+        }
+    };
+
+    const getStatusProgress = (status: string) => {
+        switch (status?.toLowerCase()) {
+            case 'pending': return 0;
+            case 'confirmed': return 25;
+            case 'kitchen': return 50;
+            case 'ready': return 75;
+            case 'delivering': return 100;
+            case 'completed': return 100;
+            default: return 0;
+        }
+    };
+
+    const formatStatus = (status: string, lang: string) => {
+        const map: any = {
+            'pending': { pt: 'Pendente', en: 'Pending' },
+            'confirmed': { pt: 'Confirmado', en: 'Confirmed' },
+            'kitchen': { pt: 'Na Cozinha', en: 'In Kitchen' },
+            'ready': { pt: 'Pronto para Entrega', en: 'Ready' },
+            'delivering': { pt: 'Em Rota de Entrega', en: 'Out for Delivery' },
+            'completed': { pt: 'Concluído', en: 'Completed' },
+            'cancelled': { pt: 'Cancelado', en: 'Cancelled' }
+        };
+        return map[status?.toLowerCase()]?.[lang] || status;
+    };
+
+    const handleOrderSearch = async (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
+        const code = searchOrderCode.trim();
+        if (!code) return;
+
+        setIsSearchingOrder(true);
+        try {
+            // Search by short ID (suffix) or full ID
+            const { data, error } = await supabase
+                .from('orders')
+                .select('*, order_items(*)')
+                .or(`id.ilike.%${code}%,short_id.ilike.%${code}%`)
+                .order('created_at', { ascending: false });
+
+            if (error) throw error;
+            setSearchedOrders(data || []);
+            
+            if (!data || data.length === 0) {
+                alert(language === 'en' ? 'No order found with this code.' : 'Nenhuma encomenda encontrada com este código.');
+            }
+        } catch (err) {
+            console.error('Search error:', err);
+            alert(language === 'en' ? 'Error searching for order.' : 'Erro ao procurar encomenda.');
+        } finally {
+            setIsSearchingOrder(false);
+        }
+    };
+
+    const ActiveOrderTracking: React.FC<{ orders: any[], searchedOrders: any[] }> = ({ orders, searchedOrders }) => {
         const activeOrders = orders.filter(o => 
             ['pending', 'confirmed', 'kitchen', 'ready', 'delivering'].includes(o.status?.toLowerCase())
         );
 
-        if (activeOrders.length === 0) return null;
+        // Combine user's active orders with manually searched ones, removing duplicates
+        const allTrackedOrders = [...activeOrders];
+        searchedOrders.forEach(so => {
+            if (!allTrackedOrders.find(o => o.id === so.id)) {
+                allTrackedOrders.push(so);
+            }
+        });
 
-        const latestOrder = activeOrders[0];
-        const statusSteps = ['pending', 'kitchen', 'ready', 'delivered'];
+        if (allTrackedOrders.length === 0 && !isSearchingOrder) {
+            return (
+                <div className="bg-white rounded-3xl p-6 shadow-sm border-2 border-[#d9a65a]/10 flex flex-col items-center text-center">
+                    <div className="w-16 h-16 bg-[#f7f1eb] rounded-2xl flex items-center justify-center mb-4">
+                        <ShoppingBag className="w-8 h-8 text-[#d9a65a]" />
+                    </div>
+                    <h3 className="font-serif text-lg text-[#3b2f2f] mb-1">{language === 'en' ? 'No Active Orders' : 'Sem Encomendas Ativas'}</h3>
+                    <p className="text-sm text-gray-500 mb-6">{language === 'en' ? 'Your active orders will appear here for tracking.' : 'As suas encomendas ativas aparecerão aqui para acompanhamento.'}</p>
+                    
+                    <div className="w-full max-w-xs">
+                        <form onSubmit={handleOrderSearch} className="relative">
+                            <input 
+                                type="text"
+                                placeholder={language === 'en' ? 'Track by order code...' : 'Acompanhar por código...'}
+                                value={searchOrderCode}
+                                onChange={(e) => setSearchOrderCode(e.target.value)}
+                                className="w-full pl-4 pr-12 py-3 bg-gray-50 border border-gray-100 rounded-xl text-sm focus:outline-none focus:border-[#d9a65a] transition-all"
+                            />
+                            <button 
+                                type="submit"
+                                disabled={isSearchingOrder}
+                                className="absolute right-2 top-1.5 p-1.5 bg-[#3b2f2f] text-[#d9a65a] rounded-lg hover:bg-[#d9a65a] hover:text-[#3b2f2f] transition-all disabled:opacity-50"
+                            >
+                                {isSearchingOrder ? <Loader className="w-4 h-4 animate-spin" /> : <ChevronRight className="w-4 h-4" />}
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            );
+        }
+
+        // Set the featured order (either the one user picked, or the latest one)
+        const featuredOrder = allTrackedOrders.find(o => o.id === selectedOrderId) || allTrackedOrders[0];
+        const otherOrders = allTrackedOrders.filter(o => o.id !== featuredOrder.id);
         
-        const getStatusIndex = (status: string) => {
-            const s = status?.toLowerCase();
-            if (s === 'pending') return 0;
-            if (s === 'kitchen' || s === 'confirmed') return 1;
-            if (s === 'ready' || s === 'delivering') return 2;
-            if (s === 'delivered' || s === 'completed') return 3;
-            return 0;
-        };
-
-        const currentIndex = getStatusIndex(latestOrder.status);
+        const steps = [
+            { id: 'pending', label: { en: 'Pending', pt: 'Pendente' }, icon: <Clock className="w-5 h-5" /> },
+            { id: 'confirmed', label: { en: 'Confirmed', pt: 'Confirmado' }, icon: <CheckCircle className="w-5 h-5" /> },
+            { id: 'kitchen', label: { en: 'Kitchen', pt: 'Cozinha' }, icon: <PenBox className="w-5 h-5" /> },
+            { id: 'ready', label: { en: 'Ready', pt: 'Pronto' }, icon: <ShoppingBag className="w-5 h-5" /> },
+            { id: 'delivering', label: { en: 'Out', pt: 'Em Rota' }, icon: <Smartphone className="w-5 h-5" /> }
+        ];
 
         return (
-            <motion.div 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border-2 border-[#d9a65a]/10 relative overflow-hidden"
-            >
-                <div className="absolute top-0 right-0 p-4">
-                    <motion.div 
-                        animate={{ scale: [1, 1.1, 1] }} 
-                        transition={{ repeat: Infinity, duration: 2 }}
-                        className="flex items-center gap-2 bg-amber-50 text-amber-600 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest"
-                    >
-                        <Clock className="w-3 h-3" />
-                        {language === 'en' ? 'Live Tracking' : 'Em Direto'}
-                    </motion.div>
-                </div>
-
-                <div className="flex items-center gap-4 mb-8">
-                    <div className="w-12 h-12 bg-[#3b2f2f] rounded-2xl flex items-center justify-center">
-                        <ShoppingBag className="w-6 h-6 text-[#d9a65a]" />
-                    </div>
-                    <div>
-                        <h2 className="font-serif text-2xl text-[#3b2f2f]">
-                            {language === 'en' ? 'Acompanhar Pedido' : 'Acompanhar Pedido'}
-                        </h2>
-                        <p className="text-sm text-gray-400 font-medium">#{latestOrder.short_id || latestOrder.id.slice(0, 6)}</p>
+            <div className="space-y-6">
+                <div className="flex items-center justify-between px-2">
+                    <h3 className="font-serif text-xl md:text-2xl text-[#3b2f2f]">{language === 'en' ? 'Track Encomenda' : 'Acompanhar Encomenda'} <span className="text-[#d9a65a]/40 ml-2">#{featuredOrder.short_id || featuredOrder.id.slice(-6).toUpperCase()}</span></h3>
+                    <div className="flex items-center gap-3">
+                        <span className="text-xs font-black bg-[#d9a65a] text-[#3b2f2f] px-3 py-1 rounded-full uppercase tracking-widest shadow-sm">
+                            {allTrackedOrders.length} {allTrackedOrders.length === 1 ? (language === 'en' ? 'Active' : 'Ativa') : (language === 'en' ? 'Active' : 'Ativas')}
+                        </span>
                     </div>
                 </div>
 
-                {/* Stepper */}
-                <div className="relative flex justify-between items-center px-2">
-                    {/* Background Line */}
-                    <div className="absolute left-0 right-0 h-1 bg-gray-100 top-1/2 -translate-y-1/2 z-0" />
-                    {/* Active Line */}
-                    <motion.div 
-                        initial={{ width: 0 }}
-                        animate={{ width: `${(currentIndex / (statusSteps.length - 1)) * 100}%` }}
-                        className="absolute left-0 h-1 bg-[#d9a65a] top-1/2 -translate-y-1/2 z-0"
-                    />
-
-                    {statusSteps.map((s, idx) => {
-                        const isActive = idx <= currentIndex;
-                        const isCurrent = idx === currentIndex;
-                        
-                        let label = '';
-                        let icon = null;
-                        
-                        if (idx === 0) {
-                            label = language === 'en' ? 'Received' : 'Recebido';
-                            icon = <CheckCircle className={`w-5 h-5 ${isActive ? 'text-white' : 'text-gray-400'}`} />;
-                        } else if (idx === 1) {
-                            label = language === 'en' ? 'Kitchen' : 'Cozinha';
-                            icon = <PenBox className={`w-5 h-5 ${isActive ? 'text-white' : 'text-gray-400'}`} />;
-                        } else if (idx === 2) {
-                            label = language === 'en' ? 'Ready' : 'Pronto';
-                            icon = <RotateCcw className={`w-5 h-5 ${isActive ? 'text-white' : 'text-gray-400'}`} />;
-                        } else {
-                            label = language === 'en' ? 'Finalized' : 'Finalizado';
-                            icon = <CheckCircle className={`w-5 h-5 ${isActive ? 'text-white' : 'text-gray-400'}`} />;
-                        }
-
-                        return (
-                            <div key={idx} className="relative z-10 flex flex-col items-center gap-3">
-                                <motion.div 
-                                    animate={isCurrent ? { scale: [1, 1.2, 1] } : {}}
-                                    transition={{ repeat: Infinity, duration: 2 }}
-                                    className={`w-10 h-10 rounded-full flex items-center justify-center border-4 ${isActive ? 'bg-[#d9a65a] border-[#fcf7f2]' : 'bg-white border-gray-100 shadow-sm'}`}
-                                >
-                                    {icon}
-                                </motion.div>
-                                <span className={`text-[10px] font-bold uppercase tracking-widest ${isActive ? 'text-[#3b2f2f]' : 'text-gray-400'}`}>
-                                    {label}
-                                </span>
-                            </div>
-                        );
-                    })}
-                </div>
-
-                {latestOrder.status === 'delivering' && (
-                    <div className="mt-8 p-4 bg-green-50 rounded-2xl flex items-center gap-4 border border-green-100 animate-pulse">
-                        <div className="w-10 h-10 bg-green-500 rounded-xl flex items-center justify-center">
-                            <Smartphone className="w-5 h-5 text-white" />
-                        </div>
+                {/* Featured Order - Premium Full-Width Card */}
+                <motion.div 
+                    layoutId={featuredOrder.id}
+                    className="bg-white rounded-[2.5rem] p-6 md:p-10 shadow-2xl border-2 border-[#d9a65a]/10 relative overflow-hidden"
+                >
+                    {/* Background Decorative Pattern */}
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-[#fcf7f2] rounded-bl-[200px] -mr-32 -mt-32 opacity-50 pointer-events-none" />
+                    
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-6 relative z-10">
                         <div>
-                            <p className="text-green-700 font-bold text-sm">
-                                {language === 'en' ? 'Driver is on the way!' : 'O estafeta está a caminho!'}
-                            </p>
-                            <p className="text-green-600/70 text-xs font-medium">
-                                {language === 'en' ? 'Keep your phone nearby.' : 'Mantenha o seu telemóvel por perto.'}
-                            </p>
+                            <p className="text-[10px] font-black text-[#d9a65a] uppercase tracking-[0.3em] mb-2">{language === 'en' ? 'Current Status' : 'Estado Atual'}</p>
+                            <h4 className="font-serif text-3xl md:text-4xl text-[#3b2f2f]">
+                                {formatStatus(featuredOrder.status, language)}
+                            </h4>
+                        </div>
+                        <div className="flex items-center gap-4">
+                            <div className="text-right hidden md:block">
+                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{language === 'en' ? 'Est. Arrival' : 'Chegada Est.'}</p>
+                                <p className="font-black text-[#3b2f2f] text-lg">30-45 min</p>
+                            </div>
+                            <button 
+                                onClick={() => handleSupportOrder(featuredOrder.id, featuredOrder.status)}
+                                className="flex items-center gap-3 py-4 px-6 bg-[#3b2f2f] text-[#d9a65a] rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-[#d9a65a] hover:text-[#3b2f2f] transition-all shadow-xl hover:-translate-y-1"
+                            >
+                                <MessageSquare className="w-5 h-5" />
+                                {language === 'en' ? 'Live Support' : 'Suporte Direto'}
+                            </button>
                         </div>
                     </div>
-                )}
-            </motion.div>
+
+                    {/* Prominent Stages UI */}
+                    <div className="relative z-10 pt-4 pb-12">
+                        {/* Progress Line */}
+                        <div className="absolute top-6 left-[30px] right-[30px] h-2 bg-gray-50 rounded-full" />
+                        <motion.div 
+                            initial={{ width: 0 }}
+                            animate={{ width: `calc(${getStatusProgress(featuredOrder.status)}% - 60px)` }}
+                            className="absolute top-6 left-[30px] h-2 bg-gradient-to-r from-[#d9a65a] to-amber-400 rounded-full shadow-[0_0_15px_rgba(217,166,90,0.3)] transition-all duration-1000"
+                        />
+
+                        {/* Stage Icons and Labels */}
+                        <div className="flex justify-between relative">
+                            {steps.map((step, idx) => {
+                                const isActive = getStatusProgress(featuredOrder.status) >= (idx * 25);
+                                const isCurrent = (getStatusProgress(featuredOrder.status) === (idx * 25)) || (!isActive && idx > 0 && getStatusProgress(featuredOrder.status) >= ((idx-1) * 25));
+                                
+                                return (
+                                    <div key={step.id} className="flex flex-col items-center gap-4 w-12 md:w-20">
+                                        <div className={`w-12 h-12 md:w-14 md:h-14 rounded-2xl flex items-center justify-center transition-all duration-700 border-2 ${
+                                            isActive 
+                                                ? 'bg-white border-[#d9a65a] text-[#d9a65a] shadow-[0_10px_20px_rgba(217,166,90,0.15)] ring-4 ring-[#d9a65a]/10 scale-110' 
+                                                : 'bg-white border-gray-100 text-gray-300'
+                                        }`}>
+                                            {step.icon}
+                                        </div>
+                                        <div className="text-center group">
+                                            <p className={`text-[9px] md:text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-colors ${isActive ? 'text-[#3b2f2f]' : 'text-gray-300'}`}>
+                                                {step.label[language as 'en' | 'pt']}
+                                            </p>
+                                            {isCurrent && (
+                                                <motion.div 
+                                                    layoutId="currentIndicator"
+                                                    className="w-1 h-1 bg-[#d9a65a] rounded-full mx-auto mt-1"
+                                                    animate={{ opacity: [0.3, 1, 0.3] }}
+                                                    transition={{ repeat: Infinity, duration: 1.5 }}
+                                                />
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    {/* Order Details Preview */}
+                    <div className="mt-8 pt-8 border-t border-gray-50 flex flex-wrap gap-6 items-center">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-gray-50 rounded-xl flex items-center justify-center">
+                                <ShoppingBag className="w-5 h-5 text-gray-400" />
+                            </div>
+                            <div>
+                                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">{language === 'en' ? 'Items' : 'Artigos'}</p>
+                                <p className="text-sm font-black text-[#3b2f2f]">{featuredOrder.order_items?.length || 0} {language === 'en' ? 'Products' : 'Produtos'}</p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-gray-50 rounded-xl flex items-center justify-center">
+                                <Clock className="w-5 h-5 text-gray-400" />
+                            </div>
+                            <div>
+                                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">{language === 'en' ? 'Ordered At' : 'Pedido há'}</p>
+                                <p className="text-sm font-black text-[#3b2f2f]">{new Date(featuredOrder.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                            </div>
+                        </div>
+                    </div>
+                </motion.div>
+
+                {/* Tracking Search & Other Orders Section */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pt-4">
+                    {/* Search Component */}
+                    <div className="md:col-span-1">
+                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-4 ml-2">{language === 'en' ? 'Track Another Order' : 'Rastrear Outro Pedido'}</p>
+                        <form onSubmit={handleOrderSearch} className="relative group">
+                            <input 
+                                type="text"
+                                placeholder={language === 'en' ? 'By code...' : 'Por código...'}
+                                value={searchOrderCode}
+                                onChange={(e) => setSearchOrderCode(e.target.value)}
+                                className="w-full pl-5 pr-14 py-4 bg-white border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-8 focus:ring-[#d9a65a]/5 focus:border-[#d9a65a] transition-all shadow-sm group-hover:shadow-md"
+                            />
+                            <button 
+                                type="submit"
+                                disabled={isSearchingOrder}
+                                className="absolute right-2 top-2 p-2.5 bg-[#d9a65a] text-[#3b2f2f] rounded-xl hover:bg-[#3b2f2f] hover:text-[#d9a65a] transition-all disabled:opacity-50"
+                            >
+                                {isSearchingOrder ? <Loader className="w-5 h-5 animate-spin" /> : <ChevronRight className="w-5 h-5" />}
+                            </button>
+                        </form>
+                    </div>
+
+                    {/* Pending List ("Lista Pendente") */}
+                    <div className="md:col-span-2">
+                        {otherOrders.length > 0 && (
+                            <>
+                                <div className="flex items-center justify-between mb-4 ml-2">
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{language === 'en' ? 'Pending Tracker List' : 'Lista Pendente'}</p>
+                                    <span className="text-[10px] font-bold text-[#d9a65a]">{otherOrders.length} {language === 'en' ? 'more' : 'mais'}</span>
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    {otherOrders.map((order) => (
+                                        <motion.button
+                                            key={order.id}
+                                            onClick={() => setSelectedOrderId(order.id)}
+                                            whileHover={{ x: 5 }}
+                                            className="flex items-center justify-between p-4 bg-white rounded-2xl border border-gray-50 hover:border-[#d9a65a]/30 hover:shadow-lg transition-all text-left"
+                                        >
+                                            <div className="flex items-center gap-4">
+                                                <div className={`p-2 rounded-xl ${getStatusBg(order.status)}`}>
+                                                    {getStatusIconDashboard(order.status)}
+                                                </div>
+                                                <div>
+                                                    <p className="text-[10px] font-black text-[#d9a65a] tracking-widest">#{order.short_id || order.id.slice(-6).toUpperCase()}</p>
+                                                    <p className="text-sm font-serif text-[#3b2f2f]">{formatStatus(order.status, language)}</p>
+                                                </div>
+                                            </div>
+                                            <div className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center group-hover:bg-[#d9a65a]/10">
+                                                <ChevronRight className="w-4 h-4 text-gray-400" />
+                                            </div>
+                                        </motion.button>
+                                    ))}
+                                </div>
+                            </>
+                        )}
+                        
+                        {otherOrders.length === 0 && !isSearchingOrder && allTrackedOrders.length === 1 && (
+                            <div className="h-full flex items-center justify-center p-8 bg-[#fdfaf7]/50 rounded-[2rem] border border-dashed border-[#d9a65a]/10">
+                                <p className="text-[10px] font-black text-[#d9a65a]/40 uppercase tracking-[0.3em] text-center">
+                                    {language === 'en' ? 'Tracking 1 Active Order' : 'Acompanhando 1 Pedido Ativo'}
+                                </p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
         );
     };
 
@@ -915,8 +1150,10 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                     </div>
                 )}
 
-                {/* Active Order Tracking */}
-                <ActiveOrderTracking orders={orders} />
+                {/* Order Tracking Section */}
+                <div className="mb-10">
+                    <ActiveOrderTracking orders={orders} searchedOrders={searchedOrders} />
+                </div>
 
                 {/* Queue Ticket Section */}
                 <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-[#d9a65a]/20">
@@ -1053,7 +1290,7 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                                                 {t.reorder}
                                             </button>
                                             <button
-                                                onClick={() => handleSupportOrder(order.short_id || order.id)}
+                                                onClick={() => handleSupportOrder(order.short_id || order.id, order.status)}
                                                 className="flex-1 min-w-[140px] flex items-center justify-center gap-2 bg-gray-50 text-gray-500 py-3 rounded-xl font-bold hover:bg-gray-100 transition-all text-xs uppercase tracking-widest border border-gray-100"
                                             >
                                                 <HelpCircle className="w-4 h-4" />
@@ -1075,9 +1312,40 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                         )}
                     </div>
 
-                    {/* Right: Support Contact */}
+                    {/* Right: Support Contact & Status */}
                     <div className="space-y-6" id="support-section">
-                        <div className="bg-[#3b2f2f] text-white p-8 rounded-3xl relative overflow-hidden">
+                        {/* WhatsApp Direct Card - NEW */}
+                        <motion.div 
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            whileHover={{ scale: 1.02 }}
+                            onClick={() => {
+                                const msg = language === 'en' 
+                                    ? encodeURIComponent("Hello Pão Caseiro Team! I need some assistance.") 
+                                    : encodeURIComponent("Olá Equipa Pão Caseiro! Gostaria de obter assistência.");
+                                window.open(`https://wa.me/258879146662?text=${msg}`, '_blank');
+                            }}
+                            className="bg-gradient-to-br from-[#25D366] to-[#128C7E] p-8 rounded-[2.5rem] text-white shadow-xl cursor-pointer relative overflow-hidden group"
+                        >
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-150 duration-700" />
+                            <div className="relative z-10">
+                                <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center mb-6 backdrop-blur-sm">
+                                    <MessageSquare className="w-8 h-8 text-white" />
+                                </div>
+                                <h3 className="font-serif text-2xl mb-2">{language === 'en' ? 'WhatsApp Support' : 'Suporte WhatsApp'}</h3>
+                                <p className="text-white/80 text-sm mb-6 leading-relaxed">
+                                    {language === 'en' 
+                                        ? 'Chat directly with our team for immediate assistance.' 
+                                        : 'Fale directamente com a nossa equipa para assistência imediata.'}
+                                </p>
+                                <div className="flex items-center gap-2 font-black text-xs uppercase tracking-[0.2em]">
+                                    {language === 'en' ? 'Open Chat' : 'Abrir Chat'}
+                                    <ChevronRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
+                                </div>
+                            </div>
+                        </motion.div>
+
+                        <div className="bg-[#3b2f2f] text-white p-8 rounded-3xl relative overflow-hidden shadow-sm border border-white/5">
                             <div className="absolute top-0 right-0 w-32 h-32 bg-[#d9a65a]/10 rounded-full blur-3xl -mr-16 -mt-16" />
 
                             <h2 className="font-serif text-2xl text-[#d9a65a] mb-2 flex items-center gap-3">

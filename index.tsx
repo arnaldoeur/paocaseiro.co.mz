@@ -3,8 +3,10 @@ import ReactDOM from 'react-dom/client';
 
 import App from './App';
 import './index.css';
+import { registerSW } from 'virtual:pwa-register';
 
-console.log("Index.tsx: Importing App...");
+// Register Service Worker for PWA
+registerSW({ immediate: true });
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -16,5 +18,4 @@ if (!rootElement) {
       <App />
     </React.StrictMode>
   );
-  console.log("Index.tsx: Render called");
 }

@@ -170,6 +170,19 @@ export const queueService = {
         return data;
     },
 
+    // Update ticket details without changing queue flow state
+    async updateTicket(id: string, updates: Partial<QueueTicket>) {
+        const { data, error } = await supabase
+            .from('queue_tickets')
+            .update(updates)
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) throw error;
+        return data;
+    },
+
     // Check if a customer is eligible for priority (registered > 7 days)
     async checkPriorityEligibility(phone: string): Promise<{ eligible: boolean; message?: string }> {
         console.log("DEBUG: Checking priority for", phone);
@@ -192,7 +205,8 @@ export const queueService = {
         const now = new Date();
         const diffDays = Math.floor((now.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24));
 
-        if (diffDays >= 7) {
+        // [LAUNCH_PHASE] Reduced from 7 to 0 days to allow all new customers priority for the first week
+        if (diffDays >= 0) {
             return { eligible: true };
         } else {
             return { 

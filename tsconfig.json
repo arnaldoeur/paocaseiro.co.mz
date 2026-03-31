@@ -25,5 +25,16 @@
     },
     "allowImportingTsExtensions": true,
     "noEmit": true
-  }
+  },
+  "exclude": [
+    "supabase/functions/**/*",
+    "dist",
+    "test_extract"
+  ],
+  "include": [
+    "src",
+    "vite-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx"
+  ]
 }

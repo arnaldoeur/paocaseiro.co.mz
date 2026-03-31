@@ -8,9 +8,9 @@ export type ConnectionMode = 'proxy' | 'direct';
 
 const getInitialMode = (): ConnectionMode => {
     if (typeof window !== 'undefined') {
-        return (localStorage.getItem('supabase_connection_mode') as ConnectionMode) || 'proxy';
+        return (localStorage.getItem('supabase_connection_mode') as ConnectionMode) || 'direct';
     }
-    return 'proxy';
+    return 'direct';
 };
 
 let currentMode = getInitialMode();
@@ -64,6 +64,183 @@ export const refreshSupabaseClient = () => {
     const newUrl = getSupabaseUrl();
     if (newUrl) {
         supabase = createClient(newUrl, SUPABASE_KEY);
+    }
+};
+
+// --- Document Generation & Drive Sync (Moved up to fix hoisting issues) ---
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
+
+export const generateReceipt = async (
+    orderId: string, 
+    shortId: string, 
+    customerId: string, 
+    customerName: string, 
+    items: any[], 
+    totalAmount: number, 
+    documentType: 'Receipt' | 'Invoice' = 'Receipt', 
+    generatePdfFile: boolean = true,
+    createPairedDocument: boolean = true,
+    metadata: any = {}
+) => {
+    try {
+        const primaryNo = documentType === 'Receipt' ? `REC-${shortId}` : `FAT-${shortId}`;
+        const primaryData = {
+            order_id: orderId,
+            customer_id: customerId,
+            customer_name: customerName,
+            receipt_no: primaryNo,
+            date: new Date().toISOString().split('T')[0],
+            total_amount: totalAmount,
+            currency: 'MT',
+            document_type: documentType,
+            items: items,
+            status: documentType === 'Receipt' ? 'paid' : 'pending',
+            created_at: new Date().toISOString()
+        };
+        const { data: primaryResult, error: primaryError } = await supabase.from('receipts').insert([primaryData]).select().single();
+        if (primaryError) throw primaryError;
+
+        if (createPairedDocument) {
+            const pairedType = documentType === 'Receipt' ? 'Invoice' : 'Receipt';
+            const pairedNo = pairedType === 'Receipt' ? `REC-${shortId}` : `FAT-${shortId}`;
+            const pairedData = {
+                ...primaryData,
+                receipt_no: pairedNo,
+                document_type: pairedType,
+                status: pairedType === 'Receipt' ? 'paid' : primaryData.status,
+            };
+            const { error: pairedError } = await supabase.from('receipts').insert([pairedData]);
+            if (pairedError) console.error("Could not insert paired document record", pairedError);
+        }
+
+        if (documentType === 'Receipt' || createPairedDocument) {
+            await supabase.from('receipts')
+                .update({ status: 'paid' })
+                .eq('order_id', orderId)
+                .eq('document_type', 'Invoice');
+                
+            if (!orderId.startsWith('MANUAL-')) {
+                await supabase.from('orders')
+                    .update({ payment_status: 'paid' })
+                    .eq('id', orderId);
+            }
+        }
+
+        if (generatePdfFile) {
+            try {
+                const { generateCustomerReceiptPDF, generateFormalInvoicePDF } = await import('./pdfGenerator');
+                
+                const generateAndUploadPdf = async (type: 'Receipt' | 'Invoice', receiptNo: string, dbData: any) => {
+                    const docProps = { 
+                        ...dbData, 
+                        short_id: shortId, 
+                        transaction_id: receiptNo, 
+                        delivery_type: 'pickup', 
+                        amount_paid: totalAmount,
+                        ...metadata 
+                    };
+                    const doc = type === 'Receipt' 
+                        ? await generateCustomerReceiptPDF(docProps, items) 
+                        : await generateFormalInvoicePDF(docProps, items);
+
+                    const pdfBlob = doc.output('blob');
+                    const fileName = `${type === 'Receipt' ? 'recibos' : 'faturas'}/${receiptNo}.pdf`;
+                
+                    const { error: uploadError } = await supabase.storage.from('products').upload(fileName, pdfBlob, {
+                         contentType: 'application/pdf',
+                         upsert: true
+                    });
+                    
+                    if (!uploadError) {
+                         const folderName = type === 'Receipt' ? 'Recibos' : 'Faturas';
+                         const { data: folderInfo } = await supabase.from('drive_folders').select('id').eq('name', folderName).maybeSingle();
+                         
+                         await supabase.from('drive_files').insert({
+                             name: `${receiptNo}.pdf`,
+                             path: fileName,
+                             size: pdfBlob.size,
+                             type: 'application/pdf',
+                             folder_id: folderInfo?.id || null,
+                             uploaded_by: 'system' 
+                         });
+                    } else {
+                         console.error(`PDF Upload Error for ${type}:`, uploadError);
+                    }
+                };
+
+                await generateAndUploadPdf(documentType, primaryNo, primaryData);
+                
+                if (createPairedDocument) {
+                    const pairedType = documentType === 'Receipt' ? 'Invoice' : 'Receipt';
+                    const pairedNo = pairedType === 'Receipt' ? `REC-${shortId}` : `FAT-${shortId}`;
+                    await generateAndUploadPdf(pairedType, pairedNo, primaryData);
+                }
+
+            } catch (pdfErr) {
+                console.error("PDF Generation/Sync Error:", pdfErr);
+            }
+        }
+
+        return { success: true, data: primaryResult };
+    } catch (error) {
+        console.error('Receipt generation error:', error);
+        return { success: false, error };
+    }
+};
+
+export const uploadReceiptToDrive = async (pdfBlob: Blob, orderId: string, documentType: 'Receipt' | 'Invoice') => {
+    try {
+        const orderShortId = orderId.split('-')[0].toUpperCase(); 
+        const receiptNo = documentType === 'Receipt' ? `REC-${orderShortId}` : `FAT-${orderShortId}`;
+        const fileName = `${documentType === 'Receipt' ? 'recibos' : 'faturas'}/${receiptNo}.pdf`;
+
+        const { error: uploadError } = await supabase.storage.from('products').upload(fileName, pdfBlob, {
+             contentType: 'application/pdf',
+             upsert: true
+        });
+
+        if (!uploadError) {
+             const folderName = documentType === 'Receipt' ? 'Recibos' : 'Faturas';
+             const { data: folderInfo } = await supabase.from('drive_folders').select('id').eq('name', folderName).maybeSingle();
+             
+             await supabase.from('drive_files').insert({
+                 name: `${receiptNo}.pdf`,
+                 path: fileName,
+                 size: pdfBlob.size,
+                 type: 'application/pdf',
+                 folder_id: folderInfo?.id || null,
+                 uploaded_by: 'system' 
+             });
+             return { success: true };
+        } else {
+             console.error("PDF Auto-Save Upload Error:", uploadError);
+             return { success: false, error: uploadError };
+        }
+    } catch (err) {
+        console.error("Auto-save sync error:", err);
+        return { success: false, error: err };
+    }
+};
+
+export const previewDocumentPDF = async (docData: any) => {
+    try {
+        const { generateCustomerReceiptPDF, generateFormalInvoicePDF } = await import('./pdfGenerator');
+        const docProps = { 
+            ...docData, 
+            short_id: docData.receipt_no.split('-').pop() || '000', 
+            transaction_id: docData.receipt_no, 
+            delivery_type: 'pickup', 
+            amount_paid: docData.total_amount 
+        };
+        const doc = docData.document_type === 'Receipt' 
+            ? await generateCustomerReceiptPDF(docProps, docData.items || []) 
+            : await generateFormalInvoicePDF(docProps, docData.items || []);
+            
+        return doc.output('bloburl');
+    } catch (error) {
+        console.error("Preview PDF generation failed:", error);
+        return null;
     }
 };
 
@@ -154,6 +331,19 @@ export const saveOrderToSupabase = async (orderData: any, items: any[]) => {
 
         if (orderError) throw orderError;
 
+        // NEW: Log System Event for Admin Notification Center
+        try {
+            await (await import('./NotificationService')).NotificationService.logSystemEvent(
+                'Nova Encomenda',
+                `Encomenda #${orderData.short_id} recebida de ${orderData.customer_name}. Total: ${orderData.total_amount} MT`,
+                'ORDER',
+                'success',
+                customer.id
+            );
+        } catch (logErr) {
+            console.error("System logging failed for order:", logErr);
+        }
+
         // 3. Prepare Items with order_id
         const orderItems = items.map(item => ({
             order_id: order.id,
@@ -183,85 +373,12 @@ export const saveOrderToSupabase = async (orderData: any, items: any[]) => {
             }
         }
 
-        // 6. Generate Initial Document
-        try {
-            const shortIdStr = orderData.short_id || Date.now().toString().slice(-6);
-            const isPaid = orderData.payment_status === 'paid';
-            
-            const docMetadata = {
-                customer_phone: customer.contact_no || orderData.customer_phone || orderData.phone || '',
-                customer_email: customer.email || orderData.customer_email || '',
-                customer_nuit: customer.nuit || orderData.customer_nuit || '',
-                customer_address: customer.address || orderData.customer_address || orderData.delivery_address || '',
-                payment_method: orderData.payment_method || orderData.method || ''
-            };
-
-            await generateReceipt(
-                order.id,
-                shortIdStr,
-                customer.id,
-                customer.name,
-                items,
-                orderData.total_amount,
-                isPaid ? 'Receipt' : 'Invoice',
-                true, // Generate PDF to Drive
-                isPaid, // Create paired document if paid
-                docMetadata
-            );
-        } catch (docError) {
-            console.error("Initial document generation error", docError);
-        }
-
-        // 6. Send Branded Notifications
-        try {
-            const fullOrder = {
-                ...order,
-                customer_email: customer.email,
-                customer_name: customer.name,
-                total_amount: orderData.total_amount,
-                short_id: orderData.short_id,
-                delivery_type: orderData.delivery_type,
-                delivery_address: orderData.delivery_address,
-                table_zone: orderData.table_zone,
-                table_people: orderData.table_people,
-                notes: orderData.notes,
-                customer_phone: orderData.customer_phone
-            };
-
-            // Email Confirmation to Customer
-            sendOrderConfirmationEmail(fullOrder, items).catch(e => console.error("Email notification failed", e));
-
-            // Detailed Email Notification to Admin
-            sendAdminNewOrderNotification(fullOrder, items).catch(e => console.error("Admin notification failed", e));
-
-            // WhatsApp Notification to Kitchen and Admin
-            notifyKitchenNewOrderWhatsApp(fullOrder, items).catch(e => console.error("Kitchen WhatsApp notification failed", e));
-            notifyAdminNewOrderWhatsApp(fullOrder, items).catch(e => console.error("Admin WhatsApp notification failed", e));
-
-            // WhatsApp Notification / Receipt to Customer
-            notifyCustomerNewOrderWhatsApp(fullOrder, items).catch(e => console.error("Customer WhatsApp notification failed", e));
-
-            // SMS Confirmation
-            const smsOrder = {
-                short_id: orderData.short_id,
-                orderId: order.id,
-                customer: { phone: orderData.customer_phone, name: customer.name },
-                status: 'pending'
-            };
-            notifyCustomer(smsOrder, 'order_confirmed').catch(e => console.error("SMS notification failed", e));
-
-            // Admin SMS Notification
-            const adminSmsOrder = {
-                orderId: orderData.short_id || order.id,
-                customer: { name: customer.name },
-                total: orderData.total_amount,
-                items: items
-            };
-            notifyTeam(adminSmsOrder, 'new_order').catch(e => console.error("Admin SMS notification failed", e));
-
-        } catch (notifError) {
-            console.error("Post-save notification error", notifError);
-        }
+        // 6. Trigger Background Tasks (Non-blocking)
+        const shortIdStr = orderData.short_id || Date.now().toString().slice(-6);
+        const isPaid = orderData.payment_status === 'paid';
+        
+        processOrderBackgroundTasks(order, items, customer, orderData, shortIdStr, isPaid)
+            .catch(bgError => console.error("Background tasks failed silently:", bgError));
 
         return { success: true, order, customer };
     } catch (error) {
@@ -269,6 +386,96 @@ export const saveOrderToSupabase = async (orderData: any, items: any[]) => {
         return { success: false, error };
     }
 };
+
+/**
+ * Encapsulated background worker for decoupled processing.
+ * Ready to be migrated to a Supabase Edge Function in the future.
+ */
+async function processOrderBackgroundTasks(
+    order: any, 
+    items: any[], 
+    customer: any, 
+    orderData: any, 
+    shortIdStr: string, 
+    isPaid: boolean
+) {
+    // 1. Generate Initial Document
+    try {
+        const docMetadata = {
+            customer_phone: customer.contact_no || orderData.customer_phone || orderData.phone || '',
+            customer_email: customer.email || orderData.customer_email || '',
+            customer_nuit: customer.nuit || orderData.customer_nuit || '',
+            customer_address: customer.address || orderData.customer_address || orderData.delivery_address || '',
+            payment_method: orderData.payment_method || orderData.method || ''
+        };
+
+        await generateReceipt(
+            order.id,
+            shortIdStr,
+            customer.id,
+            customer.name,
+            items,
+            orderData.total_amount,
+            isPaid ? 'Receipt' : 'Invoice',
+            true, // Generate PDF to Drive
+            isPaid, // Create paired document if paid
+            docMetadata
+        );
+    } catch (docError) {
+        console.error("Initial document generation error", docError);
+    }
+
+    // 2. Send Branded Notifications
+    try {
+        const fullOrder = {
+            ...order,
+            customer_email: customer.email,
+            customer_name: customer.name,
+            total_amount: orderData.total_amount,
+            short_id: shortIdStr,
+            delivery_type: orderData.delivery_type,
+            delivery_address: orderData.delivery_address,
+            table_zone: orderData.table_zone,
+            table_people: orderData.table_people,
+            notes: orderData.notes,
+            customer_phone: orderData.customer_phone
+        };
+
+        // Email Confirmation to Customer
+        sendOrderConfirmationEmail(fullOrder, items).catch(e => console.error("Email notification failed", e));
+
+        // Detailed Email Notification to Admin
+        sendAdminNewOrderNotification(fullOrder, items).catch(e => console.error("Admin notification failed", e));
+
+        // WhatsApp Notification to Kitchen and Admin
+        notifyKitchenNewOrderWhatsApp(fullOrder, items).catch(e => console.error("Kitchen WhatsApp notification failed", e));
+        notifyAdminNewOrderWhatsApp(fullOrder, items).catch(e => console.error("Admin WhatsApp notification failed", e));
+
+        // WhatsApp Notification / Receipt to Customer
+        notifyCustomerNewOrderWhatsApp(fullOrder, items).catch(e => console.error("Customer WhatsApp notification failed", e));
+
+        // SMS Confirmation
+        const smsOrder = {
+            short_id: shortIdStr,
+            orderId: order.id,
+            customer: { phone: orderData.customer_phone, name: customer.name },
+            status: 'pending'
+        };
+        notifyCustomer(smsOrder, 'order_confirmed').catch(e => console.error("SMS notification failed", e));
+
+        // Admin SMS Notification
+        const adminSmsOrder = {
+            orderId: shortIdStr || order.id,
+            customer: { name: customer.name },
+            total: orderData.total_amount,
+            items: items
+        };
+        notifyTeam(adminSmsOrder, 'new_order').catch(e => console.error("Admin SMS notification failed", e));
+
+    } catch (notifError) {
+        console.error("Post-save notification error", notifError);
+    }
+}
 
 export const getProducts = async () => {
     try {
@@ -282,186 +489,5 @@ export const getProducts = async () => {
     } catch (error) {
         console.error('Error fetching products:', error);
         return { success: false, error };
-    }
-};
-
-import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
-
-export const generateReceipt = async (
-    orderId: string, 
-    shortId: string, 
-    customerId: string, 
-    customerName: string, 
-    items: any[], 
-    totalAmount: number, 
-    documentType: 'Receipt' | 'Invoice' = 'Receipt', 
-    generatePdfFile: boolean = true,
-    createPairedDocument: boolean = true,
-    metadata: any = {}
-) => {
-    try {
-        const primaryNo = documentType === 'Receipt' ? `REC-${shortId}` : `FAT-${shortId}`;
-        const primaryData = {
-            order_id: orderId,
-            customer_id: customerId,
-            customer_name: customerName,
-            receipt_no: primaryNo,
-            date: new Date().toISOString().split('T')[0],
-            total_amount: totalAmount,
-            currency: 'MT',
-            document_type: documentType,
-            items: items,
-            status: documentType === 'Receipt' ? 'paid' : 'pending',
-            created_at: new Date().toISOString()
-        };
-        const { data: primaryResult, error: primaryError } = await supabase.from('receipts').insert([primaryData]).select().single();
-        if (primaryError) throw primaryError;
-
-        // If paired document requested, generate the opposite type
-        if (createPairedDocument) {
-            const pairedType = documentType === 'Receipt' ? 'Invoice' : 'Receipt';
-            const pairedNo = pairedType === 'Receipt' ? `REC-${shortId}` : `FAT-${shortId}`;
-            const pairedData = {
-                ...primaryData,
-                receipt_no: pairedNo,
-                document_type: pairedType,
-                status: pairedType === 'Receipt' ? 'paid' : primaryData.status,
-            };
-            const { error: pairedError } = await supabase.from('receipts').insert([pairedData]);
-            if (pairedError) console.error("Could not insert paired document record", pairedError);
-        }
-
-        // Make sure we update the status of the initial document if the formal receipt is issued
-        if (documentType === 'Receipt' || createPairedDocument) {
-            await supabase.from('receipts')
-                .update({ status: 'paid' })
-                .eq('order_id', orderId)
-                .eq('document_type', 'Invoice');
-                
-            if (!orderId.startsWith('MANUAL-')) {
-                await supabase.from('orders')
-                    .update({ payment_status: 'paid' })
-                    .eq('id', orderId);
-            }
-        }
-
-        // --- Generate PDF & Sync to Drive ---
-        if (generatePdfFile) {
-            try {
-                const { generateCustomerReceiptPDF, generateFormalInvoicePDF } = await import('./pdfGenerator');
-                
-                const generateAndUploadPdf = async (type: 'Receipt' | 'Invoice', receiptNo: string, dbData: any) => {
-                    const docProps = { 
-                        ...dbData, 
-                        short_id: shortId, 
-                        transaction_id: receiptNo, 
-                        delivery_type: 'pickup', 
-                        amount_paid: totalAmount,
-                        ...metadata 
-                    };
-                    const doc = type === 'Receipt' 
-                        ? await generateCustomerReceiptPDF(docProps, items) 
-                        : await generateFormalInvoicePDF(docProps, items);
-
-                    const pdfBlob = doc.output('blob');
-                    const fileName = `${type === 'Receipt' ? 'recibos' : 'faturas'}/${receiptNo}.pdf`;
-                
-                    const { error: uploadError } = await supabase.storage.from('products').upload(fileName, pdfBlob, {
-                         contentType: 'application/pdf',
-                         upsert: true
-                    });
-                    
-                    if (!uploadError) {
-                         const folderName = type === 'Receipt' ? 'Recibos' : 'Faturas';
-                         const { data: folderInfo } = await supabase.from('drive_folders').select('id').eq('name', folderName).maybeSingle();
-                         
-                         await supabase.from('drive_files').insert({
-                             name: `${receiptNo}.pdf`,
-                             path: fileName,
-                             size: pdfBlob.size,
-                             type: 'application/pdf',
-                             folder_id: folderInfo?.id || null,
-                             uploaded_by: 'system' 
-                         });
-                    } else {
-                         console.error(`PDF Upload Error for ${type}:`, uploadError);
-                    }
-                };
-
-                // Generate primary
-                await generateAndUploadPdf(documentType, primaryNo, primaryData);
-                
-                // Generate paired
-                if (createPairedDocument) {
-                    const pairedType = documentType === 'Receipt' ? 'Invoice' : 'Receipt';
-                    const pairedNo = pairedType === 'Receipt' ? `REC-${shortId}` : `FAT-${shortId}`;
-                    await generateAndUploadPdf(pairedType, pairedNo, primaryData);
-                }
-
-            } catch (pdfErr) {
-                console.error("PDF Generation/Sync Error:", pdfErr);
-            }
-        }
-
-        return { success: true, data: primaryResult };
-    } catch (error) {
-        console.error('Receipt generation error:', error);
-        return { success: false, error };
-    }
-};
-
-export const uploadReceiptToDrive = async (pdfBlob: Blob, orderId: string, documentType: 'Receipt' | 'Invoice') => {
-    try {
-        const orderShortId = orderId.split('-')[0].toUpperCase(); 
-        const receiptNo = documentType === 'Receipt' ? `REC-${orderShortId}` : `FAT-${orderShortId}`;
-        const fileName = `${documentType === 'Receipt' ? 'recibos' : 'faturas'}/${receiptNo}.pdf`;
-
-        const { error: uploadError } = await supabase.storage.from('products').upload(fileName, pdfBlob, {
-             contentType: 'application/pdf',
-             upsert: true
-        });
-
-        if (!uploadError) {
-             const folderName = documentType === 'Receipt' ? 'Recibos' : 'Faturas';
-             const { data: folderInfo } = await supabase.from('drive_folders').select('id').eq('name', folderName).maybeSingle();
-             
-             await supabase.from('drive_files').insert({
-                 name: `${receiptNo}.pdf`,
-                 path: fileName,
-                 size: pdfBlob.size,
-                 type: 'application/pdf',
-                 folder_id: folderInfo?.id || null,
-                 uploaded_by: 'system' 
-             });
-             return { success: true };
-        } else {
-             console.error("PDF Auto-Save Upload Error:", uploadError);
-             return { success: false, error: uploadError };
-        }
-    } catch (err) {
-        console.error("Auto-save sync error:", err);
-        return { success: false, error: err };
-    }
-};
-
-export const previewDocumentPDF = async (docData: any) => {
-    try {
-        const { generateCustomerReceiptPDF, generateFormalInvoicePDF } = await import('./pdfGenerator');
-        const docProps = { 
-            ...docData, 
-            short_id: docData.receipt_no.split('-').pop() || '000', 
-            transaction_id: docData.receipt_no, 
-            delivery_type: 'pickup', 
-            amount_paid: docData.total_amount 
-        };
-        const doc = docData.document_type === 'Receipt' 
-            ? await generateCustomerReceiptPDF(docProps, docData.items || []) 
-            : await generateFormalInvoicePDF(docProps, docData.items || []);
-            
-        return doc.output('bloburl');
-    } catch (error) {
-        console.error('Error generating preview PDF:', error);
-        return null;
     }
 };

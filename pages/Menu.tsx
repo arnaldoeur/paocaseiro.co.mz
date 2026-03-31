@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, ShoppingBag, Plus, Truck, Store, CreditCard, Info, AlertTriangle, Calendar } from 'lucide-react';
 import { useCart } from '../context/CartContext';
@@ -10,7 +11,7 @@ import { formatProductName, getEnglishProductName, getEnglishProductDesc } from 
 import { ComingSoonOverlay } from '../components/ComingSoonOverlay';
 
 // Launch Date in CAT (Mozambique Time): Monday, March 30th, 2026 at 00:00
-const LAUNCH_DATE = new Date('2026-03-30T00:00:00+02:00');
+const LAUNCH_DATE = new Date('2026-03-31T00:00:00+02:00');
 
 
 interface MenuProps {
@@ -25,7 +26,17 @@ const PlaceholderImage = () => (
     </div>
 );
 
+// Helper to normalize strings for URLs/IDs
+const generateSlug = (text: string) => {
+    return text.toLowerCase()
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // remove accents
+        .replace(/[^a-z0-9]+/g, '-') // replace non-alphanumerics with dash
+        .replace(/^-+|-+$/g, ''); // trim dashes
+};
+
 export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
+    const location = useLocation();
+    
     // State
     // Initialize with all sections open by default
     const [activeSections, setActiveSections] = useState<string[]>([]);
@@ -242,6 +253,44 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
                 : [...prev, title]
         );
     };
+
+    // Scroll to section based on URL hash
+    useEffect(() => {
+        if (!loading && location.hash && menuSections.length > 0) {
+            const hashId = location.hash.replace('#', '');
+            
+            // Allow partial matches to prevent broken links if naming slightly differs
+            const matchingSection = menuSections.find(s => 
+                generateSlug(s.title) === hashId ||
+                generateSlug(s.title).includes(hashId) ||
+                hashId.includes(generateSlug(s.title))
+            );
+            
+            if (matchingSection) {
+                // Ensure the category is expanded
+                if (!activeSections.includes(matchingSection.title)) {
+                    setActiveSections(prev => [...prev, matchingSection.title]);
+                }
+                
+                // Polling for the DOM element to ensure React has painted it
+                const actualId = generateSlug(matchingSection.title);
+                let attempts = 0;
+                const scrollInterval = setInterval(() => {
+                    attempts++;
+                    const element = document.getElementById(actualId);
+                    if (element) {
+                        clearInterval(scrollInterval);
+                        // Custom scroll to handle fixed navbar offset (around 100px)
+                        const y = element.getBoundingClientRect().top + window.scrollY - 100;
+                        window.scrollTo({ top: y, behavior: 'smooth' });
+                    } else if (attempts >= 10) {
+                        clearInterval(scrollInterval);
+                        console.error('Elemento não encontrado para scroll:', actualId);
+                    }
+                }, 100);
+            }
+        }
+    }, [location.hash, loading, menuSections]);
 
     // Filter logic
     const filteredSections = menuSections.map(section => ({
@@ -504,7 +553,7 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
 
                 {
                     !loading && filteredSections.map((section, index) => (
-                        <div key={index} className="bg-white rounded-2xl shadow-xl overflow-hidden border border-[#d9a65a]/10">
+                        <div key={index} id={generateSlug(section.title)} className="bg-white rounded-2xl shadow-xl overflow-hidden border border-[#d9a65a]/10">
                             <button
                                 onClick={() => toggleSection(section.title)}
                                 className="w-full flex items-center justify-between p-6 bg-[#3b2f2f] hover:bg-[#4b3a2f] transition-colors relative overflow-hidden group"

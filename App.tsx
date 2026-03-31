@@ -14,6 +14,7 @@ import { CartProvider } from './context/CartContext';
 import { Language } from './translations';
 import { ClientDashboard } from './pages/ClientDashboard';
 import ScrollToTop from './components/ScrollToTop';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 import { ITSupport } from './pages/ITSupport';
 import { Delivery } from './pages/Delivery';
@@ -26,15 +27,75 @@ import { TVDisplay } from './pages/TVDisplay';
 import { GetTicket } from './pages/GetTicket';
 import { TVTickets } from './pages/TVTickets';
 
+import { useRole } from './hooks/useRole';
+
+const RouteMetadata: React.FC<{ language: Language }> = ({ language }) => {
+  const location = useLocation();
+
+  useEffect(() => {
+    const pageTitles: Record<string, string> = {
+      '/': language === 'en' ? "Home" : "Início",
+      '/menu': language === 'en' ? "Menu & Ordering" : "Menu e Encomendas",
+      '/gallery': language === 'en' ? "Bakery Gallery" : "Galeria da Padaria",
+      '/blog': language === 'en' ? "Bakery Blog" : "Blog da Padaria",
+      '/dashboard': language === 'en' ? "Customer Dashboard" : "Painel do Cliente",
+      '/kitchen': "KDS - Cozinha",
+      '/admin': "Admin Panel",
+      '/delivery': "Logística de Entrega"
+    };
+
+    const currentTitle = pageTitles[location.pathname] || "Pão Caseiro";
+    const suffix = language === 'en' ? "The taste that warms the heart" : "O sabor que aquece o coração";
+
+    document.title = `${currentTitle} | Pão Caseiro - ${suffix}`;
+
+    if (language === 'en') {
+      document.documentElement.lang = "en";
+      const metaDesc = document.querySelector('meta[name="description"]');
+      if (metaDesc) metaDesc.setAttribute('content', 'Discover Pão Caseiro, the best bakery in Lichinga, Niassa. Fresh bread every day, excellent pastry and easy online ordering. The taste that warms the heart!');
+
+      const ogTitle = document.querySelector('meta[property="og:title"]');
+      if (ogTitle) ogTitle.setAttribute('content', `Pão Caseiro | ${currentTitle}`);
+      const ogDesc = document.querySelector('meta[property="og:description"]');
+      if (ogDesc) ogDesc.setAttribute('content', 'Discover Pão Caseiro, the best bakery in Lichinga, Niassa. Fresh bread every day, excellent pastry and easy online ordering. The taste that warms the heart!');
+    } else {
+      document.documentElement.lang = "pt-PT";
+      const metaDesc = document.querySelector('meta[name="description"]');
+      if (metaDesc) metaDesc.setAttribute('content', 'Padaria Pão Caseiro em Lichinga, Niassa. Pão fresco, pastelaria e encomendas online. O verdadeiro sabor artesanal que aquece o coração. Peça já!');
+
+      const ogTitle = document.querySelector('meta[property="og:title"]');
+      if (ogTitle) ogTitle.setAttribute('content', `Pão Caseiro | ${currentTitle}`);
+      const ogDesc = document.querySelector('meta[property="og:description"]');
+      if (ogDesc) ogDesc.setAttribute('content', 'Padaria Pão Caseiro em Lichinga, Niassa. Pão fresco, pastelaria e encomendas online. O verdadeiro sabor artesanal que aquece o coração. Peça já!');
+    }
+
+    // Update canonical and og:url
+    const currentUrl = `https://paocaseiro.co.mz${location.pathname}`;
+    const canonical = document.querySelector('link[rel="canonical"]');
+    if (canonical) canonical.setAttribute('href', currentUrl);
+    const ogUrl = document.querySelector('meta[property="og:url"]');
+    if (ogUrl) ogUrl.setAttribute('content', currentUrl);
+  }, [language, location.pathname]);
+
+  return null;
+};
+
 const MaintenanceGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isMaintenance, setIsMaintenance] = useState(false);
   const [isPanic, setIsPanic] = useState(false);
   const [loading, setLoading] = useState(true);
   const location = useLocation();
+  const { role, loading: roleLoading } = useRole();
 
   useEffect(() => {
     const checkStatus = async () => {
       try {
+        if (!navigator.onLine) {
+            console.log("App is currently offline. Skipping maintenance check.");
+            setLoading(false);
+            return;
+        }
+
         if (!supabase || !supabase.from) {
             console.warn("Supabase client not initialized correctly.");
             setLoading(false);
@@ -42,7 +103,7 @@ const MaintenanceGuard: React.FC<{ children: React.ReactNode }> = ({ children })
         }
 
         const { data, error } = await supabase.from('system_settings').select('key, value').in('key', ['maintenance_mode', 'panic_mode']);
-        
+
         if (error) {
             console.warn("Could not fetch maintenance status:", error.message);
             setLoading(false);
@@ -65,12 +126,23 @@ const MaintenanceGuard: React.FC<{ children: React.ReactNode }> = ({ children })
     return () => clearInterval(interval);
   }, []);
 
+  // Allow app to render if there's no maintenance/panic active, don't wait for role verification.
+  // We only care about roles if we need to bypass a blocked state.
   if (loading) return <div className="min-h-screen bg-[#f7f1eb] flex items-center justify-center p-4"><div className="w-10 h-10 border-4 border-t-transparent border-[#d9a65a] rounded-full animate-spin"></div></div>;
 
-  const isIT = location.pathname === '/it';
-  const isAdmin = location.pathname.startsWith('/admin');
+  // We are blocked. Now wait for role check if still loading
+  const shouldBlockBase = isPanic || isMaintenance;
+  if (shouldBlockBase && roleLoading) return <div className="min-h-screen bg-[#f7f1eb] flex items-center justify-center p-4"><div className="w-10 h-10 border-4 border-t-transparent border-[#d9a65a] rounded-full animate-spin"></div></div>;
+
+  // Real Roles (either from app_metadata or local fallback)
+  const isIT = role === 'it';
+  const isAdmin = role === 'admin' || role === 'it';
+
+  // For people waiting on the path bypass (optional fallback)
+  const isITPath = location.pathname === '/it';
   
-  const shouldBlock = (isPanic && !isIT) || (isMaintenance && !isIT && !isAdmin);
+  // Real check
+  const shouldBlock = (isPanic && !isIT && !isITPath) || (isMaintenance && !isIT && !isAdmin && !isITPath);
 
   if (shouldBlock) {
     return (
@@ -117,79 +189,47 @@ const App: React.FC = () => {
     setLanguage((prev) => (prev === 'pt' ? 'en' : 'pt'));
   };
 
-  // Dynamic SEO Tags based on Language & Route
-  useEffect(() => {
-    const pageTitles: Record<string, string> = {
-      '/': language === 'en' ? "Home" : "Início",
-      '/menu': language === 'en' ? "Menu & Ordering" : "Menu e Encomendas",
-      '/gallery': language === 'en' ? "Bakery Gallery" : "Galeria da Padaria",
-      '/blog': language === 'en' ? "Bakery Blog" : "Blog da Padaria",
-      '/dashboard': language === 'en' ? "Customer Dashboard" : "Painel do Cliente",
-      '/kitchen': "KDS - Cozinha",
-      '/admin': "Admin Panel",
-      '/delivery': "Logística de Entrega"
-    };
-
-    const currentTitle = pageTitles[location.pathname] || "Pão Caseiro";
-    const suffix = language === 'en' ? "The taste that warms the heart" : "O sabor que aquece o coração";
-
-    if (language === 'en') {
-      document.title = `${currentTitle} | Pão Caseiro - ${suffix}`;
-      document.documentElement.lang = "en";
-      const metaDesc = document.querySelector('meta[name="description"]');
-      if (metaDesc) metaDesc.setAttribute('content', 'Discover Pão Caseiro, the best bakery in Lichinga, Niassa. Fresh bread every day, excellent pastry and easy online ordering. The taste that warms the heart!');
-      
-      const ogTitle = document.querySelector('meta[property="og:title"]');
-      if (ogTitle) ogTitle.setAttribute('content', `Pão Caseiro | ${currentTitle}`);
-    } else {
-      document.title = `${currentTitle} | Pão Caseiro - ${suffix}`;
-      document.documentElement.lang = "pt-PT";
-      const metaDesc = document.querySelector('meta[name="description"]');
-      if (metaDesc) metaDesc.setAttribute('content', 'Padaria Pão Caseiro em Lichinga, Niassa. Pão fresco, pastelaria e encomendas online. O verdadeiro sabor artesanal que aquece o coração. Peça já!');
-      
-      const ogTitle = document.querySelector('meta[property="og:title"]');
-      if (ogTitle) ogTitle.setAttribute('content', `Pão Caseiro | ${currentTitle}`);
-    }
-  }, [language, location.pathname]);
-
   return (
     <CartProvider>
       <Router>
+        <RouteMetadata language={language} />
         <ScrollToTop />
         <div className="min-h-screen bg-[#f7f1eb] text-[#3b2f2f] font-sans">
           <MaintenanceGuard>
-            <Routes>
-              {/* Standalone Pages (No Navbar/Footer) */}
-              <Route path="/admin" element={<Admin />} />
-              <Route path="/it" element={<ITSupport />} />
-              <Route path="/delivery" element={<Delivery />} />
-              <Route path="/kitchen" element={<Kitchen />} />
-              <Route path="/tv-display" element={<TVDisplay />} />
-              <Route path="/get-ticket" element={<GetTicket />} />
-              <Route path="/tv-senhas" element={<TVTickets />} />
-              <Route path="/seed" element={<Seeder />} />
+            <ErrorBoundary>
+              <Routes>
+                {/* Standalone Pages (No Navbar/Footer) */}
+                <Route path="/admin" element={<Admin />} />
+                <Route path="/it" element={<ITSupport />} />
+                <Route path="/delivery" element={<Delivery />} />
+                <Route path="/kitchen" element={<Kitchen />} />
+                <Route path="/tv-display" element={<TVDisplay />} />
+                <Route path="/get-ticket" element={<GetTicket />} />
+                <Route path="/tv-senhas" element={<TVTickets />} />
+                <Route path="/seed" element={<Seeder />} />
 
-              {/* Main Website Pages */}
-              <Route path="/*" element={
-                <>
-                  <Navbar language={language} toggleLanguage={toggleLanguage} />
-                  <Routes>
-                    <Route path="/" element={<Home language={language} />} />
-                    <Route path="/menu" element={<Menu language={language} />} />
-                    <Route path="/gallery" element={<Gallery language={language} />} />
-                    <Route path="/blog" element={<Blog language={language} />} />
-                    <Route path="/blog/:slug" element={<BlogPost language={language} />} />
-                    <Route path="/order-receipt/:orderId" element={<OrderReceipt />} />
-                    <Route path="/dashboard" element={<ClientDashboard language={language} />} />
-                    <Route path="/privacidade" element={<Privacy />} />
-                    <Route path="/termos" element={<Terms />} />
-                    {/* Add other main routes here */}
-                  </Routes>
-                  <Footer language={language} />
-                  <Cart language={language} />
-                </>
-              } />
-            </Routes>
+                {/* Main Website Pages */}
+                <Route path="/*" element={
+                  <>
+                    <Navbar language={language} toggleLanguage={toggleLanguage} />
+                    <Routes>
+                      <Route path="/" element={<Home language={language} />} />
+                      <Route path="/menu" element={<Menu language={language} />} />
+                      <Route path="/gallery" element={<Gallery language={language} />} />
+                      <Route path="/blog" element={<Blog language={language} />} />
+                      <Route path="/blog/:slug" element={<BlogPost language={language} />} />
+                      <Route path="/order-receipt/:orderId" element={<OrderReceipt />} />
+                      <Route path="/dashboard" element={<ClientDashboard language={language} />} />
+                      <Route path="/privacidade" element={<Privacy />} />
+                      <Route path="/termos" element={<Terms />} />
+                      {/* Add other main routes here */}
+                    </Routes>
+                    <Footer language={language} />
+                    <Cart language={language} />
+                  </>
+                } />
+              </Routes>
+            </ErrorBoundary>
           </MaintenanceGuard>
         </div>
       </Router>

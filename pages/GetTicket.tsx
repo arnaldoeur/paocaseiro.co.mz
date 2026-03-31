@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Ticket, Clock, CheckCircle, Smartphone, UserCheck, Search, X, Printer, Bell } from 'lucide-react';
 import { queueService } from '../services/queue';
 import { printerService } from '../services/printer';
-import { notifyQueueTicketGenerated } from '../services/sms';
+import { NotificationService } from '../services/NotificationService';
 
 export const GetTicket: React.FC = () => {
     const [step, setStep] = useState<'category' | 'type' | 'phone' | 'otp' | 'ticket'>('category');
@@ -28,7 +28,7 @@ export const GetTicket: React.FC = () => {
             const { data: companyData } = await supabase.from('company_profiles').select('*').limit(1).maybeSingle();
             
             setCompany({
-                logo_url: settingsMap.logo_url || companyData?.logo_url || '/images/logo_receipt.png',
+                logo_url: settingsMap.logo_url || companyData?.logo_url || '/logo_on_dark.png',
                 office_name: settingsMap.office_name || companyData?.office_name || 'Pão Caseiro',
                 slogan: settingsMap.slogan || companyData?.slogan || 'O Sabor que Aquece o Coração'
             });
@@ -77,13 +77,22 @@ export const GetTicket: React.FC = () => {
                 console.warn("Print attempt failed:", printErr);
             }
 
-            // Trigger SMS notification
+            // Trigger SMS/WhatsApp notification using unified service
             if (phone) {
-                try {
-                    await notifyQueueTicketGenerated(data, phone);
-                } catch (smsErr) {
-                    console.warn("SMS notification failed:", smsErr);
-                }
+                NotificationService.notifyTicketGenerated(data, phone)
+                    .catch(smsErr => console.warn("Notification attempt failed:", smsErr));
+            }
+
+            // NEW: Log System Event for Admin Center
+            try {
+                await NotificationService.logSystemEvent(
+                    'Nova Senha Gerada',
+                    `Senha #${data.ticket_number} (${data.category === 'priority' ? 'Prioritária' : 'Normal'}) gerada para ${phone || 'Visitante'}.`,
+                    'TICKET',
+                    'info'
+                );
+            } catch (logErr) {
+                console.error("Ticket system logging failed:", logErr);
             }
         } catch (error) {
             console.error("Error creating ticket:", error);
@@ -277,7 +286,9 @@ export const GetTicket: React.FC = () => {
                             <div className="bg-white/[0.03] backdrop-blur-3xl rounded-[4rem] shadow-4xl w-full overflow-hidden border border-white/10 relative group">
                                 <div className="p-10 text-center border-b border-dashed border-white/10 relative">
                                     <p className="text-[10px] font-black tracking-[0.5em] text-[#d9a65a] uppercase mb-4 opacity-60">A SUA SENHA</p>
-                                    <h2 className="text-[10rem] font-mono font-black text-white tracking-tighter my-2 leading-none">{ticket.ticket_number}</h2>
+                                    <h2 className="text-[10rem] font-mono font-black text-white tracking-tighter my-2 leading-none">
+                                        {ticket.is_priority && !ticket.ticket_number.startsWith('P') ? 'P' : ''}{ticket.ticket_number}
+                                    </h2>
                                     <div className="flex justify-center items-center gap-3 mt-8">
                                         {ticket.status === 'waiting' && (
                                             <span className="inline-flex items-center gap-2 px-6 py-2 rounded-full bg-white/5 text-white/40 text-xs font-black uppercase tracking-widest border border-white/5">
@@ -310,9 +321,9 @@ export const GetTicket: React.FC = () => {
                                         <div className="flex flex-col items-center gap-4 py-4 border-t border-white/5">
                                             <div className="p-3 bg-white rounded-2xl shadow-2xl">
                                                 <img 
-                                                    src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(`${company?.office_name} - Senha: ${ticket.ticket_number}\nEstado: Em Espera`)}`}
+                                                    src={`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(`${company?.office_name} - Senha: ${(ticket.is_priority && !ticket.ticket_number.startsWith('P')) ? 'P' : ''}${ticket.ticket_number}\nEstado: Em Espera`)}`}
                                                     alt="Ticket QR Code"
-                                                    className="w-24 h-24"
+                                                    className="w-48 h-48"
                                                 />
                                             </div>
                                             <p className="text-[8px] font-black text-white/30 uppercase tracking-[0.2em] max-w-[200px] text-center">

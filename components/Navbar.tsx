@@ -123,7 +123,7 @@ export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
 
   const Logo = ({ className = "h-12", variant = 'light' }: { className?: string, variant?: 'light' | 'dark' }) => (
     <img
-      src={variant === 'light' ? "/logo_on_light.png" : "/logo_on_dark.png"}
+      src="/logo_on_dark.png"
       alt="Pão Caseiro Logo"
       className={`object-contain ${className}`}
     />
@@ -256,7 +256,7 @@ export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
             initial={{ opacity: 0, x: '100%' }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: '100%' }}
-            className="fixed inset-0 z-[60] bg-[#3b2f2f] text-[#f7f1eb] flex flex-col items-center justify-center gap-8"
+            className="fixed inset-0 z-[60] bg-[#3b2f2f] text-[#f7f1eb] flex flex-col items-center justify-start gap-8 overflow-y-auto pt-20 pb-10"
           >
             <button
               id="mobile-menu-close"

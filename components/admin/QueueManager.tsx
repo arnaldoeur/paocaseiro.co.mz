@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { useRealtimeTickets } from '../../hooks/useRealtimeTickets';
 import { queueService, QueueTicket } from '../../services/queue';
-import { notifyQueueTicketCalling } from '../../services/sms';
+import { NotificationService } from '../../services/NotificationService';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export const QueueManager: React.FC = () => {
@@ -84,7 +84,7 @@ export const QueueManager: React.FC = () => {
             
             // Integrated SMS Notification
             if (currentlyCalling.customer_phone) {
-                notifyQueueTicketCalling(
+                NotificationService.notifyTicketCalling(
                     currentlyCalling, 
                     currentlyCalling.counter || counter, 
                     currentlyCalling.customer_phone

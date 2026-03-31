@@ -7,7 +7,8 @@ import { LocationPicker } from './LocationPicker';
 import { Receipt } from './Receipt';
 import { AddressAutocomplete } from './AddressAutocomplete'; // Import the new component
 import { translations, Language } from '../translations';
-import { notifyTeam, notifyCustomer, sendSMS } from '../services/sms';
+import { notifyTeam } from '../services/sms';
+import { NotificationService } from '../services/NotificationService';
 import { saveOrderToSupabase, supabase } from '../services/supabase';
 import { formatProductName, getEnglishProductName } from '../services/stringUtils';
 import { ClientLoginModal } from './ClientLoginModal';
@@ -340,6 +341,15 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
     };
 
     const handleNextStep = async () => {
+        if (!navigator.onLine) {
+            setError(
+                language === 'pt' 
+                    ? 'Você está offline. Verifique a sua conexão à internet para prosseguir com a encomenda.' 
+                    : 'You are offline. Please check your internet connection to proceed with your order.'
+            );
+            return;
+        }
+
         if (step === 'cart') {
             // Check Shop Hours
             const now = new Date();
@@ -350,7 +360,7 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
             const openTime = 6 * 60; // 06:00
             const closeTime = 22 * 60; // 22:00
 
-            const isOpen = (currentTime >= openTime && currentTime < closeTime) || localStorage.getItem('pc_bypass_hours') === 'true' || true; // [BYPASS] Force open for testing
+            const isOpen = (currentTime >= openTime && currentTime < closeTime) || localStorage.getItem('pc_bypass_hours') === 'true'; // Removed hardcoded bypass for production
 
             if (!isOpen) {
                 setError(
@@ -500,6 +510,15 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
     const [currentTxId, setCurrentTxId] = useState<string | undefined>(undefined);
 
     const handlePayment = async () => {
+        if (!navigator.onLine) {
+            setError(
+                language === 'pt' 
+                    ? 'Você está offline. A página de pagamento não pode ser aberta sem ligação à internet.' 
+                    : 'You are offline. The payment page cannot be opened without an internet connection.'
+            );
+            return;
+        }
+
         // Generate consistent IDs
         const timestamp = Date.now();
         const shortId = `PC-${timestamp.toString().slice(-4)}`; // Short ID for User (e.g. PC-1234)
@@ -655,7 +674,8 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
 
         // Notify Team & Customer
         notifyTeam(newOrder, 'new_order').catch(err => console.error("Team notification failed", err));
-        notifyCustomer(newOrder, 'order_confirmed').catch(err => console.error("Customer notification failed", err));
+        NotificationService.notifyOrderStatus(newOrder, 'pending')
+            .catch(err => console.error("Customer notification failed", err));
 
 
         // Save to Supabase
@@ -743,7 +763,8 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
 
                     // Enforce 160 char limit
                     msg = msg.substring(0, 160);
-                    sendSMS(details.phone, msg).catch(err => console.error("Invoice SMS failed", err));
+                    NotificationService.sendCustomNotification(details.phone, msg)
+                        .catch(err => console.error("Invoice notification failed", err));
                 }
             })
             .catch(err => console.error("Database save exception", err));
@@ -767,7 +788,21 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                                     <p className="text-lg">{t.cart.empty}</p>
                                 </div>
                             ) : (
-                                cart.map((item) => (
+                                <div className="space-y-4">
+                                    <div className="flex justify-end">
+                                        <button
+                                            onClick={() => {
+                                                if (window.confirm(language === 'en' ? 'Are you sure you want to clear your cart?' : 'Tem certeza que deseja limpar o seu carrinho?')) {
+                                                    clearCart();
+                                                }
+                                            }}
+                                            className="text-xs font-bold text-red-500 flex items-center gap-1 hover:text-red-700 transition-colors bg-white/50 px-3 py-1.5 rounded-full border border-red-100 shadow-sm"
+                                        >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                            {language === 'en' ? 'Clear all' : 'Limpar tudo'}
+                                        </button>
+                                    </div>
+                                    {cart.map((item) => (
                                     <div key={item.name} className="bg-white p-3 rounded-xl shadow-sm border border-[#d9a65a]/20 flex gap-4 items-center">
                                         {/* Image Thumbnail */}
                                         <div className="w-16 h-16 bg-gray-100 rounded-lg shrink-0 overflow-hidden">
@@ -799,7 +834,8 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                                             </button>
                                         </div>
                                     </div>
-                                ))
+                                    ))}
+                                </div>
                             )}
                         </div>
                         {cart.length > 0 && (

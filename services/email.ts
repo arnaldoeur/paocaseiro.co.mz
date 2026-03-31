@@ -3,13 +3,11 @@ import { formatProductName } from './stringUtils';
 import { supabase } from './supabase';
 
 /**
- * Service to handle Email notifications via Resend API (routed through Vite proxy)
+ * Service to handle Email notifications via Resend API (routed through Supabase Edge Function)
  */
 
-const RESEND_API_KEY = 're_S6EgeUY6_L24YuNaVSrmAC265zq9wQxwh';
 const DEFAULT_FROM = 'Pão Caseiro <sistema@paocaseiro.co.mz>';
 const FALLBACK_LOGO_URL = 'https://bqiegszufcqimlvucrpm.supabase.co/storage/v1/object/public/branding/LOGO_FUND0_(SEM_FUNDO).png';
-
 
 /**
  * Base template for all branded emails
@@ -33,7 +31,7 @@ const brandedEmailLayout = (content: string) => `
 `;
 
 /**
- * Send an email using the Resend API via Vite Proxy.
+ * Send an email using the Resend API via Supabase Edge Function.
  */
 export const sendEmail = async (to: string[], subject: string, html: string, replyTo?: string, fromOverride?: string, bcc: string[] = [], attachments: any[] = []) => {
     try {
@@ -55,31 +53,22 @@ export const sendEmail = async (to: string[], subject: string, html: string, rep
             payload.attachments = attachments;
         }
 
-        // Using /api/resend proxy to avoid CORS
-        const response = await fetch('/api/resend/emails', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${RESEND_API_KEY}`,
-                'Accept': 'application/json'
-            },
-            body: JSON.stringify(payload)
+        const { data, error } = await supabase.functions.invoke('notify-email', {
+            body: payload
         });
 
-        // Some error cases might not return JSON, handle carefully
-        const data = await response.json().catch(() => ({ message: 'Unexpected response from server' }));
-
-        if (!response.ok) {
-            console.error('Resend API Error:', data);
-            throw new Error(data.message || 'Failed to send email');
+        if (error) {
+            console.error('Supabase Email Function Error:', error);
+            throw error;
         }
 
-        console.log('Email sent successfully:', data);
+        const responseData = data;
+        console.log('Email sent successfully:', responseData);
 
         // --- Asynchronous Logging of Communication ---
         Promise.resolve().then(async () => {
             try {
-                const { data: settings } = await supabase.from('system_settings').select('value').eq('key', 'sms_pricing').single();
+                const { data: settings } = await supabase.from('system_settings').select('value').eq('key', 'sms_pricing').maybeSingle();
                 const cost = settings?.value?.cost_per_email || 0;
                 await supabase.from('sms_logs').insert([{
                     type: 'email',

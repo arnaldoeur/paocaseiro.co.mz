@@ -7,7 +7,7 @@ interface LandingLaunchPopupProps {
 }
 
 // Global Launch Constant
-const LAUNCH_DATE = new Date('2026-03-30T00:00:00+02:00');
+const LAUNCH_DATE = new Date('2026-03-31T00:00:00+02:00');
 
 export const LandingLaunchPopup: React.FC<LandingLaunchPopupProps> = ({ language }) => {
     const [isOpen, setIsOpen] = useState(false);
@@ -72,8 +72,8 @@ export const LandingLaunchPopup: React.FC<LandingLaunchPopupProps> = ({ language
                             </h2>
                             <p className="text-gray-600 mb-8 max-w-[300px] mx-auto text-sm leading-relaxed">
                                 {language === 'pt' 
-                                    ? 'A nossa plataforma oficial de encomendas online e entrega abre na Segunda-feira, 30 de Março às 00:00.' 
-                                    : 'Our official online ordering and delivery platform opens Monday, March 30th at 00:00.'}
+                                    ? 'A nossa plataforma oficial de encomendas online e entrega abre na Terça-feira, 31 de Março às 00:00.' 
+                                    : 'Our official online ordering and delivery platform opens Tuesday, March 31st at 00:00.'}
                             </p>
 
                             <div className="space-y-4 mb-8">

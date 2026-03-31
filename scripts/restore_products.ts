@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { translations } from './translations.js'; // Note: Ensure this works with node or use a simplified mock
+import { translations } from '../translations.ts';
 
 const supabaseUrl = 'https://bqiegszufcqimlvucrpm.supabase.co';
 const supabaseKey = 'sb_publishable_qRQDGEPxtpR2Je8qjvZgRg_ap-lADS1'; // Using the publishable key from SUPABASE_ACCESS.md

@@ -23,25 +23,29 @@ const SERVICES = [
         icon: Wheat,
         title: 'Padaria e Pastelaria',
         desc: 'Pães rústicos, bolos tradicionais e salgados frescos, feitos com dedicação diária.',
-        image: '/images/categories/Pao caseiro.png'
+        image: '/images/categories/Pao caseiro.png',
+        categoryId: 'paes'
     },
     {
         icon: Cake,
         title: 'Confeitaria',
         desc: 'Doces finos, tortas artesanais e sobremesas personalizadas para momentos especiais.',
-        image: '/images/categories/Fatias Xadrez.png'
+        image: '/images/categories/Fatias Xadrez.png',
+        categoryId: 'doces-pastelaria'
     },
     {
         icon: Coffee,
         title: 'Café',
         desc: 'Bebidas quentes e frias, preparadas com grãos selecionados para um aroma incomparável.',
-        image: '/images/categories/Cafe quente.png'
+        image: '/images/categories/Cafe quente.png',
+        categoryId: 'cafes'
     },
     {
         icon: ShoppingBag,
         title: 'Lanches e Takeaway',
         desc: 'Opções práticas e deliciosas para quem não abre mão da qualidade no dia a dia.',
-        image: '/images/categories/cachoro quente completo.png'
+        image: '/images/categories/cachoro quente completo.png',
+        categoryId: 'lanches'
     }
 ];
 
@@ -50,37 +54,43 @@ const CLASSICS = [
         title: 'Pastéis de Nata',
         desc: 'A clássica doçura portuguesa, estaladiços por fora e cremosos por dentro.',
         price: '',
-        image: '/images/pastel_nata.png'
+        image: '/images/pastel_nata.png',
+        categoryId: 'doces-pastelaria'
     },
     {
         title: 'Pão de Cereais',
         desc: 'Uma opção saudável, rica em fibra e com um sabor inconfundível.',
         price: '',
-        image: '/images/products/pao-cereais.png'
+        image: '/images/products/pao-cereais.png',
+        categoryId: 'paes'
     },
     {
         title: 'Pão Integral',
         desc: 'O nosso pão integral clássico, fresco a toda a hora.',
         price: '',
-        image: '/images/products/pao-caseiro-fresh.png'
+        image: '/images/products/pao-caseiro-fresh.png',
+        categoryId: 'paes'
     },
     {
         title: 'Pão Caseiro',
         desc: 'Aquele pão rústico especial que toda a família adora.',
         price: '',
-        image: '/images/products/pao-caseiro-marcos.png'
+        image: '/images/products/pao-caseiro-marcos.png',
+        categoryId: 'paes'
     },
     {
         title: 'Croissants',
         desc: 'Folhados, recheados ou simples, sempre com a máxima qualidade.',
         price: '',
-        image: '/images/products/croissants-recheados.png'
+        image: '/images/products/croissants-recheados.png',
+        categoryId: 'folhados-salgados'
     },
     {
         title: 'Broa de Milho',
         desc: 'Broa densa e saborosa, feita com a melhor farinha de milho.',
         price: '',
-        image: '/images/products/broa-milho.png'
+        image: '/images/products/broa-milho.png',
+        categoryId: 'paes'
     }
 ];
 
@@ -222,7 +232,7 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
 
     const Logo = ({ className = "h-12" }: { className?: string }) => (
         <img
-            src="/images/marco/logo oficial pao caseiro sem fundo.png"
+            src="/logo_on_dark.png"
             alt="Pão Caseiro Logo"
             className={`object-contain ${className}`}
         />
@@ -440,7 +450,8 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                             <motion.div
                                 key={idx}
                                 whileHover={{ y: -10 }}
-                                className="group bg-[#4b3a2f] rounded-3xl border border-[#f7f1eb]/10 hover:border-[#d9a65a]/50 transition-colors shadow-lg flex flex-col overflow-hidden"
+                                onClick={() => navigate(`/menu#${service.categoryId}`)}
+                                className="group bg-[#4b3a2f] rounded-3xl border border-[#f7f1eb]/10 hover:border-[#d9a65a]/50 transition-colors shadow-lg flex flex-col overflow-hidden cursor-pointer"
                             >
                                 <div className="p-8 flex flex-col items-center text-center flex-grow">
                                     <div className="mb-6 p-4 bg-[#3b2f2f] rounded-full group-hover:bg-[#d9a65a] group-hover:text-[#3b2f2f] transition-colors duration-300">
@@ -485,10 +496,11 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                                 whileInView={{ opacity: 1, y: 0 }}
                                 viewport={{ once: true, margin: "-100px" }}
                                 transition={{ delay: idx * 0.1 }}
-                                className="flex flex-col h-full bg-white rounded-2xl shadow-lg item-card overflow-hidden group"
+                                onClick={() => navigate(`/menu#${item.categoryId}`)}
+                                className="flex flex-col h-full bg-white rounded-2xl shadow-lg item-card overflow-hidden group cursor-pointer"
                             >
-                                <div className="w-full h-64 overflow-hidden">
-                                    <img src={item.image} alt={item.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                                <div className="h-64 relative overflow-hidden flex flex-col items-center justify-center">
+                                    <img src={item.image} alt={item.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
                                 </div>
                                 <div className="p-6 flex flex-col flex-grow">
                                     <h3 className="font-serif text-2xl font-bold text-[#3b2f2f] mb-3 group-hover:text-[#d9a65a] transition-colors">

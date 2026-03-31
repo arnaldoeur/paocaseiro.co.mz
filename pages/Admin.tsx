@@ -29,6 +29,7 @@ import { AnalyticsChart } from '../components/Analytics/AnalyticsChart';
 import { AdminPerformanceView } from './admin/AdminPerformanceView';
 import { AdminAuditView } from './admin/AdminAuditView';
 import { QueueManager } from '../components/admin/QueueManager';
+import { AdminNotifications } from '../components/admin/AdminNotifications';
 import { AdminDriveView } from './admin/AdminDriveView';
 import { AdminBillingView } from '../components/admin/AdminBillingView';
 import { AdminNewsletterView } from '../components/admin/AdminNewsletterView';
@@ -141,7 +142,7 @@ export const Admin: React.FC = () => {
     const [soundEnabled, setSoundEnabled] = useState(() => localStorage.getItem('admin_sound') !== 'false');
 
     // Sidebar/View State
-    const [activeView, setActiveView] = useState<'dashboard' | 'orders' | 'kitchen' | 'stock' | 'pos' | 'delivery' | 'settings' | 'customers' | 'team' | 'logistics' | 'support' | 'support_ai' | 'billing' | 'documents' | 'messages' | 'blog' | 'newsletter' | 'queue'>('dashboard');
+    const [activeView, setActiveView] = useState<'dashboard' | 'orders' | 'kitchen' | 'stock' | 'pos' | 'delivery' | 'settings' | 'customers' | 'team' | 'logistics' | 'support' | 'support_ai' | 'billing' | 'documents' | 'messages' | 'blog' | 'newsletter' | 'queue' | 'notificacoes'>('dashboard');
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(window.innerWidth < 768);
     
     // Auto-close sidebar on mobile after navigation
@@ -470,7 +471,10 @@ export const Admin: React.FC = () => {
     const [memberForm, setMemberForm] = useState({
         id: 0,
         name: '',
-        role: 'vendedor',
+        username: '',
+        email: '',
+        phone: '',
+        role: 'staff',
         password: '',
         avatar_url: ''
     });
@@ -713,6 +717,20 @@ export const Admin: React.FC = () => {
 
             const { data: orderResult, error: orderError } = await supabase.from('orders').insert([orderData]).select().single();
             if (orderError) throw orderError;
+
+            // NEW: Log System Event
+            try {
+                const { NotificationService } = await import('../services/NotificationService');
+                await NotificationService.logSystemEvent(
+                    'Venda POS Manual',
+                    `Nova venda manual #${orderResult.short_id || orderResult.id.slice(0,6)} de ${orderData.customer_name}. Total: ${orderData.total_amount} MT`,
+                    'ORDER',
+                    'success',
+                    orderResult.customer_id
+                );
+            } catch (logErr) {
+                console.error("Manual order system logging failed:", logErr);
+            }
 
             // Insert items
             const itemsToInsert = posCart.map(i => ({
@@ -1533,6 +1551,7 @@ export const Admin: React.FC = () => {
                         details: { method: 'fallback_password', admin_name: localMatch.name }
                     });
                     refreshAllData();
+                } else {
                     setError('Credenciais incorretas');
                     await logAudit({
                         action: 'ADMIN_LOGIN_FAILED',
@@ -2611,6 +2630,11 @@ export const Admin: React.FC = () => {
                                     <LayoutDashboard size={22} className="shrink-0" /> 
                                     <span className={isSidebarCollapsed ? 'md:hidden' : ''}>Painel Principal</span>
                                 </button>
+
+                                <button onClick={() => handleNavClick('notificacoes')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeView === 'notificacoes' ? 'bg-rose-500 text-white shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'md:justify-center' : ''}`} title="Notificações">
+                                    <Bell size={22} className="shrink-0" /> 
+                                    <span className={isSidebarCollapsed ? 'md:hidden' : ''}>Notificações</span>
+                                </button>
                                 
                                 <button onClick={() => handleNavClick('orders')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeView === 'orders' ? 'bg-[#d9a65a] text-[#3b2f2f] shadow-lg translate-x-1' : 'text-gray-400 hover:text-white hover:bg-white/5'} ${isSidebarCollapsed ? 'md:justify-center' : ''}`} title="Encomendas">
                                     <ShoppingBag size={22} className="shrink-0" /> 
@@ -2751,6 +2775,7 @@ export const Admin: React.FC = () => {
                              activeView === 'logistics' ? 'Logística e Entregas' :
                              activeView === 'kitchen' ? 'Cozinha e KDS' :
                              activeView === 'blog' ? 'Blog e CMS' :
+                             activeView === 'notificacoes' ? 'Centro de Notificações' :
                              activeView.charAt(0).toUpperCase() + activeView.slice(1)}
                         </h1>
                         <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mt-1">
@@ -2978,6 +3003,13 @@ export const Admin: React.FC = () => {
                                 </tbody>
                             </table>
                         </div>
+                    </div>
+                )}
+
+                {/* Notifications View */}
+                {activeView === 'notificacoes' && (
+                    <div className="h-[calc(100vh-200px)] animate-fade-in">
+                        <AdminNotifications />
                     </div>
                 )}
 
@@ -3878,7 +3910,84 @@ export const Admin: React.FC = () => {
                     )
                 }
 
-                {/* --- Messages View --- */}
+                {/* Edit / Create Member Modal - Global (works from any tab) */}
+                {isEditingMember && (
+                    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                        <div className="bg-white rounded-2xl w-full max-w-md p-6 animate-scale-in">
+                            <div className="flex justify-between items-center mb-6">
+                                <h3 className="text-xl font-bold font-serif text-[#3b2f2f]">{currentMember ? 'Editar Membro' : 'Novo Membro da Equipa'}</h3>
+                                <button onClick={() => { setIsEditingMember(false); setCurrentMember(null); setMemberAvatar(null); }} title="Fechar" className="text-gray-400 hover:text-red-500 transition-colors"><X size={24} /></button>
+                            </div>
+                            <form onSubmit={handleSaveMember} className="space-y-4">
+                                <div className="flex flex-col items-center gap-4 mb-4">
+                                    <div className="w-24 h-24 rounded-full bg-gray-50 border-2 border-[#d9a65a]/20 flex items-center justify-center overflow-hidden relative group">
+                                        {(memberAvatar || currentMember?.avatar_url) ? (
+                                            <img src={memberAvatar || currentMember?.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
+                                        ) : (
+                                            <Users size={32} className="text-gray-300" />
+                                        )}
+                                        <label className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                                            <Upload size={20} className="text-white" />
+                                            <input
+                                                type="file"
+                                                className="hidden"
+                                                accept="image/*"
+                                                title="Carregar nova foto"
+                                                onChange={async (e) => {
+                                                    const file = e.target.files?.[0];
+                                                    if (!file) return;
+                                                    const fileName = `avatars/${Date.now()}_${file.name}`;
+                                                    const { error } = await supabase.storage.from('products').upload(fileName, file);
+                                                    if (error) return alert('Erro: ' + error.message);
+                                                    const { data } = supabase.storage.from('products').getPublicUrl(fileName);
+                                                    let url = data.publicUrl;
+                                                    if (url.includes('/supabase-proxy')) {
+                                                        url = url.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co');
+                                                    }
+                                                    setMemberAvatar(url);
+                                                }}
+                                            />
+                                        </label>
+                                    </div>
+                                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Foto de Perfil</span>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Nome Completo</label>
+                                    <input required name="name" title="Nome Completo" defaultValue={currentMember?.name} type="text" className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:border-[#d9a65a] outline-none" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Nome de Utilizador (Login)</label>
+                                    <input required name="username" title="Nome de Utilizador" defaultValue={currentMember?.username} type="text" className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:border-[#d9a65a] outline-none" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Email (Para Recuperação)</label>
+                                    <input name="email" title="Email" defaultValue={currentMember?.email} type="email" className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:border-[#d9a65a] outline-none" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Palavra-passe {currentMember && '(Opcional se não quiser alterar)'}</label>
+                                    <input name="password" title="Palavra-passe" type="password" required={!currentMember} placeholder={currentMember ? 'Deixar em branco para manter a atual' : ''} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:border-[#d9a65a] outline-none" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Papel / Acesso</label>
+                                    <select required name="role" title="Papel / Acesso" defaultValue={currentMember?.role || 'staff'} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:border-[#d9a65a] outline-none">
+                                        <option value="admin">Administrador Geral</option>
+                                        <option value="it">Suporte TI</option>
+                                        <option value="staff">Equipa (Staff)</option>
+                                        <option value="vendas">Vendas</option>
+                                        <option value="driver">Motorista (Parceiro Drive)</option>
+                                        <option value="kitchen">Cozinha</option>
+                                    </select>
+                                </div>
+                                <div className="pt-4 flex gap-3">
+                                    <button type="submit" disabled={isSubmitting} className="flex-1 py-3 bg-[#d9a65a] text-[#3b2f2f] font-bold rounded-xl hover:bg-[#c89549] transition-colors shadow-lg flex justify-center items-center gap-2">
+                                        {isSubmitting ? <span className="w-4 h-4 border-2 border-[#3b2f2f] border-t-transparent rounded-full animate-spin"></span> : 'Guardar Membro'}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                )}
+
                 {activeView === 'messages' && (
                         <div className="h-[calc(100vh-140px)] animate-fade-in flex border border-[#3b2f2f]/10 rounded-2xl overflow-hidden bg-white/50 backdrop-blur-sm shadow-2xl">
                             {/* Mail Sidebar */}
@@ -5851,7 +5960,7 @@ export const Admin: React.FC = () => {
                                                         onClick={() => {
                                                             setCurrentMember(null);
                                                             setMemberAvatar(null);
-                                                            setMemberForm({ id: 0, name: '', role: 'vendedor', password: '', avatar_url: '' });
+                                                            setMemberForm({ id: 0, name: '', username: '', email: '', phone: '', role: 'staff', password: '', avatar_url: '' });
                                                             setIsEditingMember(true);
                                                         }}
                                                         className="px-6 py-3 bg-[#3b2f2f] text-[#d9a65a] font-bold rounded-xl shadow-lg hover:brightness-110 active:scale-95 transition-all text-xs uppercase tracking-widest flex items-center gap-2"
@@ -5875,7 +5984,8 @@ export const Admin: React.FC = () => {
                                                                 <div>
                                                                     <p className="font-bold text-[#3b2f2f]">{member.name}</p>
                                                                     <p className="text-[10px] font-black text-[#d9a65a] uppercase tracking-widest">{member.role}</p>
-                                                                    <p className="text-[10px] font-black text-gray-500 font-mono mt-0.5">{companyInfo.staffPrefix}-{member.id.substring(0,6).toUpperCase()}</p>
+                                                                    <p className="text-[10px] font-black text-gray-500 font-mono mt-0.5">{member.username || companyInfo.staffPrefix}</p>
+                                                                    {member.email && <p className="text-[10px] text-gray-400 mt-0.5 truncate max-w-[150px]">{member.email}</p>}
                                                                 </div>
                                                             </div>
                                                             <div className="flex gap-2">
@@ -5883,7 +5993,16 @@ export const Admin: React.FC = () => {
                                                                     onClick={() => {
                                                                         setCurrentMember(member);
                                                                         setMemberAvatar(member.avatar_url || null);
-                                                                        setMemberForm({ ...member, password: '' });
+                                                                        setMemberForm({ 
+                                                                            id: member.id,
+                                                                            name: member.name || '',
+                                                                            username: member.username || '',
+                                                                            email: member.email || '',
+                                                                            phone: member.phone || '',
+                                                                            role: member.role || 'staff',
+                                                                            password: '',
+                                                                            avatar_url: member.avatar_url || ''
+                                                                        });
                                                                         setIsEditingMember(true);
                                                                     }}
                                                                     className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
@@ -5918,7 +6037,7 @@ export const Admin: React.FC = () => {
                                                     <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100">
                                                         <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Distribuição de Cargos</p>
                                                         <div className="space-y-2">
-                                                            {['admin', 'it', 'vendedor'].map(role => {
+                                                            {['admin', 'it', 'staff', 'vendas', 'driver', 'kitchen'].map(role => {
                                                                 const count = teamMembers.filter((m: any) => m.role === role).length;
                                                                 const percentage = (count / teamMembers.length) * 100 || 0;
                                                                 return (
@@ -6860,7 +6979,7 @@ export const Admin: React.FC = () => {
                                 <div className="relative z-10 text-center flex-1 overflow-y-auto p-4 sm:p-8 bg-[#fffbf5] custom-scrollbar" id="pos-receipt-content">
                                     <div className="border-b-2 border-[#d9a65a] pb-6 mb-6 text-center space-y-2 flex flex-col items-center">
                                         <div className="w-32 h-auto mb-2">
-                                            <img src="/images/logo_receipt.png" alt="Pão Caseiro" className="w-full h-full object-contain" onError={(e) => { e.currentTarget.src = "/images/marco/logo oficial pao caseiro sem fundo.png"; }} />
+                                            <img src="/logo_on_dark.png" alt="Pão Caseiro" className="w-full h-full object-contain" />
                                         </div>
                                         <p className="text-sm text-gray-500 uppercase tracking-widest font-bold">Padaria, Pastelaria e Café</p>
                                     </div>
@@ -7196,7 +7315,7 @@ function AdminBlogView() {
         loadGalleryItems();
 
         const loadTeam = async () => {
-            const { data } = await supabase.from('team_members').select('id, name, role').in('role', ['admin', 'staff', 'it']);
+            const { data } = await supabase.from('team_members').select('id, name, username, email, phone, role, avatar_url');
             if (data) setTeamMembers(data);
         };
         loadTeam();

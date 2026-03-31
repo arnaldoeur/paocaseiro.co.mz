@@ -51,7 +51,7 @@ export const Receipt: React.FC<ReceiptProps> = ({
         } else {
             setSettings({
                 senderId: 'Pão Caseiro',
-                icon: '/images/logo_receipt.png',
+                icon: '/logo_on_dark.png',
                 address: 'Lichinga, Av. Acordo de Lusaka',
                 phone: '+258 87 9146 662'
             });
@@ -147,7 +147,7 @@ export const Receipt: React.FC<ReceiptProps> = ({
                 <div id="receipt-content" className="flex-1 overflow-y-auto p-8 bg-[#fffbf5]" ref={receiptRef}>
                     <div className="border-b-2 border-[#d9a65a] pb-6 mb-6 text-center space-y-2 flex flex-col items-center">
                         <div className="w-32 h-auto mb-2">
-                            <img src={settings?.icon || "/images/logo_receipt.png"} alt={settings?.senderId || "Pão Caseiro"} className="w-full h-full object-contain" />
+                            <img src={settings?.icon || "/logo_on_dark.png"} alt={settings?.senderId || "Pão Caseiro"} className="w-full h-full object-contain" />
                         </div>
                         <p className="text-sm text-gray-500 uppercase tracking-widest font-bold">Padaria, Pastelaria e Café</p>
                     </div>

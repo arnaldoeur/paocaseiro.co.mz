@@ -117,7 +117,7 @@ export const AnalyticsChart: React.FC<AnalyticsChartProps> = ({ orders = [], tea
         const saved = localStorage.getItem('message_settings');
         return saved ? JSON.parse(saved) : {
             senderId: 'Pão Caseiro',
-            icon: '/images/logo_receipt.png',
+            icon: '/logo_on_dark.png',
             address: 'Av. Acordo de Lusaka, Xiquelene, Maputo',
             phone: '+258 87 9146 662',
             email: 'geral@paocaseiro.co.mz',

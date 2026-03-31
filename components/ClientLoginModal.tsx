@@ -7,6 +7,7 @@ import { sendSMS } from '../services/sms';
 import { sendOTPEmail } from '../services/email';
 import { logAudit } from '../services/audit';
 import { sendWhatsAppMessage } from '../services/whatsapp';
+import { NotificationService } from '../services/NotificationService';
 
 interface ClientLoginModalProps {
     isOpen: boolean;
@@ -107,11 +108,26 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                     await sendOTPEmail(formattedIdentifier, code);
                     setSuccessMsg(language === 'en' ? 'Code sent via Email! Check your inbox.' : 'Código enviado por Email! Verifique a sua caixa de entrada.');
                 } else {
-                    console.log(`[AUTH] Sending OTP to Phone ${formattedIdentifier}: ${code}`);
-                    const smsBody = `Pao Caseiro: O seu codigo de acesso e ${code}.`;
-                    await sendSMS(formattedIdentifier.replace('+', ''), smsBody);
-                    await sendWhatsAppMessage(formattedIdentifier.replace('+', ''), `Pão Caseiro: O seu código de acesso é *${code}*. Não partilhe com ninguém.`);
-                    setSuccessMsg(language === 'en' ? 'Code sent via SMS and WhatsApp!' : 'Código enviado por SMS e WhatsApp!');
+                    console.log(`[AUTH] Sending OTP to phone ${formattedIdentifier}: ${code}`);
+                    let waSent = false;
+                    try {
+                        const waMsg = `Pão Caseiro: O seu código de acesso é *${code}*. Não partilhe com ninguém.`;
+                        const res = await sendWhatsAppMessage(formattedIdentifier, waMsg);
+                        waSent = !!res?.success;
+                        if (!waSent) console.warn('[AUTH] WhatsApp failed, trying SMS...');
+                    } catch (e) {
+                        console.error('[AUTH] WA exception:', e);
+                    }
+
+                    if (waSent) {
+                        setSuccessMsg(language === 'en' ? 'Code sent via WhatsApp! Check your phone.' : 'Código enviado por WhatsApp! Verifique o telemóvel.');
+                    } else {
+                        const smsMsg = `Pao Caseiro: O seu codigo de acesso e ${code}.`;
+                        console.log(`[AUTH] Calling sendSMS for ${formattedIdentifier}`);
+                        const smsRes = await sendSMS(formattedIdentifier.replace('+', ''), smsMsg);
+                        console.log(`[AUTH] SMS response:`, smsRes);
+                        setSuccessMsg(language === 'en' ? 'Code sent via SMS! Check your phone.' : 'Código enviado por SMS! Verifique o telemóvel.');
+                    }
                 }
                 
                 setExistingCustomer(customerData);
@@ -141,12 +157,25 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
 
                 const code = Math.floor(100000 + Math.random() * 900000).toString();
                 setGeneratedOtp(code);
-                console.log(`[AUTH] Sending OTP to Phone ${formattedIdentifier}: ${code}`);
 
-                const smsBody = `Pao Caseiro: Seu codigo de acesso e ${code}.`;
-                const res = await sendSMS(formattedIdentifier.replace('+', ''), smsBody);
-                await sendWhatsAppMessage(formattedIdentifier.replace('+', ''), `Pão Caseiro: O seu código de acesso para criar conta é *${code}*. Não partilhe com ninguém.`);
-                if (res && res.status === 'error') throw new Error(res.message);
+                console.log(`[AUTH] Sending registration OTP to phone ${formattedIdentifier}: ${code}`);
+                
+                let waSent = false;
+                try {
+                    const waMsg = `Pão Caseiro: O seu código de acesso é *${code}*. Não partilhe com ninguém.`;
+                    const res = await sendWhatsAppMessage(formattedIdentifier, waMsg);
+                    waSent = !!res?.success;
+                    if (!waSent) console.warn('[AUTH] Registration WA failed, trying SMS...');
+                } catch (e) {
+                    console.error('[AUTH] Registration WA exception:', e);
+                }
+
+                if (!waSent) {
+                    const smsMsg = `Pao Caseiro: O seu codigo de acesso e ${code}.`;
+                    console.log(`[AUTH] Calling sendSMS for registration: ${formattedIdentifier}`);
+                    const smsRes = await sendSMS(formattedIdentifier.replace('+', ''), smsMsg);
+                    console.log(`[AUTH] Registration SMS response:`, smsRes);
+                }
 
                 if (existingCustomerData) {
                     setSuccessMsg(language === 'en' ? 'Number already registered! We sent a login code.' : 'Número já registado! Enviámos um código para fazer login.');
@@ -220,9 +249,29 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                 setSuccessMsg(language === 'en' ? 'Reset code sent via Email.' : 'Código de recuperação enviado por Email.');
             } else {
                 const smsBody = `Pao Caseiro: Seu codigo de recuperacao e ${code}.`;
-                await sendSMS(identifier.replace('+', ''), smsBody);
-                await sendWhatsAppMessage(identifier.replace('+', ''), `Pão Caseiro: O seu código de recuperação de palavra-passe é *${code}*.`);
-                setSuccessMsg(language === 'en' ? 'Reset code sent via WhatsApp & SMS.' : 'Código de recuperação enviado por WhatsApp e SMS.');
+                
+                let smsSent = false;
+                let waSent = false;
+
+                try {
+                    await sendSMS(identifier.replace('+', ''), smsBody);
+                    smsSent = true;
+                } catch (e) {
+                    console.error('[AUTH] Reset SMS failed:', e);
+                }
+
+                try {
+                    const waRes = await sendWhatsAppMessage(identifier.replace('+', ''), `Pão Caseiro: O seu código de recuperação de palavra-passe é *${code}*.`);
+                    if (waRes && waRes.success) waSent = true;
+                } catch (e) {
+                    console.error('[AUTH] Reset WhatsApp failed:', e);
+                }
+
+                if (!smsSent && !waSent) {
+                    throw new Error(language === 'en' ? 'Failed to send recovery code.' : 'Erro ao enviar código de recuperação.');
+                }
+
+                setSuccessMsg(language === 'en' ? 'Reset code sent! Check your phone.' : 'Código de recuperação enviado! Verifique o telemóvel.');
             }
             setStep('reset-otp');
         } catch (err: any) {
@@ -336,6 +385,19 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                 localStorage.setItem('pc_user_data', JSON.stringify(customerData));
                 window.dispatchEvent(new Event('pc_user_update'));
                 await logAudit({ action: 'CUSTOMER_REGISTER', entity_type: 'customer', entity_id: customerData.id, details: { }, customer_phone: customerData.contact_no });
+
+                // NEW: Log and notify admin about new registration
+                try {
+                    await NotificationService.logSystemEvent(
+                        'Novo Registo de Cliente',
+                        `Nome: ${name}\nContacto: ${identifier}\nEmail: ${email || 'N/A'}\nWhatsApp: ${whatsapp || 'N/A'}`,
+                        'USER',
+                        'success',
+                        customerData.id
+                    );
+                } catch (logErr) {
+                    console.error("New registration system logging failed:", logErr);
+                }
             }
 
             onClose();

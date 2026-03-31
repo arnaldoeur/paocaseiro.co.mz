@@ -2,9 +2,7 @@ import { supabase } from './supabase';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-const EVOLUTION_API_URL = import.meta.env.VITE_WHATSAPP_API_URL || 'https://wa.zyphtech.com';
 const INSTANCE_NAME = import.meta.env.VITE_WHATSAPP_INSTANCE_NAME || 'Zyph Tech, Lda';
-const API_KEY = import.meta.env.VITE_WHATSAPP_API_KEY || '24724DC5AA2F-4CBF-9013-9C645CF4E565';
 
 /**
  * Format the phone number to E.164 required by Evolution API (e.g. 25884xxxxxxx)
@@ -22,7 +20,7 @@ const formatPhone = (phone: string) => {
 };
 
 /**
- * Send a Text Message via WhatsApp
+ * Send a Text Message via WhatsApp via Supabase Edge Function
  */
 export const sendWhatsAppMessage = async (to: string, text: string) => {
     if (!to) return { success: false, error: 'No phone number provided' };
@@ -30,69 +28,45 @@ export const sendWhatsAppMessage = async (to: string, text: string) => {
     const formattedNumber = formatPhone(to);
     
     try {
-        const payload = {
-            number: formattedNumber,
-            options: {
-                delay: 1000,
-                presence: 'composing'
-            },
-            text: text
-        };
-
-        const response = await fetch(`${EVOLUTION_API_URL}/message/sendText/${encodeURIComponent(INSTANCE_NAME)}`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'apikey': API_KEY
-            },
-            body: JSON.stringify(payload)
+        const { data, error } = await supabase.functions.invoke('notify-whatsapp', {
+            body: {
+                number: formattedNumber,
+                text: text
+            }
         });
 
-        const data = await response.json();
+        if (error) throw error;
 
-        if (!response.ok) {
-            console.error('WhatsApp API Error:', data);
-            throw new Error(data.message || 'Failed to send WhatsApp message');
-        }
+        console.log('WhatsApp success response:', data);
 
-        // Log to Supabase
-        Promise.resolve().then(async () => {
-            try {
-                await supabase.from('sms_logs').insert([{
-                    type: 'whatsapp',
-                    recipient: formattedNumber,
-                    content: 'Text Notification',
-                    status: 'sent',
-                    cost: 0
-                }]);
-            } catch (e) { }
-        });
+        // Async log success
+        supabase.from('sms_logs').insert([{
+            type: 'whatsapp',
+            recipient: formattedNumber,
+            content: text.substring(0, 200), // Log snippet
+            status: 'sent',
+            cost: 0
+        }]).catch(e => console.error('[WhatsApp Log Error]', e));
 
         return { success: true, data };
     } catch (error: any) {
         console.error('WhatsApp Service Error:', error);
         
-        Promise.resolve().then(async () => {
-            try {
-                await supabase.from('sms_logs').insert([{
-                    type: 'whatsapp_error',
-                    recipient: formattedNumber,
-                    content: error.message,
-                    status: 'error',
-                    cost: 0
-                }]);
-            } catch (e) { }
-        });
+        // Async log error
+        supabase.from('sms_logs').insert([{
+            type: 'whatsapp_error',
+            recipient: formattedNumber,
+            content: error.message,
+            status: 'error',
+            cost: 0
+        }]).catch(e => console.error('[WhatsApp Log Error]', e));
 
-        return { success: false, error: error.message };
+        throw error;
     }
 };
 
 /**
- * Send Media (PDF/Image) via WhatsApp
- * @param media Content via Base64 or direct Web URL
- * @param mediatype eg. "document", "image", "video", "audio"
- * @param fileName fileName of the media
+ * Send Media (PDF/Image) via WhatsApp via Supabase Edge Function
  */
 export const sendWhatsAppMedia = async (to: string, mediatype: string, fileName: string, caption: string, media: string) => {
     if (!to) return { success: false, error: 'No phone number provided' };
@@ -100,51 +74,31 @@ export const sendWhatsAppMedia = async (to: string, mediatype: string, fileName:
     const formattedNumber = formatPhone(to);
     
     try {
-        const payload = {
-            number: formattedNumber,
-            options: {
-                delay: 1500,
-                presence: 'composing'
-            },
-            mediatype: mediatype,
-            fileName: fileName,
-            caption: caption,
-            media: media
-        };
-
-        const response = await fetch(`${EVOLUTION_API_URL}/message/sendMedia/${encodeURIComponent(INSTANCE_NAME)}`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'apikey': API_KEY
-            },
-            body: JSON.stringify(payload)
+        const { data, error } = await supabase.functions.invoke('notify-whatsapp', {
+            body: {
+                number: formattedNumber,
+                media: media,
+                mediatype: mediatype,
+                fileName: fileName,
+                caption: caption
+            }
         });
 
-        const data = await response.json();
-
-        if (!response.ok) {
-            console.error('WhatsApp API Media Error:', data);
-            throw new Error(data.message || 'Failed to send WhatsApp media');
-        }
+        if (error) throw error;
 
         // Log to Supabase
-        Promise.resolve().then(async () => {
-            try {
-                await supabase.from('sms_logs').insert([{
-                    type: 'whatsapp_media',
-                    recipient: formattedNumber,
-                    content: `Media File: ${fileName}`,
-                    status: 'sent',
-                    cost: 0
-                }]);
-            } catch (e) { }
-        });
+        supabase.from('sms_logs').insert([{
+            type: 'whatsapp_media',
+            recipient: formattedNumber,
+            content: `Media: ${fileName}`,
+            status: 'sent',
+            cost: 0
+        }]).catch(e => console.error('[WhatsApp Media Log Error]', e));
 
         return { success: true, data };
     } catch (error: any) {
         console.error('WhatsApp Service Media Error:', error);
-        return { success: false, error: error.message };
+        throw error;
     }
 };
 

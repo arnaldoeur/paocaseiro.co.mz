@@ -1,62 +1,11 @@
 import path from 'path';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
+import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
-  console.log('Supabase URL:', env.VITE_SUPABASE_URL);
-  console.log('Supabase Key:', env.VITE_SUPABASE_ANON_KEY);
   const proxyConfig = {
-    '/api/paysuite': {
-      target: 'https://paysuite.tech',
-      changeOrigin: true,
-      rewrite: (path: string) => {
-        // Check for ?action=verify&id=...
-        const match = path.match(/\?action=verify&id=([^&]+)/);
-        if (match && match[1]) {
-          return `/api/v1/payments/${match[1]}`;
-        }
-        return path.replace(/^\/api\/paysuite/, '/api/v1/payments');
-      },
-      secure: false,
-      configure: (proxy: any, _options: any) => {
-        proxy.on('proxyReq', (proxyReq: any, _req: any, _res: any) => {
-          proxyReq.setHeader('User-Agent', 'PaoCaseiro/1.0');
-          proxyReq.setHeader('Referer', 'https://paocaseiro.co.mz');
-          proxyReq.setHeader('Origin', 'https://paocaseiro.co.mz');
-          proxyReq.setHeader('Accept', 'application/json');
-          proxyReq.setHeader('X-Requested-With', 'XMLHttpRequest');
-        });
-      }
-    },
-    '/api/resend': {
-      target: 'https://api.resend.com',
-      changeOrigin: true,
-      rewrite: (path: string) => path.replace(/^\/api\/resend/, ''),
-      secure: false,
-      configure: (proxy: any, _options: any) => {
-        proxy.on('proxyReq', (proxyReq: any, _req: any, _res: any) => {
-          proxyReq.setHeader('Accept', 'application/json');
-        });
-        proxy.on('proxyRes', (proxyRes: any, _req: any, _res: any) => {
-          proxyRes.headers['access-control-allow-origin'] = '*';
-          proxyRes.headers['access-control-allow-methods'] = 'GET, POST, PUT, DELETE, PATCH, OPTIONS';
-          proxyRes.headers['access-control-allow-headers'] = 'X-Requested-With, content-type, Authorization, apikey, Accept';
-        });
-      }
-    },
-    '/api/turbo': {
-      target: 'https://my.turbo.host',
-      changeOrigin: true,
-      rewrite: (path: string) => path.replace(/^\/api\/turbo/, '/api/international-sms'),
-      secure: false,
-      configure: (proxy: any, _options: any) => {
-        proxy.on('proxyReq', (proxyReq: any, _req: any, _res: any) => {
-          proxyReq.setHeader('Origin', 'https://my.turbo.host');
-          proxyReq.setHeader('Referer', 'https://my.turbo.host');
-        });
-      }
-    },
     '/supabase-proxy': {
       target: env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co',
       changeOrigin: true,
@@ -101,14 +50,61 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 3000,
       host: '0.0.0.0',
-      proxy: proxyConfig
+      proxy: proxyConfig,
+      allowedHosts: true
     },
     preview: {
       port: 3000,
       host: '0.0.0.0',
-      proxy: proxyConfig
+      proxy: proxyConfig,
+      allowedHosts: true
     },
-    plugins: [react()],
+    plugins: [
+      react(),
+      VitePWA({
+        registerType: 'autoUpdate',
+        includeAssets: ['favicon.ico', 'robots.txt', 'images/**/*.png', 'images/**/*.jpg'],
+        manifest: {
+          name: 'Pão Caseiro - O sabor que aquece o coração',
+          short_name: 'Pão Caseiro',
+          description: 'Padaria Pão Caseiro em Lichinga. Peça já!',
+          theme_color: '#3b2f2f',
+          background_color: '#f7f1eb',
+          display: 'standalone',
+          icons: [
+            {
+              src: '/pao_caseiro_hero.png',
+              sizes: '192x192',
+              type: 'image/png'
+            },
+            {
+              src: '/pao_caseiro_hero.png',
+              sizes: '512x512',
+              type: 'image/png'
+            }
+          ]
+        },
+        workbox: {
+          globPatterns: ['**/*.{js,css,html,ico,png,svg,json}'],
+          runtimeCaching: [
+            {
+              urlPattern: /^https:\/\/bqiegszufcqimlvucrpm\.supabase\.co\/.*/i,
+              handler: 'NetworkFirst',
+              options: {
+                cacheName: 'supabase-api-cache',
+                expiration: {
+                  maxEntries: 100,
+                  maxAgeSeconds: 60 * 60 * 24 // 24 hours
+                },
+                cacheableResponse: {
+                  statuses: [0, 200]
+                }
+              }
+            }
+          ]
+        }
+      })
+    ],
     define: {
       'process.env.VITE_SUPABASE_URL': JSON.stringify(env.VITE_SUPABASE_URL || ''),
       'process.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(env.VITE_SUPABASE_ANON_KEY || ''),

@@ -32,7 +32,7 @@ export const ITSupport: React.FC = () => {
     
     const [showTeamModal, setShowTeamModal] = useState(false);
     const [editingTeam, setEditingTeam] = useState<any | null>(null);
-    const [teamForm, setTeamForm] = useState({ name: '', username: '', role: 'Admin' });
+    const [teamForm, setTeamForm] = useState({ name: '', username: '', role: 'Admin', password: '', email: '', phone: '' });
 
     // Data States
     const [stats, setStats] = useState({ activeTickets: 0, totalOrders: 0, totalSmsCost: 0, failedOrders: 0, totalSentMsgs: 0 });
@@ -237,9 +237,9 @@ export const ITSupport: React.FC = () => {
             const { data: ords } = await supabase.from('orders').select('customer_email, customer_phone');
             if (ords) {
                 if(broadcastChannel === 'email') {
-                    contacts = [...new Set(ords.map(o => o.customer_email).filter(e => e && e.includes('@')))];
+                    contacts = Array.from(new Set(ords.map(o => (o as any).customer_email as string).filter(e => e && e.includes('@'))));
                 } else {
-                    contacts = [...new Set(ords.map(o => o.customer_phone).filter(p => p && p.length > 5))];
+                    contacts = Array.from(new Set(ords.map(o => (o as any).customer_phone as string).filter(p => p && p.length > 5)));
                 }
             }
             
@@ -297,14 +297,24 @@ export const ITSupport: React.FC = () => {
 
     const handleSaveTeam = async () => {
         if (!teamForm.name.trim() || !teamForm.username.trim()) { alert("Preenche todos os campos obrigatórios"); return; }
+        
+        const payload = {
+            name: teamForm.name,
+            username: teamForm.username,
+            role: teamForm.role,
+            password: teamForm.password,
+            email: teamForm.email,
+            phone: teamForm.phone
+        };
+
         if (editingTeam) {
-            await supabase.from('team_members').update(teamForm).eq('id', editingTeam.id);
+            await supabase.from('team_members').update(payload).eq('id', editingTeam.id);
         } else {
-            await supabase.from('team_members').insert([teamForm]);
+            await supabase.from('team_members').insert([payload]);
         }
         setShowTeamModal(false);
         setEditingTeam(null);
-        setTeamForm({ name: '', username: '', role: 'Admin' });
+        setTeamForm({ name: '', username: '', role: 'Admin', password: '', email: '', phone: '' });
         fetchAllData();
     };
 
@@ -773,7 +783,7 @@ export const ITSupport: React.FC = () => {
                         <div className="bg-[#2a2a2a] rounded-2xl border border-gray-800 p-6 relative">
                             <div className="flex justify-between items-center mb-6">
                                 <h3 className="font-bold text-xl">Diretório de Equipa (Zyph)</h3>
-                                <button onClick={() => { setEditingTeam(null); setTeamForm({ name: '', username: '', role: 'Admin' }); setShowTeamModal(true); }} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg flex items-center gap-2 font-bold text-sm">
+                                <button onClick={() => { setEditingTeam(null); setTeamForm({ name: '', username: '', role: 'Admin', password: '', email: '', phone: '' }); setShowTeamModal(true); }} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg flex items-center gap-2 font-bold text-sm">
                                     <Plus className="w-4 h-4" /> Adicionar Membro
                                 </button>
                             </div>
@@ -782,8 +792,11 @@ export const ITSupport: React.FC = () => {
                                 <div className="mb-8 p-6 bg-[#1a1a1a] border border-indigo-500/50 rounded-xl">
                                     <h4 className="font-bold mb-4">{editingTeam ? 'Editar Membro' : 'Novo Membro na Zyph'}</h4>
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                                        <input type="text" placeholder="Nome" value={teamForm.name} onChange={e => setTeamForm({...teamForm, name: e.target.value})} className="bg-[#2a2a2a] border border-gray-700 rounded-lg p-3 text-white outline-none focus:border-indigo-500" />
+                                        <input type="text" placeholder="Nome Completo" value={teamForm.name} onChange={e => setTeamForm({...teamForm, name: e.target.value})} className="bg-[#2a2a2a] border border-gray-700 rounded-lg p-3 text-white outline-none focus:border-indigo-500" />
                                         <input type="text" placeholder="Username / Handle" value={teamForm.username} onChange={e => setTeamForm({...teamForm, username: e.target.value})} className="bg-[#2a2a2a] border border-gray-700 rounded-lg p-3 text-white outline-none focus:border-indigo-500" />
+                                        <input type="password" placeholder="Access Key / Password" value={teamForm.password || ''} onChange={e => setTeamForm({...teamForm, password: e.target.value})} className="bg-[#2a2a2a] border border-gray-700 rounded-lg p-3 text-white outline-none focus:border-indigo-500" />
+                                        <input type="email" placeholder="E-mail" value={teamForm.email || ''} onChange={e => setTeamForm({...teamForm, email: e.target.value})} className="bg-[#2a2a2a] border border-gray-700 rounded-lg p-3 text-white outline-none focus:border-indigo-500" />
+                                        <input type="text" placeholder="Telemóvel" value={teamForm.phone || ''} onChange={e => setTeamForm({...teamForm, phone: e.target.value})} className="bg-[#2a2a2a] border border-gray-700 rounded-lg p-3 text-white outline-none focus:border-indigo-500" />
                                         <select value={teamForm.role} onChange={e => setTeamForm({...teamForm, role: e.target.value})} className="bg-[#2a2a2a] border border-gray-700 rounded-lg p-3 text-white outline-none focus:border-indigo-500">
                                             <option value="Admin">Admin</option>
                                             <option value="Suporte">Suporte</option>
@@ -809,7 +822,11 @@ export const ITSupport: React.FC = () => {
                                             {member.name ? member.name.substring(0,2) : 'IT'}
                                         </div>
                                         <h4 className="font-bold text-lg">{member.name}</h4>
-                                        <p className="text-gray-400 text-sm mb-4">{member.username}</p>
+                                        <p className="text-gray-400 text-sm mb-1">@{member.username}</p>
+                                        <div className="flex flex-col gap-1 mb-4">
+                                            {member.email && <p className="text-gray-500 text-xs flex items-center gap-1"><Mail className="w-3 h-3" /> {member.email}</p>}
+                                            {member.phone && <p className="text-gray-500 text-xs flex items-center gap-1"><Smartphone className="w-3 h-3" /> {member.phone}</p>}
+                                        </div>
                                         <span className="bg-[#333] px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">{member.role}</span>
                                     </div>
                                 ))}

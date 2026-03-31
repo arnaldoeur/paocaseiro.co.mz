@@ -162,7 +162,7 @@ export const OrderReceipt: React.FC = () => {
                 <div className="px-10 pt-6 pb-8 text-center">
                     <div className="mb-6 relative inline-block">
                         <div className="absolute inset-0 bg-[#d9a65a]/20 blur-xl rounded-full scale-150 opacity-50"></div>
-                        <img src="/images/marco/logo oficial pao caseiro sem fundo.png" alt="Pão Caseiro" className="h-24 relative z-10 mx-auto object-contain" />
+                        <img src="/logo_on_dark.png" alt="Pão Caseiro" className="h-24 relative z-10 mx-auto object-contain" />
                     </div>
                     <h1 className="text-3xl font-serif font-black text-[#3b2f2f] uppercase tracking-tighter mb-1">Pão Caseiro</h1>
                     <p className="text-[10px] text-[#d9a65a] font-black uppercase tracking-[0.3em] mb-4">Padaria • Pastelaria • Café</p>

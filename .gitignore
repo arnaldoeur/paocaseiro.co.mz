@@ -35,3 +35,9 @@ node_modules
 node_modules
 
 paocaseiro-deploy.zip
+
+# Temp/Bug files
+bug/
+test_extract/
+dist/
+capacitor-cordova-android-plugins/

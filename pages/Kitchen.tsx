@@ -2,13 +2,16 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ChefHat, Clock, CheckCircle, AlertCircle, Loader, LogOut, User, Bell, Plus, Search, Archive, LayoutDashboard, Package, EyeOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatProductName } from '../services/stringUtils';
+import { NotificationService } from '../services/NotificationService';
 
 // Types (Mirrors Admin/Supabase structure)
 interface Order {
-    id: string; // Supabase ID
-    orderId?: string; // App ID (if different, usually 'orderId' in JSON logic, but 'id' in DB)
-    // We'll map DB fields
+    id: string; // Supabase UUID
+    short_id: string; // PC-1234 or KDS-1234
+    orderId?: string; // Compatibility alias
     customer_name: string;
+    customer_phone?: string;
+    delivery_type?: string;
     status: 'pending' | 'processing' | 'ready' | 'delivering' | 'completed' | 'cancelled';
     items: Array<{
         name: string;
@@ -173,6 +176,7 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
             if (activeData) {
                 const mapped = activeData.map((o: any) => ({
                     ...o,
+                    orderId: o.short_id, // Map short_id for UI
                     items: (o.items || []).map((i: any) => ({
                         name: i.product_name,
                         quantity: i.quantity,
@@ -287,15 +291,15 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
                 .single();
 
             if (order) {
-                const displayId = order.orderId || order.id.slice(-4);
-                const type = order.customer?.type === 'delivery' ? 'Entrega' : 
-                             order.customer?.type === 'pickup' ? 'Levantamento' : 'Cozinha';
+                const displayId = order.short_id || order.id.slice(-4).toUpperCase();
+                const type = order.delivery_type === 'delivery' ? 'Entrega' : 
+                             order.delivery_type === 'pickup' ? 'Levantamento' : 'Digital';
                 
                 const itemsText = (order.items || [])
                     .map((i: any) => `${i.quantity} ${i.product_name}`)
-                    .join(', ');
+                    .join(' e ');
 
-                const text = `Pedido ${displayId}. ${type}. ${itemsText}`;
+                const text = `Novo pedido em ${type}. Código ${displayId}. Artigos: ${itemsText}`;
                 speakQueue.current.push(text);
                 processSpeakQueue();
             }
@@ -419,8 +423,7 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
 
         // Notify prep time
         const updatedOrder = { ...selectedOrder, status: 'processing', prep_time: finalTime };
-        import('../services/sms').then(m => m.notifyCustomer(updatedOrder, 'status_update')).catch(console.error);
-        import('../services/whatsapp').then(m => m.notifyCustomerOrderStatusWhatsApp(updatedOrder, 'processing')).catch(console.error);
+        NotificationService.notifyOrderStatus(updatedOrder, 'processing').catch(console.error);
     };
 
     const confirmAddTime = async (minutesToAdd: number) => {
@@ -446,8 +449,7 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
         fetchOrders(); // Sync
 
         if (reason && reason.trim() !== '') {
-            import('../services/sms').then(m => m.notifyCustomerDelay(addTimeOrder, minutesToAdd.toString(), reason)).catch(console.error);
-            import('../services/whatsapp').then(m => m.notifyCustomerDelayWhatsApp(addTimeOrder, minutesToAdd.toString(), reason)).catch(console.error);
+            NotificationService.notifyOrderDelay(addTimeOrder, minutesToAdd.toString(), reason).catch(console.error);
         }
     };
 
@@ -462,9 +464,8 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
 
         if (order) {
             const updatedOrder = { ...order, status: 'ready' };
-            import('../services/sms').then(m => m.notifyCustomer(updatedOrder, 'status_update')).catch();
+            NotificationService.notifyOrderStatus(updatedOrder, 'ready').catch();
             import('../services/email').then(m => m.notifyOrderStatusUpdateEmail(updatedOrder)).catch();
-            import('../services/whatsapp').then(m => m.notifyCustomerOrderStatusWhatsApp(updatedOrder, 'ready')).catch();
         }
     };
 
@@ -478,9 +479,8 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
 
         if (order) {
             const updatedOrder = { ...order, status: 'completed' };
-            import('../services/sms').then(m => m.notifyCustomer(updatedOrder, 'status_update')).catch();
+            NotificationService.notifyOrderStatus(updatedOrder, 'completed').catch();
             import('../services/email').then(m => m.notifyOrderStatusUpdateEmail(updatedOrder)).catch();
-            import('../services/whatsapp').then(m => m.notifyCustomerOrderStatusWhatsApp(updatedOrder, 'completed')).catch();
         }
     };
 

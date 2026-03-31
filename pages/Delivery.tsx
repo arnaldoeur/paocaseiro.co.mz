@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Truck, Lock, Phone, ArrowRight, Loader, AlertTriangle, User, LogOut, Shield, Navigation, MapPin, CheckCircle, Package, Clock, ChefHat, MessageSquare } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { sendSMS, notifyCustomer, notifyCustomerApproaching } from '../services/sms';
+import { NotificationService } from '../services/NotificationService';
 
 // ---------- Haversine Distance Helper (meters) ----------
 function getDistanceMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -115,8 +115,8 @@ export const Delivery: React.FC = () => {
                             .update({ approaching_notified: true })
                             .eq('id', order.id);
 
-                        // Auto-send SMS to customer
-                        await notifyCustomerApproaching(order, user);
+                        // Auto-send notification to customer
+                        await NotificationService.notifyApproaching(order, user);
                         console.log(`[GPS] Approaching alert sent for #${order.short_id}`);
                     }
                 }
@@ -263,7 +263,7 @@ export const Delivery: React.FC = () => {
             const code = Math.floor(1000 + Math.random() * 9000).toString();
             setGeneratedOtp(code);
             console.log(`[DEV OTP] For ${cleanPhone}: ${code}`);
-            await sendSMS(cleanPhone, `Seu codigo de acesso Pao Caseiro: ${code}`);
+            await NotificationService.sendOTP(cleanPhone, code);
             setStep('otp');
         } catch (err: any) {
             setError(err.message || 'Erro ao verificar número.');
@@ -581,11 +581,11 @@ export const Delivery: React.FC = () => {
                                                     // Notify customer with driver phone
                                                     const customerPhone = order.customer_phone;
                                                     if (customerPhone) {
-                                                        const msg = `Pão Caseiro: #${order.short_id} está a caminho! Motorista: ${user?.name || ''}, contacte pelo ${user?.phone || ''}. O sabor que aquece o coração está a chegar!`.substring(0, 160);
-                                                        sendSMS(customerPhone, msg).catch(console.error);
+                                                        const msg = `Pão Caseiro: #${order.short_id} está a caminho! Motorista: ${user?.name || ''}, contacte pelo ${user?.phone || ''}. O sabor que aquece o coração está a chegar!`;
+                                                        await NotificationService.sendCustomNotification(customerPhone, msg);
                                                     }
                                                     
-                                                    import('../services/whatsapp').then(m => m.notifyCustomerOrderStatusWhatsApp(order, 'delivering')).catch();
+                                                    await NotificationService.notifyOrderStatus(order, 'delivering');
                                                     import('../services/email').then(m => m.notifyOrderStatusUpdateEmail({...order, status: 'delivering'})).catch();
 
                                                     // Start GPS tracking
@@ -618,8 +618,7 @@ export const Delivery: React.FC = () => {
                                                                     return alert('Erro: ' + error.message);
                                                                 }
                                                             }
-                                                            notifyCustomer({ ...order, status: 'arrived' }, 'status_update', user).catch(console.error);
-                                                            import('../services/whatsapp').then(m => m.notifyCustomerOrderStatusWhatsApp(order, 'arrived')).catch();
+                                                            await NotificationService.notifyOrderStatus(order, 'arrived');
                                                             import('../services/email').then(m => m.notifyOrderStatusUpdateEmail({...order, status: 'arrived'})).catch();
                                                             await fetchOrders();
                                                             alert('Cliente notificado que você chegou!');
@@ -632,11 +631,7 @@ export const Delivery: React.FC = () => {
                                                     <button
                                                         onClick={async () => {
                                                             if (!confirm('Reenviar OTP via SMS e WhatsApp para o cliente agora?')) return;
-                                                            const { sendSMS } = await import('../services/sms');
-                                                            const { sendWhatsAppMessage } = await import('../services/whatsapp');
-                                                            const msg = `Pão Caseiro: O motorista chegou com a sua encomenda #${order.short_id}! O seu Código (OTP) é ${order.otp}. Forneça-o ao motorista.`;
-                                                            await sendSMS(order.customer_phone, msg).catch(console.error);
-                                                            await sendWhatsAppMessage(order.customer_phone, msg).catch(console.error);
+                                                            await NotificationService.sendOTP(order.customer_phone, order.otp);
                                                             alert('OTP enviado via SMS e WhatsApp ao cliente!');
                                                         }}
                                                         className="bg-blue-600 text-white py-3 rounded-xl font-bold text-[13px] flex items-center justify-center gap-2 hover:bg-blue-700 transition-all shadow-md"
@@ -658,8 +653,7 @@ export const Delivery: React.FC = () => {
                                                                 return alert('Erro: ' + error.message);
                                                             }
                                                         }
-                                                        notifyCustomer({ ...order, status: 'completed' }, 'status_update').catch(console.error);
-                                                        import('../services/whatsapp').then(m => m.notifyCustomerOrderStatusWhatsApp(order, 'completed')).catch();
+                                                        await NotificationService.notifyOrderStatus(order, 'completed');
                                                         import('../services/email').then(m => m.notifyOrderStatusUpdateEmail({...order, status: 'completed'})).catch();
                                                         stopTracking();
                                                         await fetchOrders();
@@ -682,8 +676,7 @@ export const Delivery: React.FC = () => {
                                                         if (otp !== order.otp && otp !== '0689') return alert('OTP incorreto!');
                                                         const { supabase } = await import('../services/supabase');
                                                         await supabase.from('orders').update({ status: 'completed' }).eq('id', order.id);
-                                                        notifyCustomer({ ...order, status: 'completed' }, 'status_update').catch(console.error);
-                                                        import('../services/whatsapp').then(m => m.notifyCustomerOrderStatusWhatsApp(order, 'completed')).catch();
+                                                        await NotificationService.notifyOrderStatus(order, 'completed');
                                                         import('../services/email').then(m => m.notifyOrderStatusUpdateEmail({...order, status: 'completed'})).catch();
                                                         stopTracking();
                                                         await fetchOrders();
@@ -697,11 +690,7 @@ export const Delivery: React.FC = () => {
                                                 <button
                                                     onClick={async () => {
                                                         if (!confirm('Reenviar OTP via SMS e WhatsApp para o cliente agora?')) return;
-                                                        const { sendSMS } = await import('../services/sms');
-                                                        const { sendWhatsAppMessage } = await import('../services/whatsapp');
-                                                        const msg = `Pão Caseiro: O motorista chegou com a sua encomenda #${order.short_id}! O seu Código (OTP) é ${order.otp}. Forneça-o ao motorista.`;
-                                                        await sendSMS(order.customer_phone, msg).catch(console.error);
-                                                        await sendWhatsAppMessage(order.customer_phone, msg).catch(console.error);
+                                                        await NotificationService.sendOTP(order.customer_phone, order.otp);
                                                         alert('OTP enviado via SMS e WhatsApp ao cliente!');
                                                     }}
                                                     className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-blue-700 transition-all shadow-md"
