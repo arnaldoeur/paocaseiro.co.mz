@@ -234,13 +234,8 @@ export const Receipt: React.FC<ReceiptProps> = ({
                     </div>
 
                     <div className="mt-8 pt-8 border-t-2 border-dotted border-gray-300 text-center text-xs text-gray-400 space-y-1">
-                        <p>Obrigado pela preferência!</p>
-                        <p className="font-serif italic text-[#d9a65a] text-sm py-2">"O sabor que aquece o coração"</p>
-                        <p className="font-bold text-gray-500">{settings?.senderId || "Pão Caseiro"}</p>
-                        <p>{settings?.address || "Lichinga, Av. Acordo de Lusaka"}</p>
-                        <p>{settings?.phone || "+258 87 914 6662 | +258 84 814 6662"}</p>
-                        <p>geral@paocaseiro.co.mz</p>
-                        <p>www.paocaseiro.co.mz</p>
+                        <p className="font-bold text-gray-500">Obrigado pela preferência!</p>
+                        <p className="font-serif italic text-[#d9a65a] text-sm py-2">"O sabor que aquece o seu coração!"</p>
                     </div>
                 </div>
 

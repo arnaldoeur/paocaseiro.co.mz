@@ -907,8 +907,14 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                 <motion.div
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 text-center"
+                    className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 text-center relative"
                 >
+                    <button 
+                        onClick={() => setNeedsPhonePrompt(false)} 
+                        className="absolute top-6 right-6 text-gray-400 hover:text-gray-600 transition-colors"
+                    >
+                        <XCircle className="w-6 h-6" />
+                    </button>
                     <div className="w-16 h-16 bg-[#f7f1eb] rounded-full flex items-center justify-center mx-auto mb-6">
                         <MessageSquare className="w-8 h-8 text-[#d9a65a]" />
                     </div>

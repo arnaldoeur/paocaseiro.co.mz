@@ -14,8 +14,9 @@ serve(async (req) => {
     const { number, text, media, mediatype, fileName, caption } = await req.json()
     
     // Config (Fallback to hardcoded for immediate reliability, but secrets are preferred)
-    const INSTANCE = Deno.env.get('WHATSAPP_INSTANCE') || 'Zyph Tech, Lda'
-    const API_KEY = Deno.env.get('WHATSAPP_API_KEY') || '24724DC5AA2F-4CBF-9013-9C645CF4E565'
+    // Force verified values to bypass incorrect Supabase secrets
+    const INSTANCE = 'Zyph Tech, Lda'
+    const API_KEY = '24724DC5AA2F-4CBF-9013-9C645CF4E565'
     const BASE_URL = 'https://wa.zyphtech.com'
 
     let endpoint = `/message/sendText/${encodeURIComponent(INSTANCE)}`
@@ -51,7 +52,8 @@ serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: response.status,
     })
-  } catch (error) {
+  } catch (error: any) {
+    console.error('Notify WhatsApp Edge Function Error:', error);
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 400,

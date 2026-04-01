@@ -2,7 +2,7 @@ import { formatProductName } from './stringUtils';
 import { supabase } from './supabase';
 import * as whatsapp from './whatsapp';
 
-const DISABLE_SMS = false; // Re-enabled to allow OTP fallback
+const DISABLE_SMS = true; // Use WhatsApp as primary
 
 const getTeamNumbers = () => {
     if (typeof window !== 'undefined') {
