@@ -1,6 +1,7 @@
 // services/email.ts
 import { formatProductName } from './stringUtils';
 import { supabase } from './supabase';
+import { NotificationService } from './NotificationService';
 
 /**
  * Service to handle Email notifications via Resend API (routed through Supabase Edge Function)
@@ -68,8 +69,16 @@ export const sendEmail = async (to: string[], subject: string, html: string, rep
         // --- Asynchronous Logging of Communication ---
         Promise.resolve().then(async () => {
             try {
-                const { data: settings } = await supabase.from('system_settings').select('value').eq('key', 'sms_pricing').maybeSingle();
-                const cost = settings?.value?.cost_per_email || 0;
+                // Defensive check: Query the 'system_settings' table for pricing.
+                const { data: pricingData } = await supabase
+                    .from('system_settings')
+                    .select('value')
+                    .eq('key', 'sms_pricing')
+                    .maybeSingle();
+
+                const pricing = pricingData?.value || { cost_per_email: 0.05 };
+                const cost = pricing.cost_per_email || 0.05;
+
                 await supabase.from('sms_logs').insert([{
                     type: 'email',
                     recipient: to.join(', '),
@@ -78,7 +87,7 @@ export const sendEmail = async (to: string[], subject: string, html: string, rep
                     cost: cost
                 }]);
             } catch (e) {
-                console.error("Failed to log email communication", e);
+                console.error("[Email Log Async Error]", e);
             }
         });
 
@@ -93,6 +102,14 @@ export const sendEmail = async (to: string[], subject: string, html: string, rep
                 status: 'error',
                 cost: 0
             }]);
+            
+            // Log to Notification Center for visibility
+            await NotificationService.logSystemEvent(
+                "Falha no Envio de Email", 
+                `Não foi possível enviar email para ${to[0]}. Assunto: ${subject}. Erro: ${error.message}`, 
+                'SYSTEM', 
+                'error'
+            );
         }).catch(() => { });
         return { success: false, error: error.message };
     }

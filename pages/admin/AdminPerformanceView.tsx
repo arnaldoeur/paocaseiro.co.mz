@@ -43,12 +43,12 @@ export const AdminPerformanceView: React.FC = () => {
             
             // 2. Fetch Active Team Sessions
             const { data: sessionsData } = await supabase
-                .from('employee_sessions')
+                .from('work_sessions')
                 .select('*')
                 .order('check_in', { ascending: false });
             
             const activeSessions = (sessionsData || []).filter((s:any) => !s.check_out);
-            const activeStaffIds = new Set(activeSessions.map((s:any) => s.employee_id));
+            const activeStaffIds = new Set(activeSessions.map((s:any) => s.staff_id));
 
             // Calculate Order Times
             let totalOrderTime = 0;
@@ -67,7 +67,7 @@ export const AdminPerformanceView: React.FC = () => {
 
             // 3. Map Staff Data
             const staffWithMetrics = staffList.map((u:any) => {
-                const session = activeSessions.find((s:any) => s.employee_id === u.id);
+                const session = activeSessions.find((s:any) => s.staff_id === u.id);
                 const ordersByMe = (ordersData||[]).filter((o:any) => o.staff_id === u.id).length;
                 let currentDuration = '---';
                 let checkInTime = '---';

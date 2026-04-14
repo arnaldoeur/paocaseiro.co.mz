@@ -112,7 +112,7 @@ export const Gallery: React.FC<{ language: Language }> = ({ language }) => {
         }));
         allItems = [...allItems, ...statics];
 
-        // 3. Fetch DB Products
+        // 3. Fetch DB Products (Supabase - Daily Info)
         try {
             const { supabase } = await import('../services/supabase');
             const { data, error } = await supabase
@@ -135,11 +135,28 @@ export const Gallery: React.FC<{ language: Language }> = ({ language }) => {
             console.error('Error loading products:', err);
         }
 
-        // Remove duplicates based on Image URL (if any) to avoid identical visuals
-        const uniqueItems = Array.from(new Map(allItems.map(item => [item.image, item])).values());
+        // 4. Fetch Heavy Gallery (Hostinger - Large Files)
+        try {
+            const { invokeHostingerDB } = await import('../services/supabase');
+            const result = await invokeHostingerDB('fetch_gallery');
 
-        // Shuffle slightly? Or just sort by name? User said "Interactive Gallery".
-        // Let's keep them mixed.
+            if (result.success && result.data) {
+                const hostingerItems: GalleryItem[] = result.data.map((p: any) => ({
+                    id: `h-${p.id}`,
+                    name: p.title,
+                    price: 0,
+                    inStock: true,
+                    image: p.image_url,
+                    type: 'static'
+                }));
+                allItems = [...allItems, ...hostingerItems];
+            }
+        } catch (err) {
+            console.error('Error loading Hostinger gallery:', err);
+        }
+
+        // Remove duplicates based on Image URL
+        const uniqueItems = Array.from(new Map(allItems.map(item => [item.image, item])).values());
         setItems(uniqueItems);
         setLoading(false);
     };

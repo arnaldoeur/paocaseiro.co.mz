@@ -325,11 +325,13 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                 < div className={`absolute inset-0 transition-opacity duration-500 ${isPlayingWithSound ? 'opacity-100 z-20 bg-black' : 'opacity-60'}`} >
                     <video
                         ref={videoRef}
-                        src="https://bqiegszufcqimlvucrpm.supabase.co/storage/v1/object/public/products/PAO%20CASEIRO%20VIDEO.mp4"
+                        src="https://bbvowyztvzselxphbqmt.supabase.co/storage/v1/object/sign/files/video_paocaseiro.mp4?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9mZDFkYzkzMC1jOTIxLTQ1ODEtOTQ0NS1jYzgzZTE4OTY3NWMiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJmaWxlcy92aWRlb19wYW9jYXNlaXJvLm1wNCIsImlhdCI6MTc3NTU3MzU4MywiZXhwIjoxODA3MTA5NTgzfQ.kHLjBn0Z0FbM9y9oaZ18DX9iVbMLffZ_vbf8j7obGr8"
                         autoPlay
                         loop
                         muted
                         playsInline
+                        preload="auto"
+                        crossOrigin="anonymous"
                         className={`w-full h-full transition-all duration-500 ${isPlayingWithSound ? 'object-contain' : 'object-cover pointer-events-none'}`}
                         controls={isPlayingWithSound}
                     >

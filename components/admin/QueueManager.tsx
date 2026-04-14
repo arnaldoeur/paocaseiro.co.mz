@@ -20,12 +20,14 @@ import {
     LayoutDashboard,
     AlertTriangle,
     TrendingUp,
-    Clock
+    Clock,
+    Wifi
 } from 'lucide-react';
 import { useRealtimeTickets } from '../../hooks/useRealtimeTickets';
 import { queueService, QueueTicket } from '../../services/queue';
 import { NotificationService } from '../../services/NotificationService';
 import { motion, AnimatePresence } from 'framer-motion';
+import { getConnectionMode, setConnectionMode, refreshSupabaseClient, type ConnectionMode } from '../../services/supabase';
 
 export const QueueManager: React.FC = () => {
     const { tickets, loading, error, refresh } = useRealtimeTickets();
@@ -42,6 +44,7 @@ export const QueueManager: React.FC = () => {
     const [actionLoading, setActionLoading] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<'panel' | 'history' | 'config'>('panel');
     const [stats, setStats] = useState<any>(null);
+    const [connectionMode, setConnectionModeState] = useState<ConnectionMode>(getConnectionMode());
 
     const fetchStats = useCallback(async () => {
         try {
@@ -177,6 +180,23 @@ export const QueueManager: React.FC = () => {
     };
 
     const kioskUrl = typeof window !== 'undefined' ? `${window.location.origin}/get-ticket` : '';
+
+    const handleConnectionToggle = (mode: ConnectionMode) => {
+        setConnectionMode(mode);
+        setConnectionModeState(mode);
+        refreshSupabaseClient();
+        alert(`Modo de conexão alterado para: ${mode.toUpperCase()}. A recarregar...`);
+        refresh();
+    };
+
+    const getFriendlyError = (err: any) => {
+        if (!err) return null;
+        let msg = err.message || String(err);
+        if (msg.includes('Failed to fetch')) {
+            return "Sem Internet ou Erro de DNS no Backend. Verifique a sua ligação ou mude para o modo PROXY nas configurações.";
+        }
+        return msg;
+    };
 
     if (loading) return (
         <div className="flex items-center justify-center min-h-[400px]">
@@ -673,6 +693,32 @@ export const QueueManager: React.FC = () => {
                                         {audioEnabled ? 'Áudio Ativo' : 'Áudio Mudo'}
                                     </button>
                                 </div>
+
+                                {/* Connection Mode Toggle */}
+                                <div className="p-8 bg-blue-50 rounded-3xl border border-blue-100 flex items-center justify-between gap-8">
+                                    <div className="flex items-center gap-6">
+                                        <div className="bg-blue-500/10 p-4 rounded-2xl">
+                                            <Wifi className="text-blue-500" size={24} />
+                                        </div>
+                                        <div>
+                                            <h4 className="text-[11px] font-black uppercase tracking-widest text-[#3b2f2f] mb-1">Modo de Conexão</h4>
+                                            <p className="text-[10px] text-gray-400 font-bold leading-normal">Se estiver a ter erros de rede (Failed to fetch), experimente o Modo PROXY.</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        {(['direct', 'proxy'] as ConnectionMode[]).map((mode) => (
+                                            <button 
+                                                key={mode}
+                                                onClick={() => handleConnectionToggle(mode)}
+                                                className={`px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                                                    connectionMode === mode ? 'bg-blue-600 text-white shadow-lg' : 'bg-white text-gray-400 border border-gray-100'
+                                                }`}
+                                            >
+                                                {mode === 'direct' ? 'Direto' : 'Proxy'}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
                             </div>
 
                             <div className="pt-6 border-t border-gray-50">
@@ -728,8 +774,11 @@ export const QueueManager: React.FC = () => {
 
             {error && (
                 <div className="fixed bottom-6 right-6 left-6 p-4 bg-red-50 border border-red-200 rounded-2xl shadow-2xl flex items-center justify-between z-[100]">
-                    <p className="text-[10px] font-black uppercase text-red-600">Erro de carregamento: {error.message}</p>
-                    <button onClick={() => refresh()} className="p-1 px-3 bg-red-600 text-white rounded-lg text-[10px] font-bold">
+                    <div className="flex items-center gap-3">
+                        <AlertTriangle className="text-red-500 w-5 h-5 flex-shrink-0" />
+                        <p className="text-[10px] font-black uppercase text-red-600 leading-normal">{getFriendlyError(error)}</p>
+                    </div>
+                    <button onClick={() => refresh()} className="p-2 px-4 bg-red-600 text-white rounded-xl text-[10px] font-black hover:bg-red-700 transition-colors">
                         TENTAR NOVAMENTE
                     </button>
                 </div>

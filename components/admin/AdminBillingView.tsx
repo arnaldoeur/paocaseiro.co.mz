@@ -243,13 +243,13 @@ const CreateDocumentModal = ({ type, onClose, onSuccess }: { type: 'Receipt'|'In
             const fakeOrderId = 'MANUAL-' + Date.now();
             const shortId = Date.now().toString().slice(-5);
             
-            const { data } = await supabase.from('customers').insert({
+            const { data } = await supabase.from('customers').upsert({
                  name: customerName, 
                  contact_no: customerPhone || `MANUAL-${shortId}`,
                  nuit: customerNuit,
                  address: customerLocation,
                  email: customerEmail
-            }).select().single();
+            }, { on_conflict: 'contact_no' }).select().single();
             
             const customerId = data?.id || 'manual-customer';
             

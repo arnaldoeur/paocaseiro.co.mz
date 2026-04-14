@@ -52,6 +52,10 @@ const OrderTimer: React.FC<{ target: string }> = ({ target }) => {
     return <span>{timeLeft}</span>;
 }
 
+const isValidUUID = (id: string) => {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+};
+
 interface KitchenProps {
     user?: any; // If passed from Admin, bypass login
 }
@@ -99,7 +103,10 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
     const [confirmPassword, setConfirmPassword] = useState('');
     const [isChangingPassword, setIsChangingPassword] = useState(false);
 
-    // --- Init ---
+    // Turn/Session State (Timestamps)
+    const [isClockedIn, setIsClockedIn] = useState(false);
+    const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+
     useEffect(() => {
         if (externalUser) {
             console.log("Kitchen loaded in Admin mode", externalUser);
@@ -108,18 +115,44 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
             fetchOrders();
             fetchStatus();
             fetchProducts();
+            checkActiveSession(externalUser.id);
         } else {
             const savedAuth = localStorage.getItem('kitchen_auth');
             if (savedAuth) {
                 setIsAuthenticated(true);
                 const savedUser = localStorage.getItem('kitchen_user');
-                if (savedUser) setUser(JSON.parse(savedUser));
+                if (savedUser) {
+                    const parsedUser = JSON.parse(savedUser);
+                    setUser(parsedUser);
+                    checkActiveSession(parsedUser.id);
+                }
                 fetchOrders();
                 fetchStatus();
                 fetchProducts();
             }
         }
     }, [externalUser]);
+
+    const checkActiveSession = async (memberId: string) => {
+        try {
+            const { supabase } = await import('../services/supabase');
+            const { data } = await supabase
+                .from('work_sessions')
+                .select('*')
+                .eq('member_id', memberId)
+                .eq('status', 'active')
+                .order('clock_in', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+            if (data) {
+                setIsClockedIn(true);
+                setActiveSessionId(data.id);
+            }
+        } catch (e) {
+            console.error("Error checking active session", e);
+        }
+    };
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -318,6 +351,62 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
         }
     };
 
+    const handleClockIn = async () => {
+        if (!user) return;
+        setLoading(true);
+        try {
+            const { supabase } = await import('../services/supabase');
+            const { data, error } = await supabase
+                .from('work_sessions')
+                .insert([{
+                    member_id: user.id,
+                    clock_in: new Date().toISOString(),
+                    status: 'active'
+                }])
+                .select()
+                .single();
+
+            if (data) {
+                setIsClockedIn(true);
+                setActiveSessionId(data.id);
+                alert("Início de turno registado!");
+            }
+            if (error) throw error;
+        } catch (e: any) {
+            alert("Erro ao registar início de turno: " + e.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleClockOut = async () => {
+        if (!activeSessionId) return;
+        if (!confirm("Confirmar fim de turno / saída?")) return;
+        setLoading(true);
+        try {
+            const { supabase } = await import('../services/supabase');
+            const { error } = await supabase
+                .from('work_sessions')
+                .update({
+                    clock_out: new Date().toISOString(),
+                    status: 'completed'
+                })
+                .eq('id', activeSessionId);
+
+            if (!error) {
+                setIsClockedIn(false);
+                setActiveSessionId(null);
+                alert("Fim de turno registado. Ótimo trabalho!");
+            } else {
+                throw error;
+            }
+        } catch (e: any) {
+            alert("Erro ao registar fim de turno: " + e.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     // Poll for new orders every 10 seconds
     useEffect(() => {
         if (!isAuthenticated) return;
@@ -415,7 +504,8 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
             .from('orders')
             .update({
                 status: 'processing',
-                estimated_ready_at: now.toISOString()
+                estimated_ready_at: now.toISOString(),
+                staff_id: (user?.id && isValidUUID(user.id)) ? user.id : null
             })
             .eq('id', selectedOrder.id);
 
@@ -460,7 +550,10 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
         setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'ready' } : o));
 
         const { supabase } = await import('../services/supabase');
-        await supabase.from('orders').update({ status: 'ready' }).eq('id', orderId);
+        await supabase.from('orders').update({ 
+            status: 'ready',
+            staff_id: (user?.id && isValidUUID(user.id)) ? user.id : null // Ensure staff_id is linked
+        }).eq('id', orderId);
 
         if (order) {
             const updatedOrder = { ...order, status: 'ready' };
@@ -559,7 +652,7 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
 
     const filteredProducts = products.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
 
-    // Groups
+    // Grouping orders for the KDS layout
     const pendingOrders = orders.filter(o => o.status === 'pending' || o.status === 'kitchen');
     const processingOrders = orders.filter(o => o.status === 'processing');
     const readyOrders = orders.filter(o => o.status === 'ready');
@@ -567,30 +660,42 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
     if (!isAuthenticated) {
         return (
             <div className="min-h-screen bg-[#2f3b3b] flex items-center justify-center p-6">
-                <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md">
+                <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md text-[#3b2f2f]">
                     <div className="text-center mb-6">
                         <div className="w-16 h-16 bg-[#d9a65a] rounded-full flex items-center justify-center mx-auto mb-4 text-[#3b2f2f]">
                             <ChefHat size={32} />
                         </div>
-                        <h1 className="text-2xl font-bold text-[#3b2f2f]">Cozinha Pão Caseiro</h1>
-                        <p className="text-gray-500">Acesso Restrito</p>
+                        <h1 className="text-2xl font-bold">Cozinha Pão Caseiro</h1>
+                        <p className="text-gray-500">Acesso Restrito ao Staff</p>
                     </div>
                     <form onSubmit={handleLogin} className="space-y-4">
-                        <input
-                            type="text"
-                            placeholder="Username"
-                            className="w-full p-3 border rounded-lg"
-                            value={username} onChange={e => setUsername(e.target.value)}
-                        />
-                        <input
-                            type="password"
-                            placeholder="Password"
-                            className="w-full p-3 border rounded-lg"
-                            value={password} onChange={e => setPassword(e.target.value)}
-                        />
-                        {error && <p className="text-red-500 text-sm">{error}</p>}
-                        <button className="w-full bg-[#3b2f2f] text-white py-3 rounded-lg font-bold hover:bg-[#d9a65a] transition-colors">
-                            {loading ? 'Entrando...' : 'Entrar'}
+                        <div>
+                            <label className="text-xs font-bold text-gray-400 uppercase">Utilizador</label>
+                            <input
+                                type="text"
+                                placeholder="Seu username"
+                                className="w-full p-3 border rounded-lg mt-1"
+                                value={username} onChange={e => setUsername(e.target.value)}
+                                required
+                            />
+                        </div>
+                        <div>
+                            <label className="text-xs font-bold text-gray-400 uppercase">Senha</label>
+                            <input
+                                type="password"
+                                placeholder="Sua senha"
+                                className="w-full p-3 border rounded-lg mt-1"
+                                value={password} onChange={e => setPassword(e.target.value)}
+                                required
+                            />
+                        </div>
+                        {error && <p className="text-red-500 text-sm font-bold">{error}</p>}
+                        <button 
+                            type="submit"
+                            disabled={loading}
+                            className="w-full bg-[#3b2f2f] text-white py-3 rounded-lg font-bold hover:bg-[#d9a65a] transition-colors disabled:opacity-50"
+                        >
+                            {loading ? 'A autenticar...' : 'Entrar na Cozinha'}
                         </button>
                     </form>
                 </div>
@@ -600,7 +705,7 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
 
     return (
         <div className={`bg-[#1a1f1f] text-white font-sans flex flex-col ${externalUser ? 'w-full h-[calc(100vh-100px)]' : 'min-h-screen'}`}>
-            {/* Header */}
+            {/* Main Navigation Header */}
             <header className="bg-[#2f3b3b] p-4 shadow-lg flex justify-between items-center sticky top-0 z-20">
                 <div className="flex items-center gap-4">
                     <div className="bg-[#d9a65a] p-2 rounded-lg text-[#3b2f2f]">
@@ -655,6 +760,15 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
                             FECHADO
                         </button>
                     </div>
+                    {isClockedIn ? (
+                        <button onClick={handleClockOut} className="p-2 bg-red-500/20 text-red-400 rounded font-bold hover:bg-red-500 hover:text-white flex items-center gap-2 text-sm px-4 border border-red-500/30">
+                            <LogOut size={16} /> <span className="hidden sm:inline">Sair do Turno</span>
+                        </button>
+                    ) : (
+                        <button onClick={handleClockIn} className="p-2 bg-green-500/20 text-green-400 rounded font-bold hover:bg-green-500 hover:text-white flex items-center gap-2 text-sm px-4 border border-green-500/30">
+                            <Clock size={16} /> <span className="hidden sm:inline">Entrar ao Serviço</span>
+                        </button>
+                    )}
                     <button onClick={() => setIsManualModalOpen(true)} className="p-2 bg-[#d9a65a] text-[#3b2f2f] rounded font-bold hover:brightness-110 flex items-center gap-2 text-sm px-4">
                         <Plus size={16} /> <span className="hidden sm:inline">Novo Pedido</span>
                     </button>

@@ -27,7 +27,7 @@ export const setConnectionMode = (mode: ConnectionMode) => {
 
 const getSupabaseUrl = () => {
     // Hardcoded production fallback
-    const HARDCODED_URL = 'https://bqiegszufcqimlvucrpm.supabase.co';
+    const HARDCODED_URL = 'https://bbvowyztvzselxphbqmt.supabase.co';
     
     const directUrl = import.meta.env.VITE_SUPABASE_URL || process.env.VITE_SUPABASE_URL || HARDCODED_URL;
     
@@ -40,7 +40,7 @@ const getSupabaseUrl = () => {
 const SUPABASE_URL = getSupabaseUrl();
 
 // Hardcoded production fallback for PUBLIC Anon Key
-const HARDCODED_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJxaWVnc3p1ZmNxaW1sdnVjcnBtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEyNzA4MzgsImV4cCI6MjA4Njg0NjgzOH0.AvypZPxytOhoftIFjmK_KclmF3yf_vps-xxzYw9q18k';
+const HARDCODED_KEY = 'sb_publishable_usLS1fQUcQkjo9PUJG7jxw_p_2Y7cCW';
 
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || HARDCODED_KEY;
 
@@ -48,22 +48,88 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
     console.error("Supabase configuration missing and fallback failed! The app will likely crash.");
 }
 
-// Defensive initialization
-let supabaseClient;
-try {
-    supabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY);
-} catch (e) {
-    console.error("Fatal: Supabase client initialization failed", e);
-    // Even if it fails, we provide a placeholder to prevent immediate JS crash in modules that import 'supabase'
-    supabaseClient = { from: () => ({ select: () => ({ in: () => ({}) }) }) } as any; 
-}
+// Defensive Initialization with Singleton Pattern
+const getSupabaseClient = () => {
+    // Check if we already have a client in the global scope to avoid multiple GoTrueClient instances
+    if (typeof window !== 'undefined' && (window as any)._supabaseInstance) {
+        return (window as any)._supabaseInstance;
+    }
 
-export let supabase = supabaseClient;
+    try {
+        const client = createClient(SUPABASE_URL, SUPABASE_KEY);
+        if (typeof window !== 'undefined') {
+            (window as any)._supabaseInstance = client;
+        }
+        return client;
+    } catch (e) {
+        console.error("Fatal: Supabase client initialization failed", e);
+        // Fallback placeholder to prevent immediate JS crash
+        return { 
+            from: () => ({ select: () => ({ in: () => ({}), eq: () => ({ single: () => ({}), maybeSingle: () => ({}) }) }) }),
+            functions: { invoke: () => ({ error: { message: 'Initialization failed' } }) },
+            storage: { from: () => ({ upload: () => ({ error: { message: 'Initialization failed' } }) }) },
+            auth: { onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }) }
+        } as any;
+    }
+};
+
+export let supabase = getSupabaseClient();
 
 export const refreshSupabaseClient = () => {
     const newUrl = getSupabaseUrl();
     if (newUrl) {
         supabase = createClient(newUrl, SUPABASE_KEY);
+        if (typeof window !== 'undefined') {
+            (window as any)._supabaseInstance = supabase;
+        }
+    }
+};
+
+/**
+ * Helper to invoke the Hostinger MySQL Proxy Edge Function
+ */
+export const invokeHostingerDB = async (action: string, query?: string, params?: any[]) => {
+    try {
+        const { data, error } = await supabase.functions.invoke('hostinger-db', {
+            body: { action, query, params }
+        });
+        
+        if (error) throw error;
+        return { success: true, data };
+    } catch (error: any) {
+        console.error('Hostinger DB Error:', error);
+        return { success: false, error: error.message };
+    }
+};
+
+/**
+ * Helper to upload heavy media to Hostinger
+ */
+export const uploadToHostinger = async (file: File) => {
+    const BRIDGE_URL = 'https://paocaseiro.co.mz/paocaseiro_bridge.php'; // Production URL
+    const API_KEY = 'PaoCaseiro_Secure_Media_Bridge_2026';
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        const response = await fetch(BRIDGE_URL, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${API_KEY}`
+            },
+            body: formData
+        });
+
+        if (!response.ok) {
+            const errData = await response.json();
+            throw new Error(errData.error || 'Upload failed');
+        }
+
+        return await response.json();
+    } catch (error: any) {
+        console.error('Hostinger Upload Error:', error);
+        return { success: false, error: error.message };
     }
 };
 

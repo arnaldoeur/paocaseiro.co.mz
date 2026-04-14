@@ -1,4 +1,4 @@
-import { supabase } from './services/supabase';
+import { supabase } from '../services/supabase';
 
 async function syncDrive() {
     console.log('🔄 Starting Drive sync for product images...');

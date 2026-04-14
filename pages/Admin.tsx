@@ -41,6 +41,10 @@ import { supabase, getConnectionMode, setConnectionMode, refreshSupabaseClient, 
 import { printerService } from '../services/printer';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
+import { NotificationService } from '../services/NotificationService';
+import { useRealtimeOrders } from '../hooks/useRealtimeOrders';
+import { useRealtimeNotifications } from '../hooks/useRealtimeNotifications';
+import { AdminBlogView } from '../components/admin/AdminBlogView';
 
 const MAIL_STYLES = `
     .custom-scrollbar::-webkit-scrollbar {
@@ -121,6 +125,10 @@ interface ManualDelivery { // For non-order based deliveries if needed
     coordinates?: string; // Link or coords
 }
 
+const isValidUUID = (id: string) => {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+};
+
 export const Admin: React.FC = () => {
     // Auth State
     useEffect(() => {
@@ -143,6 +151,12 @@ export const Admin: React.FC = () => {
 
     // Sidebar/View State
     const [activeView, setActiveView] = useState<'dashboard' | 'orders' | 'kitchen' | 'stock' | 'pos' | 'delivery' | 'settings' | 'customers' | 'team' | 'logistics' | 'support' | 'support_ai' | 'billing' | 'documents' | 'messages' | 'blog' | 'newsletter' | 'queue' | 'notificacoes'>('dashboard');
+
+    // Real-time Data Hooks
+    const { orders, loading: ordersLoading, refresh: refreshOrders } = useRealtimeOrders((newOrder) => {
+        if (newOrder.id) announceOrder(newOrder.id);
+    });
+    const { notifications: systemLogs, loading: logsLoading } = useRealtimeNotifications();
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(window.innerWidth < 768);
     
     // Auto-close sidebar on mobile after navigation
@@ -273,26 +287,7 @@ export const Admin: React.FC = () => {
     const [massInput, setMassInput] = useState('');
 
     // Data State
-    const [orders, setOrders] = useState<Order[]>([]);
     const [products, setProducts] = useState<any[]>([]);
-
-    // Real-time Orders Listener for Sound
-    useEffect(() => {
-        if (!isAuthenticated) return;
-
-        const channel = supabase
-            .channel('admin-orders-sound')
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
-                console.log('New order received in Admin!', payload.new.id);
-                announceOrder(payload.new.id);
-                if (typeof loadOrders === 'function') loadOrders();
-            })
-            .subscribe();
-
-        return () => {
-            supabase.removeChannel(channel);
-        };
-    }, [isAuthenticated, soundEnabled]);
 
     // Logistics State
     const [logisticsTab, setLogisticsTab] = useState<'dashboard' | 'deliveries' | 'drivers'>('dashboard');
@@ -328,6 +323,11 @@ export const Admin: React.FC = () => {
     const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'mpesa' | 'ecash' | 'emola'>('cash');
     const [splitPayments, setSplitPayments] = useState<Record<string, number | string>>({});
     const [currentSession, setCurrentSession] = useState<any>(null);
+    const [isOpeningSession, setIsOpeningSession] = useState(false);
+    const [initialBalance, setInitialBalance] = useState('');
+    const [currentBalance, setCurrentBalance] = useState(0);
+    const [closeNotes, setCloseNotes] = useState('');
+    const [showCloseSessionModal, setShowCloseSessionModal] = useState(false);
     const [printerConfig, setPrinterConfig] = useState(() => {
         const saved = localStorage.getItem('pos_printer_config');
         return saved ? JSON.parse(saved) : { type: 'usb', paperSize: '58mm', autoPrint: true };
@@ -632,30 +632,70 @@ export const Admin: React.FC = () => {
         }
     };
 
-    const handleOpenSession = async () => {
-        const { data: { user } } = await supabase.auth.getUser();
-        const { data, error } = await supabase.from('cash_sessions').insert([{
-            opened_by: user?.id,
-            status: 'open',
-            opening_balance: 0,
-            pin_code: '0000'
-        }]).select().single();
+    const handleOpenSession = () => setIsOpeningSession(true);
 
-        if (error) return alert('Erro ao abrir sessão: ' + error.message);
-        setCurrentSession(data);
+    const handleConfirmOpenSession = async () => {
+        // Use the authenticated admin's ID from state or localStorage
+        const effectiveUserId = userId || localStorage.getItem('admin_id');
+        
+        if (!effectiveUserId || !isValidUUID(effectiveUserId)) {
+            return alert('Erro: Sessão de administrador inválida. Por favor, faça logout e entre novamente.');
+        }
+
+        // Verify if user exists in team_members to avoid foreign key violation
+        const { data: userData, error: userError } = await supabase
+            .from('team_members')
+            .select('id')
+            .eq('id', effectiveUserId)
+            .single();
+
+        if (userError || !userData) {
+            console.error('Invalid admin user ID:', effectiveUserId);
+            return alert('Erro: Utilizador administrativo não encontrado na base de dados. Por favor, faça logout e entre novamente.');
+        }
+
+        const { data, error } = await supabase.from('cash_sessions').insert([{
+            opened_by: effectiveUserId,
+            opening_balance: parseFloat(initialBalance) || 0,
+            status: 'open'
+        }]).select();
+
+        if (error) {
+            console.error('Error opening session:', error);
+            alert('Erro ao abrir sessão: ' + error.message);
+        } else {
+            setCurrentSession(data[0]);
+            setIsOpeningSession(false);
+            setInitialBalance('');
+            // Ensure state and localStorage are in sync
+            if (!userId) setUserId(effectiveUserId);
+        }
     };
 
-    const handleCloseSession = async () => {
-        if (!confirm('Deseja fechar esta sessão de caixa?')) return;
-        const { error } = await supabase.from('cash_sessions').update({
-            status: 'closed',
-            closed_at: new Date().toISOString(),
-            closing_balance: posCart.reduce((acc, curr) => acc + (curr.price * curr.quantity), 0) // Simplified
-        }).eq('id', currentSession.id);
+    const handleCloseSession = () => {
+        const total = posCart.reduce((acc, curr) => acc + (curr.price * curr.quantity), 0);
+        setCurrentBalance(total); // Suggest current session total
+        setShowCloseSessionModal(true);
+    };
 
-        if (error) return alert('Erro ao fechar sessão: ' + error.message);
-        setCurrentSession(null);
-        alert('Sessão fechada com sucesso!');
+    const handleConfirmCloseSession = async () => {
+        const { error } = await supabase
+            .from('cash_sessions')
+            .update({
+                closed_at: new Date().toISOString(),
+                closing_balance: currentBalance,
+                status: 'closed',
+                notes: closeNotes
+            })
+            .eq('id', currentSession.id);
+
+        if (error) {
+            alert('Erro ao fechar sessão: ' + error.message);
+        } else {
+            setShowCloseSessionModal(false);
+            setCloseNotes('');
+            setCurrentSession(null);
+        }
     };
 
     const mockDevices: { [key: string]: { [key: string]: string[] } } = {
@@ -712,7 +752,7 @@ export const Admin: React.FC = () => {
                 change_given: changeDue,
                 balance: 0,
                 cash_session_id: currentSession?.id,
-                staff_id: userId || null
+                staff_id: (userId && isValidUUID(userId)) ? userId : null
             };
 
             const { data: orderResult, error: orderError } = await supabase.from('orders').insert([orderData]).select().single();
@@ -890,8 +930,8 @@ export const Admin: React.FC = () => {
         loadProducts();
         loadReceipts();
 
-        const savedOrders = localStorage.getItem('bakery_orders');
-        if (savedOrders) setOrders(JSON.parse(savedOrders));
+        // Legacy persistent local state removed - handled by reactive hooks.
+        // Notifications and other real-time data now sync via Supabase.
 
         const savedMembers = localStorage.getItem('bakery_members');
         if (savedMembers) setTeamMembers(JSON.parse(savedMembers));
@@ -902,7 +942,9 @@ export const Admin: React.FC = () => {
         // Load Admin User
         const savedUser = localStorage.getItem('admin_user');
         const savedUserId = localStorage.getItem('admin_id');
-        if (savedUserId) setUserId(savedUserId);
+        if (savedUserId && savedUserId !== 'undefined' && savedUserId !== 'null' && isValidUUID(savedUserId)) {
+            setUserId(savedUserId);
+        }
         if (savedUser) {
             if (savedUser.startsWith('{')) {
                 const parsed = JSON.parse(savedUser);
@@ -1374,23 +1416,18 @@ export const Admin: React.FC = () => {
 
     // --- Persistence Init ---
     useEffect(() => {
+        let ordersChannel: any;
+        let productsChannel: any;
+
         if (localStorage.getItem('admin_auth') === 'true') {
             setIsAuthenticated(true);
             setCurrentUserRole(localStorage.getItem('admin_role') || 'staff');
-            setUserId(localStorage.getItem('admin_id') || '');
+            const storedId = localStorage.getItem('admin_id');
+            setUserId(storedId && storedId !== 'undefined' && storedId !== 'null' ? storedId : '');
             setAdminUser(localStorage.getItem('admin_user') || '');
-            setAdminPhoto(localStorage.getItem('admin_photo') || '');
             refreshAllData();
 
-            // Auto-refresh Orders every 2 seconds (user requested 2-5s)
-            const refreshInterval = setInterval(() => {
-                loadOrders().catch(err => console.error("Auto-refresh failed", err));
-            }, 2000);
-
-            // Real-time Listeners
-            let ordersChannel: any;
-            let productsChannel: any;
-
+            // Setup Real-time Listeners
             (async () => {
                 // Orders Listener
                 ordersChannel = supabase
@@ -1427,17 +1464,16 @@ export const Admin: React.FC = () => {
                     .subscribe();
             })();
 
-            return () => {
-                clearInterval(refreshInterval);
-                if (ordersChannel) ordersChannel.unsubscribe();
-                if (productsChannel) productsChannel.unsubscribe();
-            };
-
             // Redirect Driver
             if (localStorage.getItem('admin_role') === 'driver') {
                 setActiveView('logistics');
             }
         }
+
+        return () => {
+            if (ordersChannel) ordersChannel.unsubscribe();
+            if (productsChannel) productsChannel.unsubscribe();
+        };
     }, [isAuthenticated]); // Re-run when authenticated status changes
 
     // Clock
@@ -1495,7 +1531,7 @@ export const Admin: React.FC = () => {
         // Local fallback credentials (mirrors team_members table in Supabase)
         // Used when network blocks Supabase access
         const localCredentials = [
-            { id: '8baaa0b6-2ee1-45a0-b5aa-777055c0b95a', username: 'nazir', name: 'Nazir', role: 'admin', password: 'admin123' },
+            { id: '9f4b4a2d-2303-44db-9695-3cd8c5e4be00', username: 'nazir', name: 'Nazir', role: 'admin', password: 'admin123' },
         ];
 
         try {
@@ -1654,7 +1690,8 @@ export const Admin: React.FC = () => {
                         quantity: Number(i.quantity || 0)
                     }))
                 }));
-                setOrders(mapped);
+                // setOrders is now managed by useRealtimeOrders hook
+                refreshOrders(); 
             }
         } catch (e) {
             console.error("Failed to load orders", e);
@@ -1740,16 +1777,22 @@ export const Admin: React.FC = () => {
         e.preventDefault();
         setIsSubmitting(true);
         const form = e.target as any;
+        const passwordValue = form.password.value;
+        
         const memberData: any = {
             name: form.name.value,
             username: form.username.value,
             email: form.email.value,
             role: form.role.value,
-            avatar_url: memberAvatar
+            avatar_url: memberAvatar || currentMember?.avatar_url || null
         };
 
-        if (form.password.value) {
-            memberData.password = form.password.value;
+        if (passwordValue) {
+            memberData.password = passwordValue;
+        } else if (!currentMember) {
+            alert('Erro: Palavra-passe é obrigatória para novos membros.');
+            setIsSubmitting(false);
+            return;
         }
 
         try {
@@ -1757,20 +1800,23 @@ export const Admin: React.FC = () => {
                 // Update
                 const { error } = await supabase.from('team_members').update(memberData).eq('id', currentMember.id);
                 if (error) throw error;
+                await logAudit({ action: 'UPDATE_TEAM_MEMBER', entity_type: 'team_member', entity_id: currentMember.id, details: { name: memberData.name } });
                 alert('Membro atualizado com sucesso!');
             } else {
                 // Insert
                 memberData.created_at = new Date().toISOString();
-                const { error } = await supabase.from('team_members').insert([memberData]);
+                const { data, error } = await supabase.from('team_members').insert([memberData]).select().single();
                 if (error) throw error;
                 
+                await logAudit({ action: 'CREATE_TEAM_MEMBER', entity_type: 'team_member', entity_id: data.id, details: { name: memberData.name } });
+
                 // Send Welcome Email
                 if (memberData.email) {
                     await sendTeamWelcomeEmail(
                         memberData.email, 
                         memberData.name, 
                         memberData.username, 
-                        memberData.password || 'Contacte o Administrador'
+                        passwordValue || 'Contacte o Administrador'
                     );
                 }
                 
@@ -2047,6 +2093,16 @@ export const Admin: React.FC = () => {
                 status: 'active'
             }]);
             if (error) throw error;
+            
+            // Log to Notification Center
+            await NotificationService.logSystemEvent(
+                "Check-in Realizado", 
+                `${username || 'Admin'} iniciou o turno com sucesso.`, 
+                'USER', 
+                'success', 
+                userId
+            );
+
             alert("Check-in realizado com sucesso! Bom trabalho.");
             loadPerformanceMetrics();
         } catch (e: any) {
@@ -2093,6 +2149,15 @@ export const Admin: React.FC = () => {
 
             if (updateError) throw updateError;
             
+            // Log to Notification Center
+            await NotificationService.logSystemEvent(
+                "Check-out Realizado", 
+                `${username || 'Admin'} terminou o turno com sucesso.`, 
+                'USER', 
+                'info', 
+                userId
+            );
+
             alert("Check-out realizado. Até à próxima!");
             loadPerformanceMetrics();
         } catch (e: any) {
@@ -2862,7 +2927,7 @@ export const Admin: React.FC = () => {
                                 className="bg-white py-6 px-4 rounded-3xl shadow-sm border border-[#d9a65a]/10 cursor-pointer group hover:shadow-xl hover:-translate-y-1 transition-all duration-300 relative overflow-hidden flex flex-col items-center text-center"
                             >
                                 <div className="absolute top-0 right-0 p-2 opacity-5 group-hover:opacity-10 transition-opacity"><Truck size={32} /></div>
-                                <h3 className="text-3xl font-black text-[#3b2f2f] mb-1 leading-none">{orders.filter(o => o.customer.type === 'delivery' && o.status === 'pending').length}</h3>
+                                <h3 className="text-3xl font-black text-[#3b2f2f] mb-1 leading-none">{orders.filter(o => o.customer?.type === 'delivery' && o.status === 'pending').length}</h3>
                                 <p className="text-gray-400 text-[10px] uppercase font-black tracking-widest leading-none mt-1">Entregas</p>
                             </div>
 
@@ -2921,11 +2986,11 @@ export const Admin: React.FC = () => {
                                                     {o.status === 'completed' ? <CheckCircle size={14} /> : o.status === 'pending' ? <Clock size={14} /> : <X size={14} />}
                                                 </div>
                                                 <div className="flex-1 min-w-0">
-                                                    <p className="font-black text-[#3b2f2f] text-[11px] truncate">{o.customer.name}</p>
-                                                    <p className="text-[9px] font-bold text-gray-400">{o.total} MT • {o.items.length} itens</p>
+                                                    <p className="font-black text-[#3b2f2f] text-[11px] truncate">{o.customer?.name || 'Cliente'}</p>
+                                                    <p className="text-[9px] font-bold text-gray-400">{o.total} MT • {o.items?.length || 0} itens</p>
                                                 </div>
                                                 <span className="text-[8px] font-black text-gray-300 uppercase shrink-0">
-                                                    {o.date.includes(',') ? o.date.split(',')[1]?.trim() : new Date(o.date).toLocaleTimeString('pt-MZ', { hour: '2-digit', minute: '2-digit' })}
+                                                    {o.date && typeof o.date === 'string' && o.date.includes(',') ? o.date.split(',')[1]?.trim() : (o.date ? new Date(o.date).toLocaleTimeString('pt-MZ', { hour: '2-digit', minute: '2-digit' }) : 'N/A')}
                                                 </span>
                                             </div>
                                         ))
@@ -2991,17 +3056,17 @@ export const Admin: React.FC = () => {
                                             <td className="p-4 font-mono text-xs font-bold text-gray-400">#{order.orderId}</td>
                                             <td className="p-4 text-xs text-gray-400 font-mono">{new Date(order.date).toLocaleDateString('pt-PT', { day: '2-digit', month: '2-digit', year: 'numeric' })}</td>
                                             <td className="p-4">
-                                                <div className="font-bold text-[#3b2f2f]">{order.customer.name}</div>
-                                                <div className="text-xs text-gray-500 flex items-center gap-1"><MapPin size={10} /> {order.customer.type} • {order.customer.phone}</div>
+                                                <div className="font-bold text-[#3b2f2f]">{order.customer?.name || 'Cliente'}</div>
+                                                <div className="text-xs text-gray-500 flex items-center gap-1"><MapPin size={10} /> {order.customer?.type || 'N/A'} • {order.customer?.phone || 'Sem contato'}</div>
                                             </td>
-                                            <td className="p-4 font-bold text-[#d9a65a]">{order.total.toLocaleString()} MT</td>
+                                            <td className="p-4 font-bold text-[#d9a65a]">{(order.total || 0).toLocaleString()} MT</td>
                                             <td className="p-4">
                                                 <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${order.status === 'completed' || order.status === 'paid' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
                                                     {order.status === 'completed' || order.status === 'paid' ? 'Pago' : 'Pendente'}
                                                 </span>
                                             </td>
                                             <td className="p-4"><span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${order.status === 'completed' ? 'bg-green-100 text-green-700' : order.status === 'pending' ? 'bg-orange-100 text-orange-700' : order.status === 'kitchen' ? 'bg-purple-100 text-purple-700' : 'bg-red-100 text-red-700'}`}>{order.status}</span></td>
-                                            <td className="p-4"><span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${order.customer.type === 'delivery' ? 'bg-blue-50 text-blue-600' : 'bg-yellow-50 text-yellow-700'}`}>{order.customer.type === 'delivery' ? 'Entrega' : 'Local/Takeaway'}</span></td>
+                                            <td className="p-4"><span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${order.customer?.type === 'delivery' ? 'bg-blue-50 text-blue-600' : 'bg-yellow-50 text-yellow-700'}`}>{order.customer?.type === 'delivery' ? 'Entrega' : (order.customer?.type === 'pickup' ? 'Takeaway' : (order.customer?.type === 'dine_in' ? 'Local' : 'N/A'))}</span></td>
                                             <td className="p-4 text-right flex items-center justify-end gap-2">
                                                 <button
                                                     disabled={!isPrinterConnected}
@@ -3575,111 +3640,249 @@ export const Admin: React.FC = () => {
                                     </tfoot>
                                 </table>
                             </>
-                        )}
+                            )}
+                        </div>
+                    </div>
+                )}
 
-                        {/* Customers View */}
+
+
+                        {/* Customers View (Consolidated and Improved) */}
                         {activeView === 'customers' && (
-                            <div className="bg-white rounded-2xl shadow-sm border border-[#d9a65a]/10 overflow-hidden animate-fade-in relative z-0">
-                                <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-[#fcfbf9]">
-                                    <h2 className="text-2xl font-bold text-[#3b2f2f]">Base de Clientes</h2>
-                                    <div className="flex gap-2">
-                                        <button onClick={() => setIsAddingCustomer(true)} className="bg-[#3b2f2f] text-[#d9a65a] px-4 py-2 rounded-lg font-bold text-sm shadow-lg hover:brightness-110 transition-all">+ Novo Cliente</button>
+                            <div className="bg-white rounded-[40px] shadow-2xl border border-[#d9a65a]/10 overflow-hidden animate-fade-in flex flex-col h-full min-h-[600px]">
+                                <div className="p-8 border-b border-gray-100 flex flex-col md:flex-row justify-between items-start md:items-center bg-[#fcfbf9] gap-4">
+                                    <div className="flex items-center gap-4">
+                                        <div className="bg-[#3b2f2f] p-3 rounded-2xl text-[#d9a65a]">
+                                            <Users size={32} />
+                                        </div>
+                                        <div>
+                                            <h2 className="text-3xl font-serif font-black text-[#3b2f2f] uppercase tracking-tighter leading-none">Clientes</h2>
+                                            <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mt-1">{customers.length} registos ativos</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-3 w-full md:w-auto">
+                                        <button
+                                            onClick={downloadCustomersCSV}
+                                            className="flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-4 bg-white border-2 border-gray-100 text-[#3b2f2f] rounded-[2rem] text-xs font-black uppercase tracking-widest hover:border-[#d9a65a] hover:bg-[#d9a65a]/5 transition-all shadow-sm"
+                                        >
+                                            <Download size={18} /> Exportar
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                setQuickCustomerForm({ name: '', phone: '', email: '', nuit: '' });
+                                                setIsAddingCustomer(true);
+                                            }}
+                                            className="flex-1 md:flex-none flex items-center justify-center gap-2 px-8 py-4 bg-[#3b2f2f] text-[#d9a65a] rounded-[2rem] text-xs font-black uppercase tracking-widest hover:shadow-2xl hover:brightness-110 transition-all"
+                                        >
+                                            <Plus size={18} /> Novo Cliente
+                                        </button>
                                     </div>
                                 </div>
-                                <div className="p-4 border-b border-gray-100 bg-white">
-                                    <div className="relative">
-                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+
+                                <div className="p-6 bg-white border-b border-gray-50">
+                                    <div className="relative max-w-2xl">
+                                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" size={20} />
                                         <input 
                                             type="text" 
-                                            placeholder="Pesquisar por nome ou telefone..." 
-                                            className="w-full pl-10 pr-4 py-2 border rounded-xl focus:border-[#d9a65a] outline-none"
+                                            placeholder="Pesquisar por nome, telefone ou ID (ex: CLI-001)..." 
+                                            className="w-full pl-12 pr-6 py-4 bg-gray-50 border-2 border-transparent focus:border-[#d9a65a]/30 focus:bg-white rounded-[2rem] outline-none transition-all font-medium text-sm text-[#3b2f2f] shadow-inner"
                                             value={customerSearch}
                                             onChange={e => setCustomerSearch(e.target.value)}
                                         />
                                     </div>
                                 </div>
-                                <table className="w-full text-left">
-                                    <thead className="bg-gray-50 text-xs uppercase font-bold text-gray-500 border-b">
-                                        <tr><th className="p-4">Cliente</th><th className="p-4">Contacto</th><th className="p-4">Localidade</th><th className="p-4 text-right">Ações</th></tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-100">
-                                        {customers
-                                            .filter(c => c.name.toLowerCase().includes(customerSearch.toLowerCase()) || c.contact_no.includes(customerSearch))
-                                            .map(c => (
-                                            <tr key={c.id} className="hover:bg-blue-50/30 transition-colors">
-                                                <td className="p-4">
-                                                    <div className="font-bold text-[#3b2f2f]">{c.name}</div>
-                                                    <div className="text-[10px] text-gray-400">Desde: {new Date(c.created_at).toLocaleDateString()}</div>
-                                                </td>
-                                                <td className="p-4 text-sm text-gray-500">{c.contact_no}</td>
-                                                <td className="p-4 text-sm text-gray-500">{c.address || 'Não especificada'}</td>
-                                                <td className="p-4 text-right space-x-2">
-                                                    <button onClick={() => { setSelectedCustomerDetails(c); loadCustomerLogs(c.id); }} className="text-[#d9a65a] font-bold text-xs hover:underline">Ver Histórico</button>
-                                                    <button onClick={() => { setCustomerForm(c); setIsEditingCustomer(true); }} className="text-blue-600 font-bold text-xs hover:underline">Editar</button>
-                                                </td>
+
+                                <div className="flex-1 overflow-x-auto custom-scrollbar">
+                                    <table className="w-full text-left">
+                                        <thead className="bg-gray-50/50 text-[10px] uppercase font-black tracking-[0.2em] text-gray-400 border-b border-gray-100">
+                                            <tr>
+                                                <th className="p-6">Perfil do Cliente</th>
+                                                <th className="p-6">Informação Fiscal / Contacto</th>
+                                                <th className="p-6">Histórico & Status</th>
+                                                <th className="p-6 text-right">Ações</th>
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-50">
+                                            {customers
+                                                .filter(c => 
+                                                    c.name?.toLowerCase().includes(customerSearch.toLowerCase()) || 
+                                                    (c.contact_no && c.contact_no.includes(customerSearch)) ||
+                                                    (c.internal_id && c.internal_id.toLowerCase().includes(customerSearch.toLowerCase())) ||
+                                                    (c.id && c.id.toLowerCase().includes(customerSearch.toLowerCase()))
+                                                )
+                                                .map((c: any) => (
+                                                <tr key={c.id} className="hover:bg-[#d9a65a]/5 transition-colors group">
+                                                    <td className="p-6">
+                                                        <div className="flex items-center gap-4">
+                                                            <div className="w-12 h-12 rounded-2xl bg-gray-100 flex items-center justify-center text-[#d9a65a] font-serif font-black text-xl group-hover:bg-white transition-colors">
+                                                                {c.name?.charAt(0).toUpperCase()}
+                                                            </div>
+                                                            <div>
+                                                                <div className="font-bold text-[#3b2f2f] group-hover:text-[#d9a65a] transition-colors">{c.name}</div>
+                                                                <div className="flex items-center gap-2 mt-1">
+                                                                    <span className="text-[10px] font-black px-2 py-0.5 bg-[#3b2f2f] text-white rounded-full font-mono">
+                                                                        {c.internal_id || `${companyInfo.prefix}-${c.id.substring(0,4).toUpperCase()}`}
+                                                                    </span>
+                                                                    <span className="text-[10px] text-gray-400 font-bold uppercase tracking-tighter">Desde {new Date(c.created_at).toLocaleDateString('pt-PT')}</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-6">
+                                                        <div className="flex flex-col gap-1">
+                                                            <div className="flex items-center gap-2 text-sm text-gray-600 font-bold">
+                                                                <Smartphone size={14} className="text-[#d9a65a]" /> {c.contact_no}
+                                                            </div>
+                                                            {c.email && <div className="text-xs text-gray-400 flex items-center gap-2"><Mail size={12} /> {c.email}</div>}
+                                                            {c.nuit && <div className="text-[10px] font-black text-[#3b2f2f]/40 uppercase tracking-widest mt-1">NUIT: {c.nuit}</div>}
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-6">
+                                                        <div className="flex flex-col gap-2">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className={`w-1.5 h-1.5 rounded-full ${c.is_blocked ? 'bg-red-500' : 'bg-green-500'}`}></span>
+                                                                <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">{c.is_blocked ? 'Bloqueado' : 'Conta Ativa'}</span>
+                                                            </div>
+                                                            <div className="text-[9px] font-bold text-[#d9a65a] bg-[#d9a65a]/10 px-2 py-1 rounded-lg w-fit uppercase tracking-tighter">Cliente Registado</div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-6 text-right">
+                                                        <div className="flex justify-end gap-2">
+                                                            <button 
+                                                                onClick={() => { setSelectedCustomer(c); loadCustomerLogs(c.id); }} 
+                                                                className="p-3 bg-gray-50 text-gray-400 hover:bg-[#3b2f2f] hover:text-[#d9a65a] rounded-2xl transition-all"
+                                                                title="Ver Ficha Completa"
+                                                            >
+                                                                <Eye size={18} />
+                                                            </button>
+                                                            <button 
+                                                                onClick={() => { setCustomerForm(c); setIsEditingCustomer(true); }} 
+                                                                className="p-3 bg-gray-50 text-gray-400 hover:bg-[#d9a65a] hover:text-[#3b2f2f] rounded-2xl transition-all"
+                                                                title="Editar Perfil"
+                                                            >
+                                                                <Edit3 size={18} />
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                            {customers.length === 0 && (
+                                                <tr>
+                                                    <td colSpan={4} className="p-20 text-center">
+                                                        <div className="flex flex-col items-center gap-4 text-gray-300">
+                                                            <Users size={64} className="opacity-20" />
+                                                            <p className="font-serif italic text-lg opacity-50">Nenhum cliente encontrado na base de dados.</p>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
                         )}
-                        </div>
-                    </div>
-                )}
 
-                {/* Customers View */}
-                {activeView === 'customers' && (
-                    <div className="bg-white rounded-2xl shadow-sm border border-[#d9a65a]/10 overflow-hidden animate-fade-in">
-                        <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-[#fcfbf9]">
-                            <div className="flex items-center gap-3">
-                                <h2 className="text-2xl font-bold text-[#3b2f2f]">Clientes</h2>
-                                <span className="bg-[#3b2f2f] text-white text-xs font-bold px-2 py-1 rounded-full">{customers.length}</span>
-                            </div>
-                            <div className="flex gap-2">
-                                <button
-                                    onClick={downloadCustomersCSV}
-                                    className="flex items-center gap-2 px-4 py-2 bg-white border border-[#d9a65a] text-[#d9a65a] rounded-xl text-xs font-bold hover:bg-[#d9a65a] hover:text-[#3b2f2f] transition-all shadow-sm"
+                        {/* Add Customer Modal (NEW) */}
+                        {isAddingCustomer && (
+                            <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-[100] p-4">
+                                <motion.div 
+                                    initial={{ scale: 0.9, opacity: 0 }} 
+                                    animate={{ scale: 1, opacity: 1 }}
+                                    className="bg-white rounded-[40px] w-full max-w-lg p-10 shadow-2xl relative overflow-hidden"
                                 >
-                                    <Download size={14} />
-                                    Exportar Clientes
-                                </button>
-                                <button
-                                    onClick={() => setIsAddingCustomer(true)}
-                                    className="flex items-center gap-2 px-4 py-2 bg-[#3b2f2f] text-[#d9a65a] rounded-xl text-xs font-bold hover:bg-[#d9a65a] hover:text-[#3b2f2f] transition-all shadow-lg"
-                                >
-                                    <Plus size={14} /> Adicionar Cliente
-                                </button>
+                                    <button onClick={() => setIsAddingCustomer(false)} title="Fechar" className="absolute top-8 right-8 text-gray-400 hover:text-red-500 transition-colors">
+                                        <X size={28} />
+                                    </button>
+                                    
+                                    <div className="mb-8">
+                                        <div className="bg-[#d9a65a]/10 w-16 h-16 rounded-3xl flex items-center justify-center text-[#d9a65a] mb-6">
+                                            <UserPlus size={32} />
+                                        </div>
+                                        <h3 className="text-3xl font-serif font-black text-[#3b2f2f] uppercase tracking-tighter">Novo Cliente</h3>
+                                        <p className="text-sm text-gray-400 font-medium mt-2 tracking-tight">Registe um novo cliente manualmente na base de dados.</p>
+                                    </div>
+
+                                    <form onSubmit={async (e) => {
+                                        e.preventDefault();
+                                        setIsSubmitting(true);
+                                        try {
+                                            const { data, error } = await supabase.from('customers').insert({
+                                                name: quickCustomerForm.name,
+                                                contact_no: quickCustomerForm.phone,
+                                                email: quickCustomerForm.email,
+                                                nuit: quickCustomerForm.nuit
+                                            }).select().single();
+                                            
+                                            if (error) throw error;
+                                            
+                                            alert('Cliente registado com sucesso!');
+                                            setIsAddingCustomer(false);
+                                            loadCustomers();
+                                        } catch (err: any) {
+                                            alert('Erro ao registar cliente: ' + (err.code === '23505' ? 'Este número de telefone já existe.' : err.message));
+                                        } finally {
+                                            setIsSubmitting(false);
+                                        }
+                                    }} className="space-y-6">
+                                        <div className="space-y-4">
+                                            <div>
+                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Nome Completo *</label>
+                                                <input 
+                                                    required 
+                                                    placeholder="Ex: João Silva" 
+                                                    value={quickCustomerForm.name} 
+                                                    onChange={e => setQuickCustomerForm({ ...quickCustomerForm, name: e.target.value })} 
+                                                    className="w-full p-4 bg-gray-50 border-2 border-transparent focus:border-[#d9a65a]/30 focus:bg-white rounded-2xl outline-none transition-all font-bold text-gray-700"
+                                                />
+                                            </div>
+                                            
+                                            <div>
+                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Telemóvel *</label>
+                                                <input 
+                                                    required 
+                                                    placeholder="Ex: 840000000" 
+                                                    value={quickCustomerForm.phone} 
+                                                    onChange={e => setQuickCustomerForm({ ...quickCustomerForm, phone: e.target.value })} 
+                                                    className="w-full p-4 bg-gray-50 border-2 border-transparent focus:border-[#d9a65a]/30 focus:bg-white rounded-2xl outline-none transition-all font-bold text-[#d9a65a] font-mono text-lg"
+                                                />
+                                            </div>
+
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <div>
+                                                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Email</label>
+                                                    <input 
+                                                        type="email"
+                                                        placeholder="cliente@email.com" 
+                                                        value={quickCustomerForm.email} 
+                                                        onChange={e => setQuickCustomerForm({ ...quickCustomerForm, email: e.target.value })} 
+                                                        className="w-full p-4 bg-gray-50 border-2 border-transparent focus:border-[#d9a65a]/30 focus:bg-white rounded-2xl outline-none transition-all font-bold text-gray-700"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">NUIT</label>
+                                                    <input 
+                                                        placeholder="Ex: 123456789" 
+                                                        value={quickCustomerForm.nuit} 
+                                                        onChange={e => setQuickCustomerForm({ ...quickCustomerForm, nuit: e.target.value })} 
+                                                        className="w-full p-4 bg-gray-50 border-2 border-transparent focus:border-[#d9a65a]/30 focus:bg-white rounded-2xl outline-none transition-all font-bold text-gray-700 font-mono"
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="pt-6">
+                                            <button 
+                                                type="submit" 
+                                                disabled={isSubmitting}
+                                                className="w-full bg-[#3b2f2f] text-[#d9a65a] py-5 rounded-[2rem] font-black uppercase tracking-[0.2em] text-xs shadow-xl hover:brightness-110 disabled:opacity-50 flex items-center justify-center gap-3 transition-all"
+                                            >
+                                                {isSubmitting ? <Loader size={20} className="animate-spin" /> : <><Plus size={20} /> Registar Cliente</>}
+                                            </button>
+                                        </div>
+                                    </form>
+                                </motion.div>
                             </div>
-                        </div>
-                        <div className="overflow-x-auto max-h-[calc(100vh-300px)] overflow-y-auto custom-scrollbar">
-                            <table className="w-full text-left">
-                                <thead className="bg-gray-50 text-xs uppercase font-bold text-gray-500 border-b">
-                                    <tr><th className="p-4">Nome</th><th className="p-4">Telefone</th><th className="p-4">Email / Info</th><th className="p-4">Data Registo</th><th className="p-4 text-right">Ações</th></tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-50">
-                                    {customers.map((c: any) => (
-                                        <tr key={c.id} className="hover:bg-blue-50/30 transition-colors">
-                                            <td className="p-4 font-bold text-[#3b2f2f]">{c.name}</td>
-                                            <td className="p-4 text-sm text-gray-500">
-                                                {c.contact_no}
-                                                <div className="text-[10px] font-bold text-[#d9a65a] mt-1 font-mono">ID: {companyInfo.prefix}-{c.internal_id || c.id.substring(0,6).toUpperCase()}</div>
-                                            </td>
-                                            <td className="p-4 text-sm text-gray-500">
-                                                {c.email ? <div>{c.email}</div> : <span className="text-gray-300 italic">Sem email</span>}
-                                                {c.nuit && <div className="text-[10px] text-gray-400">NUIT: {c.nuit}</div>}
-                                            </td>
-                                            <td className="p-4 text-xs text-gray-400 font-mono">{new Date(c.created_at).toLocaleDateString('pt-PT')}</td>
-                                            <td className="p-4 text-right space-x-2">
-                                                <button onClick={() => handleOpenCustomerDetails(c)} className="text-[#3b2f2f] border border-gray-200 hover:bg-[#3b2f2f] hover:text-white px-3 py-1 rounded-lg text-xs font-bold transition-all">Ver</button>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                    {customers.length === 0 && (
-                                        <tr><td colSpan={5} className="p-8 text-center text-gray-400">Nenhum cliente registado.</td></tr>
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
+                        )}
 
                         {/* Customer Details Modal */}
                         {selectedCustomer && (
@@ -3804,6 +4007,12 @@ export const Admin: React.FC = () => {
                                         <button onClick={() => setIsEditingCustomer(false)} title="Fechar" className="text-gray-400 hover:text-red-500"><X size={24} /></button>
                                     </div>
                                     <form onSubmit={handleUpdateCustomer} className="space-y-4">
+                                        {customerForm.internal_id && (
+                                            <div className="bg-gray-50 p-3 rounded-lg border border-gray-100 mb-4">
+                                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">ID do Cliente</p>
+                                                <p className="text-sm font-bold text-[#d9a65a] font-mono">{customerForm.internal_id}</p>
+                                            </div>
+                                        )}
                                         <div><label htmlFor="customer-name" className="block text-xs font-bold text-gray-500 uppercase mb-1">Nome</label><input id="customer-name" required value={customerForm.name || ''} onChange={e => setCustomerForm({ ...customerForm, name: e.target.value })} className="w-full p-2 border rounded-lg focus:border-[#d9a65a] outline-none" /></div>
                                         <div><label htmlFor="customer-phone" className="block text-xs font-bold text-gray-500 uppercase mb-1">Telefone Principal</label><input id="customer-phone" required value={customerForm.contact_no || ''} onChange={e => setCustomerForm({ ...customerForm, contact_no: e.target.value })} className="w-full p-2 border rounded-lg focus:border-[#d9a65a] outline-none" /></div>
                                         <div><label htmlFor="customer-email" className="block text-xs font-bold text-gray-500 uppercase mb-1">Email</label><input id="customer-email" type="email" value={customerForm.email || ''} onChange={e => setCustomerForm({ ...customerForm, email: e.target.value })} className="w-full p-2 border rounded-lg focus:border-[#d9a65a] outline-none" /></div>
@@ -3816,9 +4025,7 @@ export const Admin: React.FC = () => {
                                 </div>
                             </div>
                         )}
-                    </div>
-                )
-                }
+
 
                 {/* Documents / Drive View */}
                 {activeView === 'documents' && (
@@ -3827,120 +4034,6 @@ export const Admin: React.FC = () => {
                     </div>
                 )}
 
-                {/* Team View */}
-                {
-                    activeView === 'team' && (
-                        <div className="bg-white rounded-2xl shadow-sm border border-[#d9a65a]/10 overflow-hidden animate-fade-in">
-                            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-[#fcfbf9]">
-                                <div className="flex items-center gap-3">
-                                    <h2 className="text-2xl font-bold text-[#3b2f2f]">Equipe</h2>
-                                </div>
-                                <button onClick={() => { setCurrentMember(null); setIsEditingMember(true); }} className="bg-[#3b2f2f] text-[#d9a65a] px-4 py-2 rounded-lg font-bold text-sm shadow-lg hover:brightness-110 transition-all">+ Novo Membro</button>
-                            </div>
-                            <table className="w-full text-left">
-                                <thead className="bg-gray-50 text-xs uppercase font-bold text-gray-500 border-b">
-                                    <tr><th className="p-4">Nome</th><th className="p-4">Username</th><th className="p-4">Cargo</th><th className="p-4 text-right">Ações</th></tr>
-                                </thead>
-                                <tbody>
-                                    {teamMembers.map(m => (
-                                        <tr key={m.id} className="hover:bg-blue-50/30 transition-colors">
-                                            <td className="p-4 font-bold text-[#3b2f2f]">{m.name}</td>
-                                            <td className="p-4 text-sm text-gray-500 font-mono">{m.username}</td>
-                                            <td className="p-4"><span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${m.role === 'admin' ? 'bg-purple-100 text-purple-700' : m.role === 'it' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>{m.role}</span></td>
-                                            <td className="p-4 text-right space-x-2">
-                                                <button onClick={() => {
-                                                    setCurrentMember(m);
-                                                    setMemberAvatar(m.avatar_url || null);
-                                                    setIsEditingMember(true);
-                                                }} className="text-blue-600 font-bold text-xs hover:underline">Editar</button>
-                                                <button onClick={() => handleResetMemberPassword(m)} className="text-orange-600 font-bold text-xs hover:underline">Reset Senha</button>
-                                                <button onClick={() => handleDeleteMember(m.id)} className="text-red-500 font-bold text-xs hover:underline">Remover</button>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-
-                            {/* Edit / Create Member Modal */}
-                            {isEditingMember && (
-                                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                                    <div className="bg-white rounded-2xl w-full max-w-md p-6 animate-scale-in">
-                                        <div className="flex justify-between items-center mb-6">
-                                            <h3 className="text-xl font-bold font-serif text-[#3b2f2f]">{currentMember ? 'Editar Membro' : 'Novo Membro da Equipa'}</h3>
-                                            <button onClick={() => { setIsEditingMember(false); setCurrentMember(null); setMemberAvatar(null); }} title="Fechar" className="text-gray-400 hover:text-red-500 transition-colors"><X size={24} /></button>
-                                        </div>
-                                        <form onSubmit={handleSaveMember} className="space-y-4">
-                                            <div className="flex flex-col items-center gap-4 mb-4">
-                                                <div className="w-24 h-24 rounded-full bg-gray-50 border-2 border-[#d9a65a]/20 flex items-center justify-center overflow-hidden relative group">
-                                                    {(memberAvatar || currentMember?.avatar_url) ? (
-                                                        <img src={memberAvatar || currentMember?.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
-                                                    ) : (
-                                                        <Users size={32} className="text-gray-300" />
-                                                    )}
-                                                    <label className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
-                                                        <Upload size={20} className="text-white" />
-                                                        <input
-                                                            type="file"
-                                                            className="hidden"
-                                                            accept="image/*"
-                                                            title="Carregar nova foto"
-                                                            onChange={async (e) => {
-                                                                const file = e.target.files?.[0];
-                                                                if (!file) return;
-                                                                const fileName = `avatars/${Date.now()}_${file.name}`;
-                                                                const { error } = await supabase.storage.from('products').upload(fileName, file);
-                                                                if (error) return alert('Erro: ' + error.message);
-                                                                const { data } = supabase.storage.from('products').getPublicUrl(fileName);
-    if (typeof data !== 'undefined' && data && data.publicUrl && data.publicUrl.includes('/supabase-proxy')) {
-        data.publicUrl = data.publicUrl.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co');
-    }
-                                                                setMemberAvatar(data.publicUrl);
-                                                            }}
-                                                        />
-                                                    </label>
-                                                </div>
-                                                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Foto de Perfil</span>
-                                            </div>
-                                            <div>
-                                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Nome Completo</label>
-                                                <input required name="name" title="Nome Completo" defaultValue={currentMember?.name} type="text" className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:border-[#d9a65a] outline-none" />
-                                            </div>
-                                            <div>
-                                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Nome de Utilizador (Login)</label>
-                                                <input required name="username" title="Nome de Utilizador" defaultValue={currentMember?.username || companyInfo.staffPrefix} type="text" className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:border-[#d9a65a] outline-none" />
-                                            </div>
-                                            <div>
-                                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Email (Para Recuperação)</label>
-                                                <input name="email" title="Email" defaultValue={currentMember?.email} type="email" className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:border-[#d9a65a] outline-none" />
-                                            </div>
-                                            <div>
-                                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Palavra-passe {currentMember && '(Opcional se não quiser alterar)'}</label>
-                                                <input name="password" title="Palavra-passe" type="password" required={!currentMember} placeholder={currentMember ? 'Deixar em branco para manter a atual' : ''} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:border-[#d9a65a] outline-none" />
-                                            </div>
-                                            <div>
-                                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Papel / Acesso</label>
-                                                <select required name="role" title="Papel / Acesso" defaultValue={currentMember?.role || 'staff'} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:border-[#d9a65a] outline-none">
-                                                    <option value="admin">Administrador Geral</option>
-                                                    <option value="it">Suporte TI</option>
-                                                    <option value="staff">Equipa (Staff)</option>
-                                                    <option value="driver">Motorista (Parceiro Drive)</option>
-                                                    <option value="kitchen">Cozinha</option>
-                                                </select>
-                                            </div>
-                                            <div className="pt-4 flex gap-3">
-                                                <button type="submit" disabled={isSubmitting} className="flex-1 py-3 bg-[#d9a65a] text-[#3b2f2f] font-bold rounded-xl hover:bg-[#c89549] transition-colors shadow-lg flex justify-center items-center gap-2">
-                                                    {isSubmitting ? <span className="w-4 h-4 border-2 border-[#3b2f2f] border-t-transparent rounded-full animate-spin"></span> : 'Guardar Membro'}
-                                                </button>
-                                            </div>
-                                        </form>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    )
-                }
-
-                {/* Edit / Create Member Modal - Global (works from any tab) */}
                 {isEditingMember && (
                     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
                         <div className="bg-white rounded-2xl w-full max-w-md p-6 animate-scale-in">
@@ -3949,6 +4042,17 @@ export const Admin: React.FC = () => {
                                 <button onClick={() => { setIsEditingMember(false); setCurrentMember(null); setMemberAvatar(null); }} title="Fechar" className="text-gray-400 hover:text-red-500 transition-colors"><X size={24} /></button>
                             </div>
                             <form onSubmit={handleSaveMember} className="space-y-4">
+                                {currentMember?.internal_id && (
+                                    <div className="bg-gray-50 p-3 rounded-xl border border-gray-100 flex justify-between items-center">
+                                        <div>
+                                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">ID do Colaborador</p>
+                                            <p className="text-sm font-bold text-[#d9a65a] font-mono">{currentMember.internal_id}</p>
+                                        </div>
+                                        <div className="text-[10px] bg-[#3b2f2f] text-white px-2 py-1 rounded-md font-bold font-mono">
+                                            ACTIVO
+                                        </div>
+                                    </div>
+                                )}
                                 <div className="flex flex-col items-center gap-4 mb-4">
                                     <div className="w-24 h-24 rounded-full bg-gray-50 border-2 border-[#d9a65a]/20 flex items-center justify-center overflow-hidden relative group">
                                         {(memberAvatar || currentMember?.avatar_url) ? (
@@ -5161,7 +5265,9 @@ export const Admin: React.FC = () => {
                                                     >
                                                         <option value="" className="bg-[#3b2f2f]">Cliente Ocasional (Balcão)</option>
                                                         {customers.map(c => (
-                                                            <option key={c.id} value={c.id} className="bg-[#3b2f2f]">{c.name} ({c.contact_no})</option>
+                                                            <option key={c.id} value={c.id} className="bg-[#3b2f2f]">
+                                                                {c.internal_id ? `[${c.internal_id}] ` : ''}{c.name} ({c.contact_no})
+                                                            </option>
                                                         ))}
                                                     </select>
                                                     <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-white/40"><Users size={16} /></div>
@@ -5217,14 +5323,31 @@ export const Admin: React.FC = () => {
                                                             <button
                                                                 onClick={async () => {
                                                                     if (!quickCustomerForm.name || !quickCustomerForm.phone) return alert('Preencha nome e telefone!');
-                                                                    const { data, error } = await supabase.from('customers').insert([{
-                                                                        name: quickCustomerForm.name,
-                                                                        contact_no: quickCustomerForm.phone,
-                                                                        email: quickCustomerForm.email,
-                                                                        nuit: quickCustomerForm.nuit
-                                                                    }]).select().single();
-                                                                    if (error) return alert('Erro ao criar cliente: ' + error.message);
-                                                                    setCustomers([...customers, data]);
+                                                                    
+                                                                    // Use upsert to handle existing customers by contact_no
+                                                                    const { data, error } = await supabase.from('customers').upsert([
+                                                                        {
+                                                                            name: quickCustomerForm.name,
+                                                                            contact_no: quickCustomerForm.phone,
+                                                                            phone: quickCustomerForm.phone,
+                                                                            email: quickCustomerForm.email,
+                                                                            nuit: quickCustomerForm.nuit,
+                                                                            updated_at: new Date().toISOString()
+                                                                        }
+                                                                    ], { onConflict: 'contact_no' }).select().single();
+
+                                                                    if (error) {
+                                                                        console.error('Customer upsert error:', error);
+                                                                        return alert('Erro ao processar cliente: ' + error.message);
+                                                                    }
+                                                                    
+                                                                    // Update local customers list if it doesn't have this one
+                                                                    if (!customers.find(c => c.id === data.id)) {
+                                                                        setCustomers([...customers, data]);
+                                                                    } else {
+                                                                        setCustomers(customers.map(c => c.id === data.id ? data : c));
+                                                                    }
+                                                                    
                                                                     setPosCustomer(data);
                                                                     setQuickCustomerForm({ name: '', phone: '', email: '', nuit: '' });
                                                                     setIsAddingQuickCustomer(false);
@@ -5417,6 +5540,93 @@ export const Admin: React.FC = () => {
                         </div>
                     )
                 }
+
+                {/* Session Opening Modal */}
+                {isOpeningSession && (
+                    <div className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center z-[70] p-4">
+                        <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white rounded-[2.5rem] w-full max-w-lg p-8 shadow-2xl overflow-hidden relative">
+                            <div className="absolute top-0 right-0 p-8 opacity-5"><Unlock size={150} /></div>
+                            <h3 className="text-2xl font-serif font-bold text-[#3b2f2f] mb-2 relative z-10">Abertura de Caixa</h3>
+                            <p className="text-gray-500 mb-8 text-sm relative z-10">Introduza o saldo inicial para começar a sessão.</p>
+
+                            <div className="space-y-6 relative z-10 mb-8">
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-400 uppercase mb-2 tracking-widest">Saldo Inicial (MT)</label>
+                                    <input
+                                        type="number"
+                                        value={initialBalance}
+                                        autoFocus
+                                        onChange={e => setInitialBalance(e.target.value)}
+                                        placeholder="0.00"
+                                        className="w-full bg-gray-50 border-2 border-gray-100 rounded-2xl p-6 text-4xl font-black text-center text-[#3b2f2f] focus:border-[#d9a65a] outline-none transition-all shadow-inner"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="flex gap-4 relative z-10">
+                                <button
+                                    onClick={() => setIsOpeningSession(false)}
+                                    className="flex-1 py-4 bg-gray-100 text-gray-500 font-bold rounded-2xl hover:bg-gray-200 transition-all text-sm uppercase tracking-widest"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    onClick={handleConfirmOpenSession}
+                                    className="flex-[1.5] py-4 bg-[#3b2f2f] text-[#d9a65a] font-bold rounded-2xl shadow-xl hover:brightness-110 active:scale-95 transition-all text-sm uppercase tracking-widest flex items-center justify-center gap-2"
+                                >
+                                    Abrir Caixa
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+
+                {/* Session Closing Modal */}
+                {showCloseSessionModal && (
+                    <div className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center z-[70] p-4">
+                        <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white rounded-[2.5rem] w-full max-w-lg p-8 shadow-2xl overflow-hidden relative">
+                            <div className="absolute top-0 right-0 p-8 opacity-5"><Lock size={150} /></div>
+                            <h2 className="text-2xl font-serif font-bold text-[#3b2f2f] mb-2 relative z-10">Fecho de Caixa</h2>
+                            <p className="text-gray-500 mb-8 text-sm relative z-10">Confirme o saldo final e adicione observações se necessário.</p>
+
+                            <div className="space-y-6 relative z-10 mb-8">
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-400 uppercase mb-2 tracking-widest">Saldo Final em Dinheiro (MT)</label>
+                                    <input
+                                        type="number"
+                                        value={currentBalance}
+                                        onChange={e => setCurrentBalance(parseFloat(e.target.value) || 0)}
+                                        className="w-full bg-gray-50 border-2 border-gray-100 rounded-2xl p-6 text-4xl font-black text-center text-[#3b2f2f] focus:border-[#d9a65a] outline-none transition-all shadow-inner"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-400 uppercase mb-2 tracking-widest">Observações (Opcional)</label>
+                                    <textarea
+                                        value={closeNotes}
+                                        onChange={e => setCloseNotes(e.target.value)}
+                                        className="w-full bg-gray-50 border-2 border-gray-100 rounded-2xl p-4 text-sm font-medium text-[#3b2f2f] focus:border-[#d9a65a] outline-none transition-all min-h-[100px]"
+                                        placeholder="Ex: Diferença de valores, quebra de stock, etc..."
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="flex gap-4 relative z-10">
+                                <button
+                                    onClick={() => setShowCloseSessionModal(false)}
+                                    className="flex-1 py-4 bg-gray-100 text-gray-500 font-bold rounded-2xl hover:bg-gray-200 transition-all text-sm uppercase tracking-widest"
+                                >
+                                    Voltar
+                                </button>
+                                <button
+                                    onClick={handleConfirmCloseSession}
+                                    className="flex-[1.5] py-4 bg-red-500 text-white font-bold rounded-2xl shadow-xl hover:brightness-110 active:scale-95 transition-all text-sm uppercase tracking-widest flex items-center justify-center gap-2"
+                                >
+                                    Confirmar Fecho
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
                 {
                     activeView === 'billing' && (
                         <AdminBillingView />
@@ -5500,7 +5710,7 @@ export const Admin: React.FC = () => {
                                                         </span>
                                                     </td>
                                                     <td className="p-6 text-right">
-                                                        <p className="font-black text-[#3b2f2f]">{order.total.toLocaleString()} MT</p>
+                                                        <p className="font-black text-[#3b2f2f]">{(order.total || 0).toLocaleString()} MT</p>
                                                     </td>
                                                     <td className="p-6">
                                                         <div className="flex justify-center gap-2">
@@ -6013,9 +6223,16 @@ export const Admin: React.FC = () => {
                                                                 </div>
                                                                 <div>
                                                                     <p className="font-bold text-[#3b2f2f]">{member.name}</p>
-                                                                    <p className="text-[10px] font-black text-[#d9a65a] uppercase tracking-widest">{member.role}</p>
-                                                                    <p className="text-[10px] font-black text-gray-500 font-mono mt-0.5">{member.username || companyInfo.staffPrefix}</p>
-                                                                    {member.email && <p className="text-[10px] text-gray-400 mt-0.5 truncate max-w-[150px]">{member.email}</p>}
+                                                                    <div className="flex items-center gap-2 mt-0.5">
+                                                                        <p className="text-[10px] font-black text-[#d9a65a] uppercase tracking-widest">{member.role}</p>
+                                                                        {member.internal_id && (
+                                                                            <>
+                                                                                <span className="text-gray-300">•</span>
+                                                                                <p className="text-[10px] font-bold text-[#3b2f2f] font-mono">{member.internal_id}</p>
+                                                                            </>
+                                                                        )}
+                                                                    </div>
+                                                                    <p className="text-[10px] font-black text-gray-400 font-mono mt-0.5">@{member.username}</p>
                                                                 </div>
                                                             </div>
                                                             <div className="flex gap-2">
@@ -6583,7 +6800,7 @@ export const Admin: React.FC = () => {
                                     </div>
                                     <div className="mt-6 flex justify-between items-center pt-4 border-t border-gray-100">
                                         <span className="font-bold text-gray-500">Total</span>
-                                        <span className="font-bold text-2xl text-[#d9a65a]">{selectedOrder.total.toLocaleString()} MT</span>
+                                        <span className="font-bold text-2xl text-[#d9a65a]">{(selectedOrder.total || 0).toLocaleString()} MT</span>
                                     </div>
                                 </div>
 
@@ -6611,7 +6828,7 @@ export const Admin: React.FC = () => {
                                     {selectedOrder.balance > 0 && (
                                         <div className="mt-3 pt-3 border-t border-red-50">
                                             <p className="text-[10px] text-red-400 uppercase font-bold mb-1">Saldo Devedor</p>
-                                            <p className="text-lg font-black text-red-500">{selectedOrder.balance.toLocaleString()} MT</p>
+                                            <p className="text-lg font-black text-red-500">{(selectedOrder.balance || 0).toLocaleString()} MT</p>
                                         </div>
                                     )}
                                 </div>
@@ -7017,7 +7234,12 @@ export const Admin: React.FC = () => {
                                     <div className="flex justify-between items-start mb-8 text-sm text-left">
                                         <div className="space-y-1">
                                             <p className="text-gray-500 uppercase">CLIENTE</p>
-                                            <p className="font-bold text-[#3b2f2f]">{lastOrderData.customer_name || 'Consumidor Final'}</p>
+                                            <div className="flex items-center gap-2">
+                                                <p className="font-bold text-[#3b2f2f]">{lastOrderData.customer_name || 'Consumidor Final'}</p>
+                                                {lastOrderData.customer_id && customers.find(c => c.id === lastOrderData.customer_id)?.internal_id && (
+                                                    <span className="text-[10px] font-bold text-[#d9a65a] font-mono">({customers.find(c => c.id === lastOrderData.customer_id)?.internal_id})</span>
+                                                )}
+                                            </div>
                                             <p className="text-gray-600">{lastOrderData.customer_phone || '+258 -----'}</p>
                                         </div>
                                         <div className="space-y-1 text-right">
@@ -7077,11 +7299,11 @@ export const Admin: React.FC = () => {
                                         )}
                                         <div className="flex justify-between text-xl font-bold text-[#3b2f2f] pt-4 border-t border-[#d9a65a]">
                                             <span>TOTAL</span>
-                                            <span>{lastOrderData.total_amount.toLocaleString()} MT</span>
+                                            <span>{(lastOrderData.total_amount || 0).toLocaleString()} MT</span>
                                         </div>
                                         <div className="flex justify-between text-green-600 pt-2 font-bold">
                                             <span>Pago</span>
-                                            <span>{lastOrderData.total_amount.toLocaleString()} MT</span>
+                                            <span>{(lastOrderData.total_amount || 0).toLocaleString()} MT</span>
                                         </div>
                                     </div>
 
@@ -7223,8 +7445,7 @@ export const Admin: React.FC = () => {
                 </AnimatePresence>
 
                 {/* Secure Auth Gate Modal */}
-                {
-                    isAdminPasswordPromptOpen && (
+                {isAdminPasswordPromptOpen && (
                         <div className="fixed inset-0 z-[70] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
                             <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl animate-scale-in text-center">
                                 <h3 className="text-xl font-bold font-serif text-[#3b2f2f] mb-2 flex justify-center items-center gap-2">Ação Protegida</h3>
@@ -7246,767 +7467,8 @@ export const Admin: React.FC = () => {
                                 </form>
                             </div>
                         </div>
-                    )
-                }
-            </div>
-            </div>
-    );
-};
-
-
-function AdminBlogView() {
-    const [posts, setPosts] = useState<any[]>([]);
-    const [comments, setComments] = useState<any[]>([]);
-    const [mediaFiles, setMediaFiles] = useState<any[]>([]);
-    const [galleryItems, setGalleryItems] = useState<any[]>([]);
-    const [activeTab, setActiveTab] = useState<'posts'|'comments'|'repository'|'gallery'|'subscribers'|'newsletter'>('posts');
-    const [isEditing, setIsEditing] = useState(false);
-    const [currentPost, setCurrentPost] = useState<any>(null);
-    const [loading, setLoading] = useState(true);
-    
-    // Form state
-    const [title, setTitle] = useState('');
-    const [excerpt, setExcerpt] = useState('');
-    const [content, setContent] = useState('');
-    const [imageUrl, setImageUrl] = useState('');
-    const [category, setCategory] = useState('');
-    const [tags, setTags] = useState('');
-    const [author, setAuthor] = useState('Admin');
-    const [seoTitle, setSeoTitle] = useState('');
-    const [seoDescription, setSeoDescription] = useState('');
-    const [teamMembers, setTeamMembers] = useState<any[]>([]);
-    const [status, setStatus] = useState<'draft'|'published'>('draft');
-    const [isUploadingImage, setIsUploadingImage] = useState(false);
-    const [uploadingRepoMedia, setUploadingRepoMedia] = useState(false);
-    
-    const quillRef = useRef<ReactQuill>(null);
-
-    const imageHandler = React.useCallback(() => {
-        const input = document.createElement('input');
-        input.setAttribute('type', 'file');
-        input.setAttribute('accept', 'image/*');
-        input.click();
-
-        input.onchange = async () => {
-            const file = input.files ? input.files[0] : null;
-            if (!file) return;
-
-            const fileExt = file.name.split('.').pop();
-            const fileName = `blog_inline_${Date.now()}.${fileExt}`;
-            
-            try {
-                // Showing a loading state could be tricky here without global state, but upload is fast
-                const { error } = await supabase.storage.from('products').upload(fileName, file);
-                if (error) throw error;
-                
-                const { data } = supabase.storage.from('products').getPublicUrl(fileName);
-    if (typeof data !== 'undefined' && data && data.publicUrl && data.publicUrl.includes('/supabase-proxy')) {
-        data.publicUrl = data.publicUrl.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co');
-    }
-                
-                // Fix proxy URL issue by replacing localhost with actual Supabase URL
-                const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-                let finalUrl = data.publicUrl;
-                if (finalUrl.includes('localhost') && finalUrl.includes('/supabase-proxy')) {
-                    finalUrl = finalUrl.replace(/^http:\/\/(localhost|127\.0\.0\.1):\d+\/supabase-proxy/, supabaseUrl);
-                }
-                
-                const quill = quillRef.current?.getEditor();
-                if (quill) {
-                    const range = quill.getSelection(true);
-                    quill.insertEmbed(range?.index || 0, 'image', finalUrl);
-                    quill.setSelection((range?.index || 0) + 1, 0); 
-                }
-            } catch (err: any) {
-                alert('Erro ao carregar imagem para o texto: ' + err.message);
-            }
-        };
-    }, []);
-
-    const modules = React.useMemo(() => ({
-        toolbar: {
-            container: [
-                [{ 'header': [1, 2, 3, false] }],
-                ['bold', 'italic', 'underline', 'strike'],
-                [{ 'list': 'ordered'}, { 'list': 'bullet' }],
-                [{ 'color': [] }, { 'background': [] }],
-                ['link', 'image', 'video'],
-                ['clean']
-            ],
-            handlers: {
-                image: imageHandler
-            }
-        }
-    }), [imageHandler]);
-
-    useEffect(() => {
-        loadPosts();
-        loadComments();
-        loadMediaFiles();
-        loadGalleryItems();
-
-        const loadTeam = async () => {
-            const { data } = await supabase.from('team_members').select('id, name, username, email, phone, role, avatar_url');
-            if (data) setTeamMembers(data);
-        };
-        loadTeam();
-
-        // Background AI Auto-Approval Loop
-        const interval = setInterval(async () => {
-            try {
-                // Fetch pending comments older than 5 minutes
-                const fiveMinutesAgo = new Date(Date.now() - 5 * 60000).toISOString();
-                const { data, error } = await supabase
-                    .from('blog_comments')
-                    .select('*')
-                    .eq('status', 'pending')
-                    .lt('created_at', fiveMinutesAgo);
-
-                if (!error && data && data.length > 0) {
-                    const { sendEmail } = await import('../services/email');
-                    const { sendSMS } = await import('../services/sms');
-                    
-                    for (const comment of data) {
-                        try {
-                            const apiKey = import.meta.env.VITE_OPENROUTER_API_KEY || "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";
-                            const aiResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-                                method: "POST",
-                                headers: {
-                                    "Authorization": `Bearer ${apiKey}`,
-                                    "Content-Type": "application/json"
-                                },
-                                body: JSON.stringify({
-                                    model: "nvidia/nemotron-3-super-120b-a12b:free",
-                                    messages: [
-                                        { role: "system", content: "You are a strict, objective comment moderator for a bakery blog. Read the user's comment. Reply ONLY with the word 'APPROVE' if it's safe, relevant, or neutral. Reply ONLY with 'REJECT' if it contains spam, hate, severe profanity, or malicious links. Do NOT output anything else." },
-                                        { role: "user", content: `Comment to moderate: "${comment.content}"` }
-                                    ],
-                                    temperature: 0.1
-                                })
-                            });
-                            const aiData = await aiResponse.json();
-                            const reply = aiData.choices?.[0]?.message?.content?.trim()?.toUpperCase() || "";
-                            const isApproved = reply.includes("APPROVE");
-                            
-                            const newStatus = isApproved ? 'approved' : 'rejected';
-                            await supabase.from('blog_comments').update({ status: newStatus }).eq('id', comment.id);
-                            
-                            // Notify user if approved
-                            if (isApproved && comment.user_id) {
-                                const { data: customer } = await supabase.from('customers').select('email, contact_no, whatsapp').eq('id', comment.user_id).single();
-                                if (customer) {
-                                    const notifyMsg = `Pão Caseiro: Olá ${comment.author}! O seu comentário no blog foi aprovado pela equipa! Obrigado por fazer parte da nossa comunidade.`;
-                                    if (customer.email) {
-                                        await sendEmail([customer.email], 'Comentário Aprovado - Blog Pão Caseiro', `<p>${notifyMsg}</p>`);
-                                    } else if (customer.contact_no || customer.whatsapp) {
-                                        await sendSMS(customer.contact_no || customer.whatsapp, notifyMsg);
-                                    }
-                                }
-                            }
-                        } catch (aiErr) {
-                            console.error("AI auto-check error", aiErr);
-                        }
-                    }
-                    loadComments();
-                }
-            } catch (err) {
-                // Silently fails if status column is still missing
-                console.warn('AI Loop skipped due to missing status column.', err);
-            }
-        }, 60000); // Check every minute
-
-        return () => clearInterval(interval);
-    }, []);
-
-    const loadPosts = async () => {
-        setLoading(true);
-        const { data, error } = await supabase.from('blog_posts').select('*').order('created_at', { ascending: false });
-        if (!error && data) {
-            setPosts(data);
-        }
-        setLoading(false);
-    };
-
-    const loadComments = async () => {
-        try {
-            const { data, error } = await supabase.from('blog_comments').select('*').order('created_at', { ascending: false });
-            if (!error && data) {
-                setComments(data);
-            }
-        } catch (err: any) {
-            console.error('Comments load failed. Possibly missing status column.', err);
-        }
-    };
-
-    const loadMediaFiles = async () => {
-        const { data, error } = await supabase.storage.from('products').list('blog_media');
-        if (!error && data) {
-            setMediaFiles(data.filter(f => f.name !== '.emptyFolderPlaceholder'));
-        }
-    };
-
-    const loadGalleryItems = async () => {
-        const { data, error } = await supabase.from('gallery_items').select('*').order('display_order', { ascending: true });
-        if (!error && data) {
-            setGalleryItems(data);
-        }
-    };
-
-    const handleRepoImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        
-        setUploadingRepoMedia(true);
-        const fileName = `blog_media/${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
-        
-        try {
-            const { error } = await supabase.storage.from('products').upload(fileName, file);
-            if (error) throw error;
-            await loadMediaFiles();
-            alert('Ficheiro guardado no repositório!');
-        } catch (err: any) {
-            alert('Erro ao carregar ficheiro: ' + err.message);
-        } finally {
-            setUploadingRepoMedia(false);
-        }
-    };
-
-    const handleUpdateCommentStatus = async (id: string, newStatus: string) => {
-        try {
-            const { error } = await supabase.from('blog_comments').update({ status: newStatus }).eq('id', id);
-            if (error) throw error;
-            loadComments();
-        } catch (e: any) {
-            alert(`Erro ao atualizar comentário (verifique se a coluna 'status' existe): ${e.message}`);
-        }
-    };
-
-    const handleDeleteComment = async (id: string) => {
-        if(!window.confirm('Tem a certeza que deseja apagar este comentário permanentemente?')) return;
-        const { error } = await supabase.from('blog_comments').delete().eq('id', id);
-        if(!error) loadComments();
-    };
-
-    const handleEdit = (post: any) => {
-        setCurrentPost(post);
-        setTitle(post.title);
-        setExcerpt(post.excerpt || '');
-        setContent(post.content || '');
-        setImageUrl(post.image_url || '');
-        setCategory(post.category || '');
-        setTags(post.tags ? post.tags.join(', ') : '');
-        setAuthor(post.author || 'Admin');
-        setSeoTitle(post.seo_title || '');
-        setSeoDescription(post.seo_description || '');
-        setStatus(post.status);
-        setIsEditing(true);
-    };
-
-    const handleNew = () => {
-        setCurrentPost(null);
-        setTitle('');
-        setExcerpt('');
-        setContent('');
-        setImageUrl('');
-        setCategory('');
-        setTags('');
-        setAuthor('Admin');
-        setSeoTitle('');
-        setSeoDescription('');
-        setStatus('draft');
-        setIsEditing(true);
-    };
-
-    const handleDelete = async (id: string) => {
-        if (!window.confirm('Tem a certeza que deseja apagar este artigo?')) return;
-        const { error } = await supabase.from('blog_posts').delete().eq('id', id);
-        if (error) alert('Erro ao apagar: ' + error.message);
-        else loadPosts();
-    };
-
-    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        
-        setIsUploadingImage(true);
-        const fileExt = file.name.split('.').pop();
-        const fileName = `blog_cover_${Date.now()}.${fileExt}`;
-        
-        try {
-            const { error } = await supabase.storage.from('products').upload(fileName, file);
-            if (error) throw error;
-            
-            const { data } = supabase.storage.from('products').getPublicUrl(fileName);
-    if (typeof data !== 'undefined' && data && data.publicUrl && data.publicUrl.includes('/supabase-proxy')) {
-        data.publicUrl = data.publicUrl.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co');
-    }
-            
-            const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-            let finalUrl = data.publicUrl;
-            if (finalUrl.includes('localhost') && finalUrl.includes('/supabase-proxy')) {
-                finalUrl = finalUrl.replace(/^http:\/\/(localhost|127\.0\.0\.1):\d+\/supabase-proxy/, supabaseUrl);
-            }
-            
-            setImageUrl(finalUrl);
-        } catch (err: any) {
-            alert('Erro ao carregar imagem: ' + err.message);
-        } finally {
-            setIsUploadingImage(false);
-        }
-    };
-
-    const handleSave = async (e: React.FormEvent) => {
-        e.preventDefault();
-        
-        // Generate simple slug from title if new
-        const slug = currentPost ? currentPost.slug : title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
-        const tagArray = tags.split(',').map(t => t.trim()).filter(Boolean);
-
-        const payload = {
-            title,
-            slug,
-            content,
-            excerpt,
-            image_url: imageUrl,
-            category,
-            tags: tagArray,
-            status,
-            author: author.trim() || 'Admin',
-            seo_title: seoTitle.trim(),
-            seo_description: seoDescription.trim()
-        };
-
-        let err;
-        if (currentPost) {
-            const { error } = await supabase.from('blog_posts').update(payload).eq('id', currentPost.id);
-            err = error;
-        } else {
-            const { error } = await supabase.from('blog_posts').insert([payload]);
-            err = error;
-        }
-
-        if (err) {
-            alert('Erro ao guardar: ' + err.message);
-        } else {
-            setIsEditing(false);
-            loadPosts();
-        }
-    };
-
-    if (isEditing) {
-        return (
-            <div>
-                <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-2xl font-bold font-serif text-[#3b2f2f]">{currentPost ? 'Editar Post' : 'Novo Post'}</h2>
-                    <button onClick={() => setIsEditing(false)} className="text-gray-500 hover:text-gray-800">Voltar</button>
-                </div>
-                <form onSubmit={handleSave} className="space-y-4 max-w-4xl">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="col-span-2">
-                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Título *</label>
-                            <input required title="Título do Post" placeholder="Ex: Nova Receita de Pão" value={title} onChange={e=>setTitle(e.target.value)} className="w-full p-3 border rounded-xl" />
-                        </div>
-                        <div className="col-span-2">
-                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Resumo (Excerpt)</label>
-                            <textarea title="Resumo do Post" placeholder="Breve descrição do artigo..." value={excerpt} onChange={e=>setExcerpt(e.target.value)} className="w-full p-3 border rounded-xl h-20" />
-                        </div>
-                        <div className="col-span-2">
-                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Conteúdo do Artigo *</label>
-                            <div className="bg-white rounded-xl overflow-hidden border">
-                                {/* @ts-ignore - ref type is missing in @types/react-quill but works at runtime */}
-                                <QuillBase 
-                                    ref={quillRef}
-                                    theme="snow" 
-                                    value={content} 
-                                    onChange={setContent} 
-                                    modules={modules}
-                                    className="h-64 mb-12"
-                                />
-                            </div>
-                        </div>
-                        <div>
-                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Imagem de Capa</label>
-                            <div className="w-full p-3 border rounded-xl flex flex-col gap-2">
-                                <input 
-                                    type="file" 
-                                    accept="image/*" 
-                                    onChange={handleImageUpload} 
-                                    disabled={isUploadingImage}
-                                    title="Carregar imagem de capa"
-                                    className="text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-[#d9a65a]/10 file:text-[#d9a65a] hover:file:bg-[#d9a65a]/20"
-                                />
-                                {isUploadingImage && <span className="text-xs text-[#d9a65a]">A carregar imagem...</span>}
-                                {imageUrl && !isUploadingImage && (
-                                    <div className="mt-2 flex items-center justify-between bg-gray-50 p-2 rounded-xl border">
-                                        <div className="flex items-center gap-2 overflow-hidden text-gray-400 text-xs">
-                                            <div className="w-10 h-10 rounded overflow-hidden bg-gray-100 flex-shrink-0">
-                                                <img src={imageUrl} alt="Capa" className="w-full h-full object-cover" />
-                                            </div>
-                                            <span className="truncate">{imageUrl}</span>
-                                        </div>
-                                        <button 
-                                            type="button" 
-                                            onClick={() => setImageUrl('')}
-                                            title="Remover Imagem"
-                                            className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                                        >
-                                            <Trash2 size={16} />
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                        <div>
-                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Autor (Interno ou Externo)</label>
-                            <input 
-                                list="team-authors" 
-                                title="Autor da publicação" 
-                                placeholder="Selecione ou escreva o nome do autor" 
-                                value={author} 
-                                onChange={e=>setAuthor(e.target.value)} 
-                                className="w-full p-3 border rounded-xl appearance-none bg-white" 
-                            />
-                            <datalist id="team-authors">
-                                <option value="Admin">Admin (Pão Caseiro)</option>
-                                {teamMembers.map(m => (
-                                    <option key={m.id} value={m.name}>{m.name} ({m.role})</option>
-                                ))}
-                            </datalist>
-                        </div>
-                        <div>
-                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Categoria</label>
-                            <input title="Categoria" placeholder="Ex: Novidades, Receitas" value={category} onChange={e=>setCategory(e.target.value)} className="w-full p-3 border rounded-xl" />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Tags (separadas por vírgula)</label>
-                            <input title="Tags" placeholder="Ex: pão, tradicional, novidade" value={tags} onChange={e=>setTags(e.target.value)} className="w-full p-3 border rounded-xl" />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Estado</label>
-                            <select title="Estado de Publicação" value={status} onChange={e=>setStatus(e.target.value as any)} className="w-full p-3 border rounded-xl">
-                                <option value="draft">Rascunho (Draft)</option>
-                                <option value="published">Publicado</option>
-                            </select>
-                        </div>
-                        
-                        <div className="col-span-2 mt-6 pt-6 border-t border-gray-200">
-                            <h3 className="font-serif font-bold text-xl text-[#3b2f2f] mb-4">Otimização SEO e Redes Sociais</h3>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="space-y-4">
-                                    <div>
-                                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Título SEO (Para partilhas)</label>
-                                        <input placeholder={title || "Título SEO"} value={seoTitle} onChange={e=>setSeoTitle(e.target.value)} className="w-full p-3 border rounded-xl" />
-                                        <p className="text-[10px] text-gray-400 mt-1">Se vazio, usa o título do artigo.</p>
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Descrição SEO (Para Google e WhatsApp)</label>
-                                        <textarea rows={3} placeholder={excerpt || "Breve resumo atrativo..."} value={seoDescription} onChange={e=>setSeoDescription(e.target.value)} className="w-full p-3 border rounded-xl placeholder-gray-300" />
-                                        <p className="text-[10px] text-gray-400 mt-1">Recomendado: 150-160 caracteres.</p>
-                                    </div>
-                                </div>
-                                <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 flex flex-col justify-center">
-                                    <span className="block text-xs font-bold text-gray-400 uppercase mb-3">Pré-visualização (Ex: WhatsApp)</span>
-                                    <div className="bg-[#e1f5fe]/50 border border-blue-100 rounded-lg overflow-hidden shadow-sm max-w-[300px] w-full mx-auto pb-2">
-                                        <div className="w-full h-32 bg-gray-200 relative">
-                                            {imageUrl ? <img src={imageUrl} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-gray-400"><ImageIcon size={24} /></div>}
-                                        </div>
-                                        <div className="p-3 bg-gray-100/50">
-                                            <p className="text-[10px] text-gray-500 mb-0.5">paocaseiro.co.mz</p>
-                                            <h4 className="text-sm font-bold text-gray-800 leading-tight mb-1 truncate">{seoTitle || title || "Título da Publicação"}</h4>
-                                            <p className="text-[11px] text-gray-500 leading-tight line-clamp-2">{seoDescription || excerpt || "Descrição atrativa que aparece quando o link é partilhado."}</p>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <button type="submit" className="mt-6 bg-[#3b2f2f] text-[#d9a65a] px-8 py-3 rounded-xl font-bold">Gravar Post</button>
-                </form>
-            </div>
-        );
-    }
-
-    return (
-        <div>
-            <div className="flex justify-between items-center mb-6">
-                <div>
-                    <h2 className="text-2xl font-bold font-serif text-[#3b2f2f] mb-1">Blog CMS</h2>
-                    <p className="text-gray-500 text-sm">Gerir as publicações do blog</p>
-                </div>
-                {(!isEditing && activeTab === 'posts') && (
-                    <button onClick={handleNew} className="bg-[#d9a65a] text-white px-4 py-2 rounded-lg font-bold shadow-lg hover:shadow-xl transition-all flex items-center gap-2">
-                        <Plus size={18} /> Novo Post
-                    </button>
                 )}
             </div>
-
-            {!isEditing && (
-                <div className="flex gap-6 mb-6 border-b border-gray-100">
-                    <button 
-                        onClick={() => setActiveTab('posts')} 
-                        className={`pb-3 font-bold text-sm tracking-wide uppercase transition-colors ${activeTab === 'posts' ? 'border-b-2 border-[#d9a65a] text-[#d9a65a]' : 'text-gray-400 hover:text-[#3b2f2f]'}`}
-                    >
-                        Artigos
-                    </button>
-                    <button 
-                        onClick={() => setActiveTab('comments')} 
-                        className={`pb-3 font-bold text-sm tracking-wide uppercase transition-colors flex items-center gap-2 ${activeTab === 'comments' ? 'border-b-2 border-[#d9a65a] text-[#d9a65a]' : 'text-gray-400 hover:text-[#3b2f2f]'}`}
-                    >
-                        Comentários 
-                        {comments.filter(c => c.status === 'pending').length > 0 && (
-                            <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full">
-                                {comments.filter(c => c.status === 'pending').length}
-                            </span>
-                        )}
-                    </button>
-                    <button 
-                        onClick={() => setActiveTab('repository')} 
-                        className={`pb-3 font-bold text-sm tracking-wide uppercase transition-colors flex items-center gap-2 ${activeTab === 'repository' ? 'border-b-2 border-[#d9a65a] text-[#d9a65a]' : 'text-gray-400 hover:text-[#3b2f2f]'}`}
-                    >
-                        Repositório
-                    </button>
-                    <button 
-                        onClick={() => setActiveTab('gallery')} 
-                        className={`pb-3 font-bold text-sm tracking-wide uppercase transition-colors flex items-center gap-2 ${activeTab === 'gallery' ? 'border-b-2 border-[#d9a65a] text-[#d9a65a]' : 'text-gray-400 hover:text-[#3b2f2f]'}`}
-                    >
-                        Galeria
-                    </button>
-                    <button 
-                        onClick={() => setActiveTab('subscribers')} 
-                        className={`pb-3 font-bold text-sm tracking-wide uppercase transition-colors flex items-center gap-2 ${activeTab === 'subscribers' ? 'border-b-2 border-[#d9a65a] text-[#d9a65a]' : 'text-gray-400 hover:text-[#3b2f2f]'}`}
-                    >
-                        Subscritores
-                    </button>
-                    <button 
-                        onClick={() => setActiveTab('newsletter')} 
-                        className={`pb-3 font-bold text-sm tracking-wide uppercase transition-colors flex items-center gap-2 ${activeTab === 'newsletter' ? 'border-b-2 border-[#d9a65a] text-[#d9a65a]' : 'text-gray-400 hover:text-[#3b2f2f]'}`}
-                    >
-                        Campanhas Email
-                    </button>
-                </div>
-            )}
-
-            {loading ? (
-                <div className="py-20 text-center"><Loader className="animate-spin mx-auto text-[#d9a65a]" /></div>
-            ) : posts.length === 0 ? (
-                <div className="py-20 text-center bg-gray-50 rounded-2xl border border-gray-100">
-                    <FileText size={48} className="mx-auto text-gray-300 mb-4" />
-                    <p className="text-gray-500">Nenhum post encontrado. Crie o primeiro!</p>
-                </div>
-            ) : activeTab === 'posts' ? (
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left">
-                        <thead className="bg-gray-50 text-xs uppercase font-bold text-gray-500 border-b">
-                            <tr>
-                                <th className="p-4">Título</th>
-                                <th className="p-4">Categoria</th>
-                                <th className="p-4">Estado</th>
-                                <th className="p-4">Data</th>
-                                <th className="p-4 text-right">Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-50">
-                            {posts.map(post => (
-                                <tr key={post.id} className="hover:bg-gray-50 transition-colors">
-                                    <td className="p-4 font-bold text-[#3b2f2f]">{post.title}</td>
-                                    <td className="p-4 text-gray-500 text-sm">{post.category || '-'}</td>
-                                    <td className="p-4">
-                                        <span className={`px-2 py-1 rounded text-xs font-bold uppercase tracking-wider ${post.status === 'published' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
-                                            {post.status}
-                                        </span>
-                                    </td>
-                                    <td className="p-4 text-gray-400 text-sm">{new Date(post.created_at).toLocaleDateString('pt-PT')}</td>
-                                    <td className="p-4 text-right">
-                                        <button title="Editar Artigo" onClick={() => handleEdit(post)} className="text-blue-500 hover:text-blue-700 mr-4 inline-block"><Edit3 size={18} /></button>
-                                        <button title="Apagar Artigo" onClick={() => handleDelete(post.id)} className="text-red-500 hover:text-red-700 inline-block"><Trash2 size={18} /></button>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            ) : activeTab === 'comments' ? (
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left">
-                        <thead className="bg-gray-50 text-xs uppercase font-bold text-gray-500 border-b">
-                            <tr>
-                                <th className="p-4">Autor</th>
-                                <th className="p-4">Comentário</th>
-                                <th className="p-4">Artigo</th>
-                                <th className="p-4">Estado</th>
-                                <th className="p-4 text-right">Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-50">
-                            {comments.map(comment => {
-                                const postTit = posts.find(p => p.id === comment.post_id)?.title || 'Artigo Desconhecido';
-                                return (
-                                    <tr key={comment.id} className="hover:bg-gray-50 transition-colors">
-                                        <td className="p-4 font-bold text-[#3b2f2f] whitespace-nowrap">{comment.author}</td>
-                                        <td className="p-4 text-gray-600 text-sm max-w-xs truncate" title={comment.content}>{comment.content}</td>
-                                        <td className="p-4 text-gray-500 text-sm max-w-[150px] truncate" title={postTit}>{postTit}</td>
-                                        <td className="p-4">
-                                            <span className={`px-2 py-1 rounded text-xs font-bold uppercase tracking-wider ${comment.status === 'approved' ? 'bg-green-100 text-green-700' : comment.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'}`}>
-                                                {comment.status === 'pending' ? 'Pendente' : comment.status === 'approved' ? 'Aprovado' : comment.status === 'rejected' ? 'Rejeitado' : 'Pendente'}
-                                            </span>
-                                        </td>
-                                        <td className="p-4 text-right whitespace-nowrap">
-                                            {comment.status !== 'approved' && (
-                                                <button title="Aprovar" onClick={() => handleUpdateCommentStatus(comment.id, 'approved')} className="text-green-500 hover:text-green-700 p-1 border border-green-200 bg-green-50 rounded mr-2"><CheckCircle size={16} /></button>
-                                            )}
-                                            {comment.status !== 'rejected' && (
-                                                <button title="Rejeitar" onClick={() => handleUpdateCommentStatus(comment.id, 'rejected')} className="text-orange-500 hover:text-orange-700 p-1 border border-orange-200 bg-orange-50 rounded mr-2"><X size={16} /></button>
-                                            )}
-                                            <button title="Apagar" onClick={() => handleDeleteComment(comment.id)} className="text-red-500 hover:text-red-700 p-1 border border-red-200 bg-red-50 rounded"><Trash2 size={16} /></button>
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                            {comments.length === 0 && (
-                                <tr>
-                                    <td colSpan={5} className="p-8 text-center text-gray-500 italic bg-white">Nenhum comentário encontrado. (Verifique se a coluna 'status' foi adicionada na BD)</td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-            ) : activeTab === 'repository' ? (
-                <div>
-                    <div className="flex justify-between items-center mb-6 bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100">
-                        <div>
-                            <h3 className="font-bold text-[#3b2f2f] text-lg">Galeria de Ficheiros</h3>
-                            <p className="text-sm text-gray-500">Utilize estes ficheiros copiando o Endereço para usar ao redigir um Artigo.</p>
-                        </div>
-                        <div className="relative">
-                            <input 
-                                type="file" 
-                                id="repoUpload"
-                                accept="image/*,video/*" 
-                                onChange={handleRepoImageUpload}
-                                disabled={uploadingRepoMedia}
-                                className="hidden"
-                            />
-                            <label htmlFor="repoUpload" className={`bg-[#3b2f2f] text-[#d9a65a] px-6 py-2 rounded-xl font-bold text-sm cursor-pointer shadow-md hover:bg-black transition-colors ${uploadingRepoMedia ? 'opacity-50 pointer-events-none' : ''}`}>
-                                {uploadingRepoMedia ? 'A carregar...' : '+ Adicionar Ficheiro'}
-                            </label>
-                        </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                        {mediaFiles.map((file, idx) => {
-                            const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-                            const path = `blog_media/${file.name}`;
-                            const publicUrlData = supabase.storage.from('products').getPublicUrl(path).data;
-                            let url = publicUrlData.publicUrl;
-                            if (url.includes('localhost') && url.includes('/supabase-proxy')) {
-                                url = url.replace(/^http:\/\/(localhost|127\.0\.0\.1):\d+\/supabase-proxy/, supabaseUrl);
-                            }
-                            const isVideo = file.metadata?.mimetype?.includes('video');
-                            
-                            return (
-                                <div key={idx} className="bg-white p-3 rounded-2xl border border-gray-100 shadow-sm group hover:shadow-lg transition-all flex flex-col items-center">
-                                    <div className="w-full aspect-square bg-gray-50 rounded-xl mb-3 overflow-hidden border border-gray-100 relative">
-                                        {isVideo ? (
-                                            <video src={url} className="w-full h-full object-cover" muted />
-                                        ) : (
-                                            <img src={url} alt={file.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                                        )}
-                                    </div>
-                                    <span className="text-xs text-gray-500 mb-2 truncate w-full text-center" title={file.name}>{file.name}</span>
-                                    <button 
-                                        onClick={() => {
-                                            navigator.clipboard.writeText(url);
-                                            alert('URL do ficheiro copiado! Agora pode colá-lo no conteúdo do Artigo.');
-                                        }}
-                                        className="w-full py-1.5 bg-gray-100 hover:bg-[#d9a65a] hover:text-white rounded-lg text-xs font-bold transition-colors"
-                                    >
-                                        Copiar Link
-                                    </button>
-                                </div>
-                            );
-                        })}
-                        {mediaFiles.length === 0 && !uploadingRepoMedia && (
-                            <div className="col-span-full py-20 text-center bg-gray-50 rounded-2xl border border-gray-100">
-                                <p className="text-gray-500">Repositório vazio. Adicione ficheiros para usar no Blog.</p>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            ) : activeTab === 'gallery' ? (
-                <div>
-                    <div className="flex justify-between items-center mb-6 bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100">
-                        <div>
-                            <h3 className="font-bold text-[#3b2f2f] text-lg">Galeria da Página Inicial</h3>
-                            <p className="text-sm text-gray-500">Faça upload de novas imagens para a página principal (Home).</p>
-                        </div>
-                        <div className="relative">
-                            <input 
-                                type="file" 
-                                id="galleryUpload"
-                                accept="image/*" 
-                                onChange={async (e) => {
-                                    const file = e.target.files?.[0];
-                                    if (!file) return;
-                                    try {
-                                        const fileExt = file.name.split('.').pop();
-                                        const fileName = `gallery_${Date.now()}.${fileExt}`;
-                                        const { error: uploadError } = await supabase.storage.from('products').upload(fileName, file);
-                                        if (uploadError) throw uploadError;
-                                        
-                                        const publicUrlData = supabase.storage.from('products').getPublicUrl(fileName).data;
-                                        let url = publicUrlData.publicUrl;
-                                        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co';
-                                        if (url.includes('localhost') && url.includes('/supabase-proxy')) {
-                                            url = url.replace(/^http:\/\/(localhost|127\.0\.0\.1):\d+\/supabase-proxy/, supabaseUrl);
-                                        }
-
-                                        const caption = prompt('Introduza uma legenda para a imagem:') || 'Nova Imagem';
-                                        await supabase.from('gallery_items').insert({ src: url, caption, display_order: galleryItems.length });
-                                        loadGalleryItems();
-                                    } catch (err: any) {
-                                        alert('Erro ao carregar imagem para galeria: ' + err.message);
-                                    }
-                                }}
-                                className="hidden"
-                            />
-                            <label htmlFor="galleryUpload" className="bg-[#3b2f2f] text-[#d9a65a] px-6 py-2 rounded-xl font-bold text-sm cursor-pointer shadow-md hover:bg-black transition-colors">
-                                + Adicionar à Galeria
-                            </label>
-                        </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                        {galleryItems.map((item) => (
-                            <div key={item.id} className="bg-white p-3 rounded-2xl border border-gray-100 shadow-sm group hover:shadow-lg transition-all flex flex-col items-center relative">
-                                <div className="w-full aspect-square bg-gray-50 rounded-xl mb-3 overflow-hidden border border-gray-100 relative">
-                                    <img src={item.src} alt={item.caption} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                                </div>
-                                <span className="text-xs text-center font-bold text-[#3b2f2f] mb-2 truncate w-full" title={item.caption}>{item.caption}</span>
-                                <button 
-                                    onClick={async () => {
-                                        if (confirm('Tem a certeza que deseja remover esta imagem da galeria?')) {
-                                            await supabase.from('gallery_items').delete().eq('id', item.id);
-                                            loadGalleryItems();
-                                        }
-                                    }}
-                                    className="absolute top-4 right-4 bg-red-500 text-white p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity shadow-md hover:bg-red-600"
-                                    title="Remover"
-                                >
-                                    <Trash2 size={16} />
-                                </button>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            ) : activeTab === 'subscribers' ? (
-                <div>
-                    <AdminNewsletterView />
-                </div>
-            ) : activeTab === 'newsletter' ? (
-                <div>
-                    <AdminEmailPipelineView />
-                </div>
-            ) : null}
         </div>
     );
 };

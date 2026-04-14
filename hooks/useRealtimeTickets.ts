@@ -14,19 +14,19 @@ export const useRealtimeTickets = () => {
   // Ref to track processed IDs and prevent duplicates or stale state updates
   const ticketsMapRef = useRef<Map<string, QueueTicket>>(new Map());
 
-  // Helper to check if a ticket is from the current Mozambique day (UTC+2)
   const isFromToday = useCallback((createdAt: string) => {
     if (!createdAt) return false;
     
-    // Get current time in Mozambique (UTC+2)
-    const now = new Date();
-    const mzNow = new Date(now.getTime() + (2 * 60 * 60 * 1000));
-    const mzTodayStr = mzNow.toISOString().split('T')[0];
+    // Get current date string in Mozambique (UTC+2) using Intl to avoid manual offset math
+    const mzTodayStr = new Intl.DateTimeFormat('en-CA', { 
+      timeZone: 'Africa/Maputo' 
+    }).format(new Date());
 
-    // Get ticket time in Mozambique
+    // Get ticket date string in Mozambique
     const ticketDate = new Date(createdAt);
-    const mzTicketDate = new Date(ticketDate.getTime() + (2 * 60 * 60 * 1000));
-    const mzTicketDateStr = mzTicketDate.toISOString().split('T')[0];
+    const mzTicketDateStr = new Intl.DateTimeFormat('en-CA', { 
+      timeZone: 'Africa/Maputo' 
+    }).format(ticketDate);
 
     return mzTicketDateStr === mzTodayStr;
   }, []);
@@ -47,7 +47,9 @@ export const useRealtimeTickets = () => {
       setError(null);
     } catch (err: any) {
       console.error('[useRealtimeTickets] Fetch Error:', err);
-      setError(err);
+      // Map common connection errors to more descriptive objects if needed
+      const enrichedError = err instanceof Error ? err : new Error(String(err));
+      setError(enrichedError);
     } finally {
       setLoading(false);
     }
@@ -89,6 +91,34 @@ export const useRealtimeTickets = () => {
           });
         }
       )
+      .on('broadcast', { event: 'ticket-calling' }, (payload) => {
+        const callingTicket = payload.payload.ticket as QueueTicket;
+        console.log('[useRealtimeTickets] Broadcast calling received:', callingTicket.ticket_number);
+        
+        setTickets((prev) => {
+            const map = new Map(ticketsMapRef.current);
+            map.set(callingTicket.id, callingTicket);
+            ticketsMapRef.current = map;
+            
+            return (Array.from(map.values()) as QueueTicket[]).sort((a, b) => 
+                new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+            );
+        });
+      })
+      .on('broadcast', { event: 'ticket-created' }, (payload) => {
+        const newTicket = payload.payload.ticket as QueueTicket;
+        console.log('[useRealtimeTickets] Broadcast created received:', newTicket.ticket_number);
+        
+        setTickets((prev) => {
+            const map = new Map(ticketsMapRef.current);
+            map.set(newTicket.id, newTicket);
+            ticketsMapRef.current = map;
+            
+            return (Array.from(map.values()) as QueueTicket[]).sort((a, b) => 
+                new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+            );
+        });
+      })
       .subscribe();
 
     return () => {

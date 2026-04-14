@@ -707,7 +707,18 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
 
         // Set the featured order (either the one user picked, or the latest one)
         const featuredOrder = allTrackedOrders.find(o => o.id === selectedOrderId) || allTrackedOrders[0];
-        const otherOrders = allTrackedOrders.filter(o => o.id !== featuredOrder.id);
+
+        if (!featuredOrder) {
+            return (
+                <div className="flex flex-col items-center justify-center py-20 px-6 bg-white rounded-[2.5rem] border-2 border-dashed border-gray-100 text-center">
+                    <ShoppingBag className="w-16 h-16 text-gray-200 mb-4" />
+                    <h3 className="font-serif text-xl text-gray-400">{language === 'en' ? 'No active orders found' : 'Nenhuma encomenda ativa encontrada'}</h3>
+                    <p className="text-sm text-gray-400 mt-2">{language === 'en' ? 'Try searching by code above' : 'Tente pesquisar pelo código acima'}</p>
+                </div>
+            );
+        }
+
+        const otherOrders = allTrackedOrders.filter(o => o.id !== featuredOrder?.id);
         
         const steps = [
             { id: 'pending', label: { en: 'Pending', pt: 'Pendente' }, icon: <Clock className="w-5 h-5" /> },
@@ -720,7 +731,7 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
         return (
             <div className="space-y-6">
                 <div className="flex items-center justify-between px-2">
-                    <h3 className="font-serif text-xl md:text-2xl text-[#3b2f2f]">{language === 'en' ? 'Track Encomenda' : 'Acompanhar Encomenda'} <span className="text-[#d9a65a]/40 ml-2">#{featuredOrder.short_id || featuredOrder.id.slice(-6).toUpperCase()}</span></h3>
+                    <h3 className="font-serif text-xl md:text-2xl text-[#3b2f2f]">{language === 'en' ? 'Track Encomenda' : 'Acompanhar Encomenda'} <span className="text-[#d9a65a]/40 ml-2">#{featuredOrder?.short_id || featuredOrder?.id?.slice(-6).toUpperCase()}</span></h3>
                     <div className="flex items-center gap-3">
                         <span className="text-xs font-black bg-[#d9a65a] text-[#3b2f2f] px-3 py-1 rounded-full uppercase tracking-widest shadow-sm">
                             {allTrackedOrders.length} {allTrackedOrders.length === 1 ? (language === 'en' ? 'Active' : 'Ativa') : (language === 'en' ? 'Active' : 'Ativas')}
@@ -730,7 +741,7 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
 
                 {/* Featured Order - Premium Full-Width Card */}
                 <motion.div 
-                    layoutId={featuredOrder.id}
+                    layoutId={featuredOrder?.id}
                     className="bg-white rounded-[2.5rem] p-6 md:p-10 shadow-2xl border-2 border-[#d9a65a]/10 relative overflow-hidden"
                 >
                     {/* Background Decorative Pattern */}
@@ -740,7 +751,7 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                         <div>
                             <p className="text-[10px] font-black text-[#d9a65a] uppercase tracking-[0.3em] mb-2">{language === 'en' ? 'Current Status' : 'Estado Atual'}</p>
                             <h4 className="font-serif text-3xl md:text-4xl text-[#3b2f2f]">
-                                {formatStatus(featuredOrder.status, language)}
+                                {formatStatus(featuredOrder?.status, language)}
                             </h4>
                         </div>
                         <div className="flex items-center gap-4">
@@ -749,7 +760,7 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                                 <p className="font-black text-[#3b2f2f] text-lg">30-45 min</p>
                             </div>
                             <button 
-                                onClick={() => handleSupportOrder(featuredOrder.id, featuredOrder.status)}
+                                onClick={() => handleSupportOrder(featuredOrder?.short_id || featuredOrder?.id, featuredOrder?.status)}
                                 className="flex items-center gap-3 py-4 px-6 bg-[#3b2f2f] text-[#d9a65a] rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-[#d9a65a] hover:text-[#3b2f2f] transition-all shadow-xl hover:-translate-y-1"
                             >
                                 <MessageSquare className="w-5 h-5" />
@@ -764,15 +775,15 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                         <div className="absolute top-6 left-[30px] right-[30px] h-2 bg-gray-50 rounded-full" />
                         <motion.div 
                             initial={{ width: 0 }}
-                            animate={{ width: `calc(${getStatusProgress(featuredOrder.status)}% - 60px)` }}
+                            animate={{ width: `calc(${getStatusProgress(featuredOrder?.status)}% - 60px)` }}
                             className="absolute top-6 left-[30px] h-2 bg-gradient-to-r from-[#d9a65a] to-amber-400 rounded-full shadow-[0_0_15px_rgba(217,166,90,0.3)] transition-all duration-1000"
                         />
 
                         {/* Stage Icons and Labels */}
                         <div className="flex justify-between relative">
                             {steps.map((step, idx) => {
-                                const isActive = getStatusProgress(featuredOrder.status) >= (idx * 25);
-                                const isCurrent = (getStatusProgress(featuredOrder.status) === (idx * 25)) || (!isActive && idx > 0 && getStatusProgress(featuredOrder.status) >= ((idx-1) * 25));
+                                const isActive = getStatusProgress(featuredOrder?.status) >= (idx * 25);
+                                const isCurrent = (getStatusProgress(featuredOrder?.status) === (idx * 25)) || (!isActive && idx > 0 && getStatusProgress(featuredOrder?.status) >= ((idx-1) * 25));
                                 
                                 return (
                                     <div key={step.id} className="flex flex-col items-center gap-4 w-12 md:w-20">
@@ -810,7 +821,7 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                             </div>
                             <div>
                                 <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">{language === 'en' ? 'Items' : 'Artigos'}</p>
-                                <p className="text-sm font-black text-[#3b2f2f]">{featuredOrder.order_items?.length || 0} {language === 'en' ? 'Products' : 'Produtos'}</p>
+                                <p className="text-sm font-black text-[#3b2f2f]">{featuredOrder?.order_items?.length || 0} {language === 'en' ? 'Products' : 'Produtos'}</p>
                             </div>
                         </div>
                         <div className="flex items-center gap-3">
@@ -819,7 +830,7 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                             </div>
                             <div>
                                 <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">{language === 'en' ? 'Ordered At' : 'Pedido há'}</p>
-                                <p className="text-sm font-black text-[#3b2f2f]">{new Date(featuredOrder.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                                <p className="text-sm font-black text-[#3b2f2f]">{featuredOrder?.created_at ? new Date(featuredOrder.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}</p>
                             </div>
                         </div>
                     </div>
@@ -1296,7 +1307,7 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                                                 {t.reorder}
                                             </button>
                                             <button
-                                                onClick={() => handleSupportOrder(order.short_id || order.id, order.status)}
+                                                onClick={() => handleSupportOrder(order?.short_id || order?.id, order?.status)}
                                                 className="flex-1 min-w-[140px] flex items-center justify-center gap-2 bg-gray-50 text-gray-500 py-3 rounded-xl font-bold hover:bg-gray-100 transition-all text-xs uppercase tracking-widest border border-gray-100"
                                             >
                                                 <HelpCircle className="w-4 h-4" />

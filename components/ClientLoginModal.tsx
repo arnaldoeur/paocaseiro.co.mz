@@ -404,8 +404,20 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
             navigate('/dashboard');
         } catch (err: any) {
             console.error('Registration Error:', err);
-            setError('Erro ao criar conta.');
-            await logAudit({ action: 'CUSTOMER_REGISTER_FAILED', entity_type: 'auth', details: { error: err.message || 'Erro ao criar conta', identifier }, customer_phone: identifier.includes('@') ? null : identifier });
+            
+            // Check if error is related to missing password column
+            if (err.message?.includes('password') && err.message?.includes('column')) {
+                setError('Erro técnico: A base de dados ainda não está configurada para suportar senhas. Por favor, adicione a coluna "password" à tabela "customers".');
+            } else {
+                setError('Erro ao criar conta.');
+            }
+
+            await logAudit({ 
+                action: 'CUSTOMER_REGISTER_FAILED', 
+                entity_type: 'auth', 
+                details: { error: err.message || 'Erro ao criar conta', identifier }, 
+                customer_phone: identifier.includes('@') ? null : identifier 
+            });
         } finally {
             setLoading(false);
         }

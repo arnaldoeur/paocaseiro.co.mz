@@ -1,0 +1,38 @@
+﻿--- DIAGNOSING WHATSAPP ---
+Host: https://wa.zyphtech.com
+Key: 24724DC5AA2F-4CBF-9013-9C645CF4E565
+
+1. Fetching instances...
+Found 1 instances.
+
+Testing instance: "Zyph Tech, Lda" (ID: ca277228-fa3d-44e2-a42b-99b2130d4228, Status: open)
+[undefined] Send Status: 201
+[undefined] Result: {
+  "key": {
+    "remoteJid": "258879146662@s.whatsapp.net",
+    "fromMe": true,
+    "id": "3EB0DA9A8327FFD99C0EFE"
+  },
+  "pushName": "Voc├¬",
+  "status": "PENDING",
+  "message": {
+    "conversation": "Diagnostic test for P├úo Caseiro - Instance: Zyph Tech, Lda"
+  },
+  "contextInfo": {
+    "mentionedJid": [],
+    "groupMentions": [],
+    "ephemeralSettingTimestamp": {
+      "low": 1775233935,
+      "high": 0,
+      "unsigned": false
+    },
+    "disappearingMode": {
+      "initiator": 0
+    }
+  },
+  "messageType": "conversation",
+  "messageTimestamp": 1775406735,
+  "instanceId": "ca277228-fa3d-44e2-a42b-99b2130d4228",
+  "source": "web"
+}
+

@@ -84,12 +84,22 @@ const MaintenanceGuard: React.FC<{ children: React.ReactNode }> = ({ children })
   const [isMaintenance, setIsMaintenance] = useState(false);
   const [isPanic, setIsPanic] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [debugStatus, setDebugStatus] = useState("Inicializando...");
   const location = useLocation();
   const { role, loading: roleLoading } = useRole();
 
   useEffect(() => {
+    // Safety timeout: Never stay in loading state longer than 5 seconds
+    const safetyTimeout = setTimeout(() => {
+      if (loading) {
+        console.warn("MaintenanceGuard: Safety timeout reached. Proceeding to render.");
+        setLoading(false);
+      }
+    }, 5000);
+
     const checkStatus = async () => {
       try {
+        setDebugStatus("Verificando ligação...");
         if (!navigator.onLine) {
             console.log("App is currently offline. Skipping maintenance check.");
             setLoading(false);
@@ -102,6 +112,7 @@ const MaintenanceGuard: React.FC<{ children: React.ReactNode }> = ({ children })
             return;
         }
 
+        setDebugStatus("Lendo definições de sistema...");
         const { data, error } = await supabase.from('system_settings').select('key, value').in('key', ['maintenance_mode', 'panic_mode']);
 
         if (error) {
@@ -120,15 +131,26 @@ const MaintenanceGuard: React.FC<{ children: React.ReactNode }> = ({ children })
         console.error("Maintenance check error:", e);
       }
       setLoading(false);
+      clearTimeout(safetyTimeout);
     };
     checkStatus();
     const interval = setInterval(checkStatus, 30000); // check every 30s
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      clearTimeout(safetyTimeout);
+    };
   }, []);
 
   // Allow app to render if there's no maintenance/panic active, don't wait for role verification.
   // We only care about roles if we need to bypass a blocked state.
-  if (loading) return <div className="min-h-screen bg-[#f7f1eb] flex items-center justify-center p-4"><div className="w-10 h-10 border-4 border-t-transparent border-[#d9a65a] rounded-full animate-spin"></div></div>;
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#f7f1eb] flex flex-col items-center justify-center p-4">
+        <div className="w-10 h-10 border-4 border-t-transparent border-[#d9a65a] rounded-full animate-spin mb-4"></div>
+        <p className="text-[#3b2f2f] font-medium animate-pulse">{debugStatus}</p>
+      </div>
+    );
+  }
 
   // We are blocked. Now wait for role check if still loading
   const shouldBlockBase = isPanic || isMaintenance;

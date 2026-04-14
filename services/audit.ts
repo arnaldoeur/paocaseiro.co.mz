@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 
-export type AuditEntityType = 'website' | 'system' | 'purchase' | 'product' | 'file' | 'order' | 'customer' | 'auth' | 'blog' | 'logistics';
+export type AuditEntityType = 'website' | 'system' | 'purchase' | 'product' | 'file' | 'order' | 'customer' | 'auth' | 'blog' | 'logistics' | 'team_member';
 
 interface AuditLogEntry {
     user_id?: string;

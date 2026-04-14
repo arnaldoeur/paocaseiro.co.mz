@@ -5,47 +5,47 @@
       {
         "name": "Palmier",
         "price": 50,
-        "image": "/images/Palmier.png"
+        "image": "/images/palmier.png"
       },
       {
         "name": "Palmier recheado",
         "price": 100,
-        "image": "/images/Palmier Recheado.png"
+        "image": "/images/palmier_recheado.png"
       },
       {
         "name": "Folhados recheados",
         "price": 80,
-        "image": "/images/Folhados recheados.png"
+        "image": "/images/folhados_recheados.png"
       },
       {
         "name": "Pastel de Nata",
         "price": 80,
-        "image": "/images/Pastel de nata.png"
+        "image": "/images/pastel_nata.png"
       },
       {
         "name": "Pastel de coco",
         "price": 80,
-        "image": "/images/Pastel de coco.png"
+        "image": "/images/pastel_coco.png"
       },
       {
         "name": "Folhado de salsicha",
         "price": 70,
-        "image": "/images/folhado_salsicha.jpg"
+        "image": "/images/folhado_salsicha.png"
       },
       {
         "name": "Croissants folhados",
         "price": 80,
-        "image": ""
+        "image": "/images/croissants_folhados.png"
       },
       {
         "name": "Empadas recheadas",
         "price": 100,
-        "image": ""
+        "image": "/images/empadas.png"
       },
       {
         "name": "Mini folhados (kg)",
         "price": 1000,
-        "image": "/images/Mini folhados.png"
+        "image": "/images/mini_folhados.png"
       }
     ]
   },
@@ -55,67 +55,67 @@
       {
         "name": "Brioche recheado",
         "price": 80,
-        "image": "/images/Brioche com fruta.png"
+        "image": "/images/brioche_fruta.png"
       },
       {
         "name": "Donuts",
         "price": 80,
-        "image": "/images/Donuts.png"
+        "image": "/images/donuts.png"
       },
       {
         "name": "Bola de Berlim",
         "price": 80,
-        "image": "/images/Bola de berlim.png"
+        "image": "/images/bola_berlim.png"
       },
       {
         "name": "Nevada",
         "price": 80,
-        "image": "/images/Nevada.png"
+        "image": "/images/nevada.png"
       },
       {
         "name": "Croissants simples",
         "price": 60,
-        "image": ""
+        "image": "/images/croissants_simples.png"
       },
       {
         "name": "Croissant recheado",
         "price": 80,
-        "image": "/images/Croissants recheados.png"
+        "image": "/images/croissants_recheados.png"
       },
       {
         "name": "Charuto",
         "price": 80,
-        "image": "/images/Charuto.png"
+        "image": "/images/charuto.png"
       },
       {
         "name": "Croissants chocolate",
         "price": 80,
-        "image": "/images/Croissants chocolate.png"
+        "image": "/images/croissants_chocolate.png"
       },
       {
         "name": "Rolo de açúcar e canela",
         "price": 80,
-        "image": "/images/Rolo de açúcar e canela.png"
+        "image": "/images/rolo_acucar_canela.png"
       },
       {
         "name": "Pão de Deus",
         "price": 60,
-        "image": "/images/pao_deus.jpg"
+        "image": "/images/pao_deus.png"
       },
       {
         "name": "Laços",
         "price": 60,
-        "image": ""
+        "image": "/images/lacos.png"
       },
       {
         "name": "Arrofadas",
         "price": 15,
-        "image": ""
+        "image": "/images/arrofadas.png"
       },
       {
         "name": "Língua de Sogra",
         "price": 15,
-        "image": ""
+        "image": "/images/lingua_sogra.png"
       },
       {
         "name": "Biscoitos (kg)",
@@ -130,7 +130,7 @@
       {
         "name": "Waffle Stick",
         "price": 200,
-        "image": ""
+        "image": "/images/waffle_stick.png"
       }
     ]
   },
@@ -200,22 +200,22 @@
       {
         "name": "Queque",
         "price": 65,
-        "image": "/images/queques.jpg"
+        "image": "/images/queques.png"
       },
       {
         "name": "Bolo de arroz",
         "price": 65,
-        "image": "/images/Bolo de arroz.png"
+        "image": "/images/bolo_arroz.png"
       },
       {
         "name": "Torta",
         "price": 85,
-        "image": ""
+        "image": "/images/torta.png"
       },
       {
         "name": "Fatia xadrez",
         "price": 150,
-        "image": "/images/Fatias Xadrez.png"
+        "image": "/images/fatias_xadrez.png"
       },
       {
         "name": "Fatia folhado de canela",
@@ -276,12 +276,12 @@
       {
         "name": "Rissóis de camarão",
         "price": 50,
-        "image": ""
+        "image": "/images/rissois_camarao.png"
       },
       {
         "name": "Samosa carne/peixe/frango/queijo",
         "price": 50,
-        "image": ""
+        "image": "/images/samosas.png"
       },
       {
         "name": "Samosa vegetais",
@@ -291,7 +291,7 @@
       {
         "name": "Coxinhas",
         "price": 50,
-        "image": ""
+        "image": "/images/coxinhas.png"
       },
       {
         "name": "Mini pizza",
@@ -321,32 +321,32 @@
       {
         "name": "Pão de forma (grande)",
         "price": 60,
-        "image": ""
+        "image": "/images/pao_forma_simples.png"
       },
       {
         "name": "Pão de forma (pequeno)",
         "price": 30,
-        "image": ""
+        "image": "/images/pao_forma_simples.png"
       },
       {
         "name": "Pão caseiro",
         "price": 10,
-        "image": ""
+        "image": "/images/pao_caseiro.png"
       },
       {
         "name": "Pão integral",
         "price": 12,
-        "image": ""
+        "image": "/images/pao_integral.png"
       },
       {
         "name": "Pão cassete integral",
         "price": 15,
-        "image": ""
+        "image": "/images/pao_forma_integral.png"
       },
       {
         "name": "Pão hamburguer/cachorro",
         "price": 15,
-        "image": ""
+        "image": "/images/cachorro_quente.png"
       },
       {
         "name": "Pão de centeio",
@@ -356,22 +356,22 @@
       {
         "name": "Pão de cereais",
         "price": 40,
-        "image": ""
+        "image": "/images/pao_cereais.png"
       },
       {
         "name": "Pão forma integral grande",
         "price": 80,
-        "image": ""
+        "image": "/images/pao_forma_integral.png"
       },
       {
         "name": "Pão forma integral pequeno",
         "price": 40,
-        "image": ""
+        "image": "/images/pao_forma_integral.png"
       },
       {
         "name": "Pão de água",
         "price": 8,
-        "image": "/images/pao_agua.jpg"
+        "image": "/images/pao_caseiro.png"
       },
       {
         "name": "Pão d’água",
@@ -381,7 +381,7 @@
       {
         "name": "Broa de milho",
         "price": 60,
-        "image": "/images/Broa de milho.png"
+        "image": "/images/broa_milho.png"
       },
       {
         "name": "Torradas",

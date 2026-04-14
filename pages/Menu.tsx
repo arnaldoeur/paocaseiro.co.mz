@@ -38,8 +38,27 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
     const location = useLocation();
     
     // State
-    // Initialize with all sections open by default
+    const [menuSections, setMenuSections] = useState(translations[language].menu.sections);
     const [activeSections, setActiveSections] = useState<string[]>([]);
+    
+    // category translations mapping
+    const categoryTranslations: Record<string, string> = {
+        'Pães': 'Breads',
+        'Folhados e Doces': 'Pastries & Sweets',
+        'Brioches': 'Brioches',
+        'Salgados': 'Savories',
+        'Fatias e Bolos': 'Slices & Cakes',
+        'Pizzas Grandes': 'Large Pizzas',
+        'Pizzas Médias': 'Medium Pizzas',
+        'Waffle': 'Waffles',
+        'Bolos Inteiros/Encomenda': 'Whole Cakes / Pre-order',
+        'Cafés': 'Coffee',
+        'Chás': 'Tea',
+        'Bebidas Quentes': 'Hot Drinks',
+        'Bebidas Frias': 'Cold Drinks',
+        'Refrescos': 'Soft Drinks',
+        'Sucos': 'Juices'
+    };
     const [quantities, setQuantities] = useState<{ [key: string]: number }>({});
     const [selectedProduct, setSelectedProduct] = useState<any | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
@@ -49,6 +68,8 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
     // Launch States
     const [currentTime, setCurrentTime] = useState(new Date());
     const [hasDismissedOverlay, setHasDismissedOverlay] = useState(false);
+    const [isSticky, setIsSticky] = useState(false);
+    const [currentCategory, setCurrentCategory] = useState('');
 
     // Auto-update time
     useEffect(() => {
@@ -56,11 +77,52 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
         return () => clearInterval(timer);
     }, []);
 
+    // Scroll handling for sticky nav and category tracking
+    useEffect(() => {
+        const handleScroll = () => {
+            const header = document.querySelector('header');
+            if (header) {
+                const headerBottom = header.getBoundingClientRect().bottom;
+                // Navbar is h-20 (80px), so when header reaches it, make bar sticky
+                setIsSticky(headerBottom <= 80);
+            }
+
+            // Scroll spy for active category
+            const sections = menuSections.map(s => document.getElementById(generateSlug(s.title)));
+            const scrollPosition = window.scrollY + 160; // Offset for Navbar (80) + StickyNav (64) + buffer
+
+            for (let i = sections.length - 1; i >= 0; i--) {
+                const section = sections[i];
+                if (section && section.offsetTop <= scrollPosition) {
+                    setCurrentCategory(menuSections[i].title);
+                    break;
+                }
+            }
+        };
+
+        window.addEventListener('scroll', handleScroll);
+        // Initial call
+        handleScroll();
+        return () => window.removeEventListener('scroll', handleScroll);
+    }, [menuSections]);
+
+    const scrollToSection = (title: string) => {
+        const id = generateSlug(title);
+        const element = document.getElementById(id);
+        if (element) {
+            // Offset for Navbar (80) + StickyNav (64) = 144
+            const y = element.getBoundingClientRect().top + window.scrollY - 144;
+            window.scrollTo({ top: y, behavior: 'smooth' });
+            
+            // Ensure section is expanded
+            if (!activeSections.includes(title)) {
+                setActiveSections(prev => [...prev, title]);
+            }
+        }
+    };
+
     const isAfterLaunch = currentTime >= LAUNCH_DATE;
     const showOverlay = !isAfterLaunch && !hasDismissedOverlay;
-
-    // Custom Products State
-    const [menuSections, setMenuSections] = useState(translations[language].menu.sections);
 
     // Context
     const { addToCart } = useCart();
@@ -71,23 +133,6 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
     // Import getProducts
     // NOTE: Make sure to import getProducts at the top of the file in the next step or assume user adds it
 
-    // Load Products from Supabase
-    const categoryTranslations: Record<string, string> = {
-        'Pães': 'Breads',
-        'Folhados & Salgados': 'Pastries & Savories',
-        'Doces & Pastelaria': 'Sweets & Pastry',
-        'Croissants': 'Croissants',
-        'Bolos & Sobremesas': 'Cakes & Desserts',
-        'Pizzas': 'Pizzas',
-        'Pizzaria': 'Pizzas',
-        'Lanches': 'Snacks & Bites',
-        'Cafés': 'Coffee',
-        'Chás': 'Tea',
-        'Bebidas Quentes': 'Hot Drinks',
-        'Bebidas Frias': 'Cold Drinks',
-        'Refrescos': 'Soft Drinks',
-        'Sucos': 'Juices'
-    };
 
 
     useEffect(() => {
@@ -139,13 +184,19 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
 
                     // Sort newSections based on a preferred order
                     const categoryOrder = [
-                        'Pão',
                         'Pães',
-                        'Doces & Pastelaria',
+                        'Folhados e Doces',
                         'Folhados & Salgados',
+                        'Brioches',
+                        'Salgados',
+                        'Fatias e Bolos',
                         'Bolos & Sobremesas',
+                        'Bolos Inteiros/Encomenda',
                         'Pizzas',
+                        'Pizzas Grandes',
+                        'Pizzas Médias',
                         'Lanches',
+                        'Waffle',
                         'Cafés',
                         'Chás',
                         'Bebidas',
@@ -158,6 +209,10 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
                         // If both are not in array, map to end
                         const posA = indexA === -1 ? 999 : indexA;
                         const posB = indexB === -1 ? 999 : indexB;
+                        
+                        if (posA === 999 && posB === 999) {
+                            return a.title.localeCompare(b.title);
+                        }
                         return posA - posB;
                     });
 
@@ -175,13 +230,15 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
 
                     // Apply same category order as live DB path
                     const categoryOrder = [
-                        'Pão',
                         'Pães',
-                        'Doces & Pastelaria',
-                        'Folhados & Salgados',
-                        'Bolos & Sobremesas',
-                        'Pizzas',
-                        'Lanches',
+                        'Folhados e Doces',
+                        'Brioches',
+                        'Salgados',
+                        'Fatias e Bolos',
+                        'Pizzas Grandes',
+                        'Pizzas Médias',
+                        'Waffle',
+                        'Bolos Inteiros/Encomenda',
                         'Cafés',
                         'Chás',
                         'Bebidas',
@@ -281,7 +338,7 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
                     if (element) {
                         clearInterval(scrollInterval);
                         // Custom scroll to handle fixed navbar offset (around 100px)
-                        const y = element.getBoundingClientRect().top + window.scrollY - 100;
+                        const y = element.getBoundingClientRect().top + window.scrollY - 144;
                         window.scrollTo({ top: y, behavior: 'smooth' });
                     } else if (attempts >= 10) {
                         clearInterval(scrollInterval);
@@ -296,8 +353,8 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
     const filteredSections = menuSections.map(section => ({
         ...section,
         items: section.items.filter((item: any) =>
-            item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            item.desc.toLowerCase().includes(searchQuery.toLowerCase())
+            (item.name?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
+            (item.desc?.toLowerCase() || '').includes(searchQuery.toLowerCase())
         )
     })).filter(section => section.items.length > 0);
 
@@ -411,6 +468,29 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
                     </div>
                 </div>
             </header>
+
+            {/* Sticky Category Nav */}
+            <div 
+                className={`sticky top-20 z-[45] bg-[#f7f1eb]/95 backdrop-blur-md shadow-md border-b border-[#d9a65a]/20 transition-all duration-300 ${
+                    isSticky ? 'opacity-100 translate-y-0 h-16' : 'opacity-0 -translate-y-full h-0 pointer-events-none'
+                }`}
+            >
+                <div className="max-w-7xl mx-auto px-4 h-full flex items-center gap-3 overflow-x-auto no-scrollbar scroll-smooth">
+                    {menuSections.map((section) => (
+                        <button
+                            key={section.title}
+                            onClick={() => scrollToSection(section.title)}
+                            className={`flex-shrink-0 px-4 py-2 rounded-full text-xs font-bold transition-all whitespace-nowrap shadow-sm ${
+                                currentCategory === section.title 
+                                ? 'bg-[#3b2f2f] text-[#d9a65a] scale-105' 
+                                : 'bg-white text-[#3b2f2f] hover:bg-[#d9a65a]/10 border border-[#d9a65a]/10'
+                            }`}
+                        >
+                            {language === 'pt' ? section.title : (categoryTranslations[section.title] || section.title)}
+                        </button>
+                    ))}
+                </div>
+            </div>
 
             {/* How It Works Section */}
             <div className="max-w-7xl mx-auto px-6 mt-8 mb-12 relative z-20">

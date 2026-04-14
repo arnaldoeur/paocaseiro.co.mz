@@ -44,6 +44,16 @@ export const queueService = {
             console.error("DEBUG: generate_queue_ticket RPC Error:", error);
             throw error;
         }
+
+        // Broadcast the new ticket for instant local updates
+        if (data && data[0]) {
+            supabase.channel('queue-realtime-enhanced').send({
+                type: 'broadcast',
+                event: 'ticket-created',
+                payload: { ticket: data[0] }
+            });
+        }
+
         console.log("DEBUG: generate_queue_ticket Success:", data);
         return data;
     },
@@ -72,8 +82,27 @@ export const queueService = {
                 console.error("DEBUG: call_queue_ticket RPC failed too:", rpcError);
                 throw rpcError;
             }
+            
+            // Broadcast the event even if RPC was used
+            if (rpcData) {
+                supabase.channel('queue-realtime-enhanced').send({
+                    type: 'broadcast',
+                    event: 'ticket-calling',
+                    payload: { ticket: rpcData }
+                });
+            }
             return rpcData;
         }
+
+        // Broadcast the event for instant UI/Audio sync
+        if (data) {
+            supabase.channel('queue-realtime-enhanced').send({
+                type: 'broadcast',
+                event: 'ticket-calling',
+                payload: { ticket: data }
+            });
+        }
+        
         console.log("DEBUG: callTicket Success:", data);
         return data;
     },

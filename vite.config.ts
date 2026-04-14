@@ -7,14 +7,14 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
   const proxyConfig = {
     '/supabase-proxy': {
-      target: env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co',
+      target: env.VITE_SUPABASE_URL || 'https://bbvowyztvzselxphbqmt.supabase.co',
       changeOrigin: true,
       ws: true,
       rewrite: (path: string) => path.replace(/^\/supabase-proxy/, ''),
       secure: false,
       configure: (proxy: any, _options: any) => {
         proxy.on('proxyReq', (proxyReq: any, req: any, _res: any) => {
-          const targetUrl = env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co';
+          const targetUrl = env.VITE_SUPABASE_URL || 'https://bbvowyztvzselxphbqmt.supabase.co';
           proxyReq.setHeader('Origin', targetUrl);
           proxyReq.setHeader('Referer', targetUrl);
           

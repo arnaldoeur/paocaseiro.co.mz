@@ -1,8 +1,9 @@
 import { formatProductName } from './stringUtils';
 import { supabase } from './supabase';
 import * as whatsapp from './whatsapp';
+import { NotificationService } from './NotificationService';
 
-const DISABLE_SMS = true; // Use WhatsApp as primary
+const DISABLE_SMS = false; // WhatsApp is primary, but SMS is enabled as fallback
 
 const getTeamNumbers = () => {
     if (typeof window !== 'undefined') {
@@ -50,8 +51,16 @@ export const sendSMS = async (to: string, body: string) => {
         // --- Asynchronous Logging of Communication ---
         Promise.resolve().then(async () => {
             try {
-                const { data: settings } = await supabase.from('system_settings').select('value').eq('key', 'sms_pricing').maybeSingle();
-                const cost = settings?.value?.cost_per_sms || 1.62;
+                // Defensive check: Query the 'system_settings' table for pricing.
+                const { data: pricingData } = await supabase
+                    .from('system_settings')
+                    .select('value')
+                    .eq('key', 'sms_pricing')
+                    .maybeSingle();
+
+                const pricing = pricingData?.value || { cost_per_sms: 1.62 };
+                const cost = pricing.cost_per_sms || 1.62;
+
                 await supabase.from('sms_logs').insert([{
                     type: 'sms',
                     recipient: formattedNumber,
@@ -60,7 +69,7 @@ export const sendSMS = async (to: string, body: string) => {
                     cost: cost
                 }]);
             } catch (e) {
-                console.error("Failed to log sms communication", e);
+                console.error("[SMS Log Async Error]", e);
             }
         });
 
@@ -71,6 +80,14 @@ export const sendSMS = async (to: string, body: string) => {
             await supabase.from('sms_logs').insert([{
                 type: 'sms', recipient: to, content: body, status: 'error', cost: 0
             }]);
+            
+            // Log to Notification Center for visibility
+            await NotificationService.logSystemEvent(
+                "Falha no Envio de SMS", 
+                `Não foi possível enviar SMS para ${to}. Erro: ${error.message}`, 
+                'SYSTEM', 
+                'error'
+            );
         }).catch(() => { });
         return { status: 'error', message: error.message };
     }

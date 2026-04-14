@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { NotificationService } from './NotificationService';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -60,6 +61,14 @@ export const sendWhatsAppMessage = async (to: string, text: string) => {
             status: 'error',
             cost: 0
         }]).catch(e => console.error('[WhatsApp Log Error]', e));
+
+        // Log to Notification Center
+        NotificationService.logSystemEvent(
+            "Falha no WhatsApp", 
+            `Não foi possível enviar mensagem para ${formattedNumber}. Erro: ${error.message}`, 
+            'SYSTEM', 
+            'error'
+        ).catch(() => {});
 
         throw error;
     }

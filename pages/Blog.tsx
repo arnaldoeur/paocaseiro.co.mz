@@ -55,16 +55,12 @@ export const Blog: React.FC<{ language: Language }> = ({ language }) => {
 
     useEffect(() => {
         const fetchPosts = async () => {
-            const { data, error } = await supabase
-                .from('blog_posts')
-                .select('id, title, slug, excerpt, image_url, author, category, created_at')
-                .eq('status', 'published')
-                .order('created_at', { ascending: false });
+            const { invokeHostingerDB } = await import('../services/supabase');
+            const result = await invokeHostingerDB('fetch_blog');
 
-            if (!error && data) {
-                setPosts(data);
-                // Extract unique categories
-                const cats = Array.from(new Set(data.map(p => p.category).filter(Boolean))) as string[];
+            if (result.success && result.data) {
+                setPosts(result.data);
+                const cats = Array.from(new Set(result.data.map((p: any) => p.category).filter(Boolean))) as string[];
                 setCategories(cats);
             }
             setLoading(false);
@@ -123,13 +119,15 @@ export const Blog: React.FC<{ language: Language }> = ({ language }) => {
                     <div className="w-full md:w-1/2">
                         <div className="w-full aspect-video rounded-[2rem] overflow-hidden shadow-2xl relative bg-[#3b2f2f] group">
                             <video 
-                                src="https://bqiegszufcqimlvucrpm.supabase.co/storage/v1/object/public/products/PAO%20CASEIRO%20VIDEO.mp4" 
+                                src="https://bbvowyztvzselxphbqmt.supabase.co/storage/v1/object/sign/files/video_paocaseiro.mp4?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9mZDFkYzkzMC1jOTIxLTQ1ODEtOTQ0NS1jYzgzZTE4OTY3NWMiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJmaWxlcy92aWRlb19wYW9jYXNlaXJvLm1wNCIsImlhdCI6MTc3NTU3MzU4MywiZXhwIjoxODA3MTA5NTgzfQ.kHLjBn0Z0FbM9y9oaZ18DX9iVbMLffZ_vbf8j7obGr8" 
                                 className="w-full h-full object-cover"
                                 autoPlay 
                                 muted 
                                 loop 
                                 controls
                                 playsInline
+                                preload="auto"
+                                crossOrigin="anonymous"
                             ></video>
                             <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent pointer-events-none group-hover:opacity-0 transition-opacity"></div>
                             <div className="absolute bottom-6 left-6 pointer-events-none text-white font-bold tracking-widest uppercase text-xs flex items-center gap-2 group-hover:opacity-0 transition-opacity">
