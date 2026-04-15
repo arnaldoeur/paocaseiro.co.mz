@@ -345,16 +345,16 @@ export const generateCustomerReceiptPDF = async (order: any, items: any[], compa
     }
 
     // Dotted separator
-    currentY += 4;
-    pdf.setDrawColor(200, 200, 200);
-    pdf.setLineDashPattern([1, 1], 0);
-    pdf.line(margin, currentY, pageWidth - margin, currentY);
-    pdf.setLineDashPattern([], 0);
+    currentY += 8;
 
-    // ── FOOTER fixed to bottom of page ──────────────────────────────────────
-    // Always render at a fixed Y from the page bottom, so it never overflows.
+    // ── FOOTER ──────────────────────────────────────────────────────────────
     const pageHeight = pdf.internal.pageSize.getHeight();
-    let footerY = pageHeight - 52; // Start footer 52mm from bottom
+    let footerY = pageHeight - 48; // Try to stick to bottom
+    
+    // Prevent overlap with dynamic content
+    if (footerY < currentY + 8) {
+        footerY = currentY + 8;
+    }
 
     pdf.setFont('helvetica', 'normal');
     pdf.setFontSize(7);
@@ -372,17 +372,17 @@ export const generateCustomerReceiptPDF = async (order: any, items: any[], compa
     pdf.setFont('helvetica', 'bold');
     pdf.setFontSize(7.5);
     pdf.setTextColor(80, 80, 80);
-    pdf.text(companyInfo.legalName || companyInfo.name || 'Pão Caseiro', pageWidth / 2, footerY, { align: 'center' });
+    pdf.text((companyInfo.legalName || companyInfo.name || 'PÃO CASEIRO, LDA').toUpperCase(), pageWidth / 2, footerY, { align: 'center' });
     footerY += 5;
 
     pdf.setFont('helvetica', 'normal');
     pdf.setFontSize(6.5);
     pdf.setTextColor(120, 120, 120);
-    const splitAddrR = pdf.splitTextToSize(companyInfo.address || 'Lichinga, Av. Acordo de Lusaka', pageWidth - 30);
+    const splitAddrR = pdf.splitTextToSize(companyInfo.address || 'Lichinga, Av. Acordo de Lusaka', pageWidth - 20);
     pdf.text(splitAddrR, pageWidth / 2, footerY, { align: 'center' });
     footerY += (splitAddrR.length * 3.5) + 1;
 
-    pdf.text(`Tel: ${companyInfo.phone || '+258 87 914 6662'} | ${companyInfo.email || 'geral@paocaseiro.co.mz'}`, pageWidth / 2, footerY, { align: 'center' });
+    pdf.text(`Telf: ${companyInfo.phone || '+258 87 914 6662'} | ${companyInfo.email || 'geral@paocaseiro.co.mz'}`, pageWidth / 2, footerY, { align: 'center' });
     footerY += 4;
 
     if (companyInfo.nuit) {
@@ -392,7 +392,9 @@ export const generateCustomerReceiptPDF = async (order: any, items: any[], compa
         pdf.setFont('helvetica', 'normal');
     }
 
-    pdf.text(companyInfo.website || 'www.paocaseiro.co.mz', pageWidth / 2, footerY, { align: 'center' });
+    if (companyInfo.website) {
+        pdf.text(companyInfo.website, pageWidth / 2, footerY, { align: 'center' });
+    }
 
     return pdf;
 };
@@ -644,20 +646,33 @@ export const generateFormalInvoicePDF = async (order: any, items: any[], company
     currentY += 12;
 
     // Dotted separator
-    pdf.setLineDashPattern([2, 2], 0);
+    pdf.setLineDashPattern([1.5, 1.5], 0);
     pdf.setDrawColor(200, 200, 200);
     pdf.line(15, currentY, pageWidth - 15, currentY);
     pdf.setLineDashPattern([], 0);
+    currentY += 12;
 
-    // ── FOOTER fixed to bottom of A4 page ────────────────────────────────────
+    // ── FOOTER ──────────────────────────────────────────────────────────────
     const pageHeightA4 = pdf.internal.pageSize.getHeight();
-    let footerYA4 = pageHeightA4 - 58; // Start 58mm from bottom
+    let footerYA4 = pageHeightA4 - 55; 
+
+    // Prevent overlap
+    if (footerYA4 < currentY + 15) {
+        footerYA4 = currentY + 15;
+    }
+
+    // Add new page if footer overflows visually
+    if (footerYA4 > pageHeightA4 - 25) {
+        pdf.addPage();
+        footerYA4 = 25;
+    }
 
     pdf.setFont('helvetica', 'normal');
     pdf.setFontSize(10);
     pdf.setTextColor(150, 150, 150);
     pdf.text("Obrigado pela preferência!", pageWidth / 2, footerYA4, { align: 'center' });
-    footerYA4 += 6;
+    footerYA4 += 5;
+    pdf.setFontSize(8);
     pdf.text("Documento Processado por Computador", pageWidth / 2, footerYA4, { align: 'center' });
     footerYA4 += 9;
 
@@ -669,30 +684,34 @@ export const generateFormalInvoicePDF = async (order: any, items: any[], company
 
     pdf.setFont('helvetica', 'bold');
     pdf.setFontSize(10);
-    pdf.setTextColor(80, 80, 80);
-    pdf.text((companyInfo.legalName || companyInfo.name || 'Pão Caseiro').toUpperCase(), pageWidth / 2, footerYA4, { align: 'center' });
+    pdf.setTextColor(60, 60, 60);
+    pdf.text((companyInfo.legalName || companyInfo.name || 'PÃO CASEIRO, LDA').toUpperCase(), pageWidth / 2, footerYA4, { align: 'center' });
     footerYA4 += 6;
 
     pdf.setFont('helvetica', 'normal');
     pdf.setFontSize(9);
-    pdf.setTextColor(120, 120, 120);
+    pdf.setTextColor(100, 100, 100);
     const splitAddrA4 = pdf.splitTextToSize(companyInfo.address || 'Lichinga, Av. Acordo de Lusaka', pageWidth - 40);
     pdf.text(splitAddrA4, pageWidth / 2, footerYA4, { align: 'center' });
-    footerYA4 += (splitAddrA4.length * 5) + 1;
+    footerYA4 += (splitAddrA4.length * 4) + 1;
 
-    pdf.text(`Tel: ${companyInfo.phone || '+258 87 914 6662'} | Email: ${companyInfo.email || 'geral@paocaseiro.co.mz'}`, pageWidth / 2, footerYA4, { align: 'center' });
-    footerYA4 += 6;
+    pdf.text(`Telf: ${companyInfo.phone || '+258 87 914 6662'} | Email: ${companyInfo.email || 'geral@paocaseiro.co.mz'}`, pageWidth / 2, footerYA4, { align: 'center' });
+    footerYA4 += 5;
 
     if (companyInfo.nuit) {
         pdf.setFont('helvetica', 'bold');
-        pdf.setFontSize(10);
+        pdf.setFontSize(9.5);
+        pdf.setTextColor(80, 80, 80);
         pdf.text(`NUIT: ${companyInfo.nuit}`, pageWidth / 2, footerYA4, { align: 'center' });
-        footerYA4 += 6;
+        footerYA4 += 5;
         pdf.setFont('helvetica', 'normal');
     }
 
-    pdf.setFontSize(9);
-    pdf.text(companyInfo.website || 'www.paocaseiro.co.mz', pageWidth / 2, footerYA4, { align: 'center' });
+    if (companyInfo.website) {
+        pdf.setFontSize(9);
+        pdf.setTextColor(150, 150, 150);
+        pdf.text(companyInfo.website, pageWidth / 2, footerYA4, { align: 'center' });
+    }
 
     return pdf;
 };
