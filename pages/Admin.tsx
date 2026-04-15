@@ -892,13 +892,16 @@ export const Admin: React.FC = () => {
 
             // Generate standard 80mm generic receipt width or adjust for A4 depending on length
             // Using a standard receipt roll width of 80mm
+            const safeWidth = Math.max(1, canvas.width);
+            const safeHeight = Math.max(80, (canvas.height * 80) / safeWidth);
+
             const pdf = new jsPDF({
                 orientation: 'portrait',
                 unit: 'mm',
-                format: [80, (canvas.height * 80) / canvas.width] // Dynamic height matching the roll
+                format: [80, safeHeight] // Dynamic height matching the roll
             });
 
-            pdf.addImage(imgData, 'PNG', 0, 0, 80, (canvas.height * 80) / canvas.width);
+            pdf.addImage(imgData, 'PNG', 0, 0, 80, safeHeight);
             pdf.save(`Recibo_PaoCaseiro_${lastOrderData.short_id}.pdf`);
         } catch (error) {
             console.error('PDF generation error:', error);

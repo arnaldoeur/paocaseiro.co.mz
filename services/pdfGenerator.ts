@@ -112,6 +112,7 @@ function numeroPorExtenso(num: number): string {
  * RECIBO (Receipt) - Mobile-friendly Beautiful Model matches POS App Print
  */
 export const generateCustomerReceiptPDF = async (order: any, items: any[], companyInfo: CompanySettings = DEFAULT_COMPANY_INFO) => {
+    companyInfo = companyInfo || DEFAULT_COMPANY_INFO;
     let currentY = 10;
     // Add more buffer height to account for the extra spaces, margins and multi-line customer info
     const estimatedHeight = 220 + (items.length * 15) + 60; 
@@ -401,6 +402,7 @@ export const generateCustomerReceiptPDF = async (order: any, items: any[], compa
  * As requested, the colorful model is used for Faturas, with all details.
  */
 export const generateFormalInvoicePDF = async (order: any, items: any[], companyInfo: CompanySettings = DEFAULT_COMPANY_INFO) => {
+    companyInfo = companyInfo || DEFAULT_COMPANY_INFO;
     const pdf = new jsPDF('p', 'mm', 'a4');
     const pageWidth = pdf.internal.pageSize.getWidth();
     // const pageHeight = pdf.internal.pageSize.getHeight();
