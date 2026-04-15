@@ -172,7 +172,7 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
                             complements: product.complements || [],
                             unit: product.unit || 'un',
                             stock: product.stock_quantity || 0,
-                            isAvailable: product.stock_quantity > 0
+                            isAvailable: product.is_available === false ? false : product.stock_quantity > 0
                         });
                         return acc;
                     }, {});

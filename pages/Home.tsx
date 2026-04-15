@@ -127,12 +127,22 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
 
     useEffect(() => {
         const fetchGallery = async () => {
-            const { data } = await supabase.from('gallery_items').select('*').order('display_order', { ascending: true });
-            if (data && data.length > 0) {
+            const { data, error } = await supabase.from('gallery_items').select('*').order('display_order', { ascending: true });
+            if (!error && data && data.length > 0) {
                 setGalleryItems(data);
             }
         };
         fetchGallery();
+
+        const channel = supabase.channel('gallery-changes')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'gallery_items' }, () => {
+                fetchGallery();
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
     }, []);
 
 
@@ -280,6 +290,7 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                     initial={{ opacity: 0, y: 30 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.8 }}
+                    style={{ willChange: "transform, opacity" }}
                     className="relative z-10 container mx-auto px-6 text-center text-[#f7f1eb]"
                 >
                     <h1 className="font-serif text-5xl md:text-7xl lg:text-8xl mb-6 drop-shadow-md">
@@ -330,7 +341,8 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                         loop
                         muted
                         playsInline
-                        preload="auto"
+                        preload="metadata"
+                        poster="/images/about-process.jpeg"
                         crossOrigin="anonymous"
                         className={`w-full h-full transition-all duration-500 ${isPlayingWithSound ? 'object-contain' : 'object-cover pointer-events-none'}`}
                         controls={isPlayingWithSound}
@@ -351,6 +363,7 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                             whileTap={{ scale: 0.95 }}
                             onClick={handlePlayWithSound}
                             className="w-24 h-24 bg-[#f7f1eb] rounded-full flex items-center justify-center text-[#3b2f2f] shadow-[0_0_30px_rgba(217,166,90,0.5)] mx-auto group hover:bg-[#d9a65a] transition-colors relative z-10 pointer-events-auto"
+                            style={{ willChange: "transform" }}
                         >
                             <Play className="w-10 h-10 ml-1 fill-current" />
                         </motion.button>
@@ -382,6 +395,7 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                             <img
                                 src="/images/about-process.jpeg"
                                 alt="Processo artesanal"
+                                loading="lazy"
                                 className="absolute top-0 left-0 w-[85%] h-[80%] object-cover object-bottom rounded-3xl shadow-xl z-10"
                             />
 
@@ -389,6 +403,7 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                             <img
                                 src="/images/about-bread.jpeg"
                                 alt="Pão fresco"
+                                loading="lazy"
                                 className="absolute bottom-0 right-0 w-[55%] h-[45%] object-cover object-bottom rounded-3xl shadow-2xl border-4 border-[#f7f1eb] z-20"
                             />
 
@@ -453,6 +468,7 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                                 key={idx}
                                 whileHover={{ y: -10 }}
                                 onClick={() => navigate(`/menu#${service.categoryId}`)}
+                                style={{ willChange: "transform" }}
                                 className="group bg-[#4b3a2f] rounded-3xl border border-[#f7f1eb]/10 hover:border-[#d9a65a]/50 transition-colors shadow-lg flex flex-col overflow-hidden cursor-pointer"
                             >
                                 <div className="p-8 flex flex-col items-center text-center flex-grow">
@@ -463,7 +479,7 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                                     <p className="text-[#f7f1eb]/70 text-sm leading-relaxed mb-6 flex-grow">{t.services.items[idx].desc}</p>
                                 </div>
                                 <div className="w-full h-48 overflow-hidden mt-auto">
-                                    <img src={service.image} alt={service.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                                    <img src={service.image} alt={service.title} loading="lazy" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500 will-change-transform" />
                                 </div>
                             </motion.div>
                         ))}
@@ -498,11 +514,12 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                                 whileInView={{ opacity: 1, y: 0 }}
                                 viewport={{ once: true, margin: "-100px" }}
                                 transition={{ delay: idx * 0.1 }}
+                                style={{ willChange: "transform, opacity" }}
                                 onClick={() => navigate(`/menu#${item.categoryId}`)}
                                 className="flex flex-col h-full bg-white rounded-2xl shadow-lg item-card overflow-hidden group cursor-pointer"
                             >
                                 <div className="h-64 relative overflow-hidden flex flex-col items-center justify-center">
-                                    <img src={item.image} alt={item.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                                    <img src={item.image} alt={item.title} loading="lazy" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500 will-change-transform" />
                                 </div>
                                 <div className="p-6 flex flex-col flex-grow">
                                     <h3 className="font-serif text-2xl font-bold text-[#3b2f2f] mb-3 group-hover:text-[#d9a65a] transition-colors">

@@ -31,6 +31,7 @@ import { AdminAuditView } from './admin/AdminAuditView';
 import { QueueManager } from '../components/admin/QueueManager';
 import { AdminNotifications } from '../components/admin/AdminNotifications';
 import { AdminDriveView } from './admin/AdminDriveView';
+import { AdminMenuView } from './admin/AdminMenuView';
 import { AdminBillingView } from '../components/admin/AdminBillingView';
 import { AdminNewsletterView } from '../components/admin/AdminNewsletterView';
 import { AdminEmailPipelineView } from '../components/admin/AdminEmailPipelineView';
@@ -148,6 +149,8 @@ export const Admin: React.FC = () => {
     const [adminPhoto, setAdminPhoto] = useState<string>('');
     const [showPassword, setShowPassword] = useState(false);
     const [soundEnabled, setSoundEnabled] = useState(() => localStorage.getItem('admin_sound') !== 'false');
+    const [whatsappMenuMode, setWhatsappMenuMode] = useState(false);
+    const [isUpdatingMaintenance, setIsUpdatingMaintenance] = useState(false);
 
     // Sidebar/View State
     const [activeView, setActiveView] = useState<'dashboard' | 'orders' | 'kitchen' | 'stock' | 'pos' | 'delivery' | 'settings' | 'customers' | 'team' | 'logistics' | 'support' | 'support_ai' | 'billing' | 'documents' | 'messages' | 'blog' | 'newsletter' | 'queue' | 'notificacoes'>('dashboard');
@@ -274,9 +277,9 @@ export const Admin: React.FC = () => {
     const [stockSearchTerm, setStockSearchTerm] = useState('');
     const [stockCategoryFilter, setStockCategoryFilter] = useState('all');
     const [stockAvailabilityFilter, setStockAvailabilityFilter] = useState<'all' | 'available' | 'unavailable'>('all');
-    const [stockTab, setStockTab] = useState<'overview' | 'management' | 'pricing'>('overview');
+    const [stockTab, setStockTab] = useState<'overview' | 'management' | 'pricing' | 'menu'>('overview');
     const [selectedMassStockIds, setSelectedMassStockIds] = useState<string[]>([]);
-    const [editedMassStock, setEditedMassStock] = useState<Record<string, { stockQuantity: number; unit: string; inStock: boolean }>>({});
+    const [editedMassStock, setEditedMassStock] = useState<Record<string, { stockQuantity: number; unit: string; inStock: boolean; showInMenu: boolean }>>({});
     const [editedMassPricing, setEditedMassPricing] = useState<Record<string, { purchasePrice: number; otherCost: number; marginPercentage: number; finalPrice: number }>>({});
     const [isSavingMassStock, setIsSavingMassStock] = useState(false);
     const [isSavingMassPricing, setIsSavingMassPricing] = useState(false);
@@ -388,7 +391,7 @@ export const Admin: React.FC = () => {
         city: 'Lichinga',
         address: 'Av. Acordo de Lusaka',
         postalCode: '3300',
-        slogan: 'O Sabor da Tradição',
+        slogan: 'O Sabor que Aquece o Coração',
         motto: 'Qualidade em cada fornada',
         currency: 'MT',
         language: 'pt',
@@ -1718,6 +1721,8 @@ export const Admin: React.FC = () => {
                 prepTime: p.prep_time,
                 deliveryTime: p.delivery_time,
                 image: p.image,
+                description: p.description,
+                show_in_menu: p.show_in_menu !== false, // default true if null
                 availability: p.is_available ? 'available' : 'unavailable',
                 variations: p.variations || [],
                 complements: p.complements || [],
@@ -1971,6 +1976,13 @@ export const Admin: React.FC = () => {
                     productPrefix: settingsMap['company_product_prefix'] || prev.productPrefix,
                     docPrefix: settingsMap['company_doc_prefix'] || prev.docPrefix
                 }));
+
+                // Fetch System Settings (Maintenance Mode)
+                const { data: sysData, error: sysError } = await supabase.from('system_settings').select('key, value').in('key', ['whatsapp_menu_mode']);
+                if (!sysError && sysData) {
+                    const waMode = sysData.find(d => d.key === 'whatsapp_menu_mode');
+                    setWhatsappMenuMode(waMode?.value?.active === true);
+                }
             }
         } catch (e) {
             console.error("Failed to load branding", e);
@@ -2079,6 +2091,32 @@ export const Admin: React.FC = () => {
             setAiReportContent("Erro de rede ao conectar à IA Analítica.");
         } finally {
             setIsGeneratingAI(false);
+        }
+    };
+
+    const handleUpdateMaintenanceMode = async (enabled: boolean) => {
+        setIsUpdatingMaintenance(true);
+        try {
+            const { error } = await supabase
+                .from('system_settings')
+                .update({ value: { active: enabled }, updated_at: new Date().toISOString() })
+                .eq('key', 'whatsapp_menu_mode');
+
+            if (error) throw error;
+            setWhatsappMenuMode(enabled);
+            
+            await logAudit({
+                action: 'UPDATE_WHATSAPP_MAINTENANCE',
+                entity_type: 'system',
+                details: { enabled }
+            });
+
+            alert(`Modo Manutenção (WhatsApp) ${enabled ? 'ACTIVADO' : 'DESACTIVADO'} com sucesso!`);
+        } catch (err: any) {
+            console.error('Error updating maintenance mode:', err);
+            alert('Falha ao atualizar modo de manutenção: ' + err.message);
+        } finally {
+            setIsUpdatingMaintenance(false);
         }
     };
 
@@ -2537,7 +2575,9 @@ export const Admin: React.FC = () => {
                     return supabase.from('products').update({
                         stock_quantity: changes.stockQuantity,
                         unit: changes.unit,
-                        is_available: changes.inStock
+                        is_available: changes.inStock,
+                        show_in_menu: changes.showInMenu,
+                        sku: changes.sku
                     }).eq('id', id);
                 });
             } else if (selectedMassStockIds.length > 0) {
@@ -3157,6 +3197,12 @@ export const Admin: React.FC = () => {
                                     </span>
                                 )}
                             </button>
+                            <button 
+                                onClick={() => setStockTab('menu')} 
+                                className={`pb-3 font-bold text-sm tracking-wide uppercase transition-colors flex items-center gap-2 ${stockTab === 'menu' ? 'border-b-2 border-[#d9a65a] text-[#d9a65a]' : 'text-gray-400 hover:text-[#3b2f2f]'}`}
+                            >
+                                📋 Menu
+                            </button>
                         </div>
 
                         {/* Stock Search Bar & Filter */}
@@ -3203,9 +3249,9 @@ export const Admin: React.FC = () => {
                                                 selectedMassStockIds.forEach(id => {
                                                     const p = products.find(prod => prod.id === id);
                                                     if (!p) return;
-                                                    const existing = next[id] || { stockQuantity: p.stockQuantity, unit: p.unit, inStock: p.inStock, sku: p.sku || '' };
+                                                    const existing = next[id] || { stockQuantity: p.stockQuantity, unit: p.unit, inStock: p.inStock, sku: p.sku || '', showInMenu: p.show_in_menu };
                                                     const newState = { ...existing, inStock: true };
-                                                    if (newState.stockQuantity === p.stockQuantity && newState.unit === p.unit && newState.inStock === p.inStock && newState.sku === (p.sku || '')) {
+                                                    if (newState.stockQuantity === p.stockQuantity && newState.unit === p.unit && newState.inStock === p.inStock && newState.sku === (p.sku || '') && newState.showInMenu === p.show_in_menu) {
                                                         delete next[id];
                                                     } else {
                                                         next[id] = newState;
@@ -3225,9 +3271,9 @@ export const Admin: React.FC = () => {
                                                 selectedMassStockIds.forEach(id => {
                                                     const p = products.find(prod => prod.id === id);
                                                     if (!p) return;
-                                                    const existing = next[id] || { stockQuantity: p.stockQuantity, unit: p.unit, inStock: p.inStock, sku: p.sku || '' };
+                                                    const existing = next[id] || { stockQuantity: p.stockQuantity, unit: p.unit, inStock: p.inStock, sku: p.sku || '', showInMenu: p.show_in_menu };
                                                     const newState = { ...existing, inStock: false };
-                                                    if (newState.stockQuantity === p.stockQuantity && newState.unit === p.unit && newState.inStock === p.inStock && newState.sku === (p.sku || '')) {
+                                                    if (newState.stockQuantity === p.stockQuantity && newState.unit === p.unit && newState.inStock === p.inStock && newState.sku === (p.sku || '') && newState.showInMenu === p.show_in_menu) {
                                                         delete next[id];
                                                     } else {
                                                         next[id] = newState;
@@ -3239,6 +3285,51 @@ export const Admin: React.FC = () => {
                                         className="bg-red-100 text-red-800 hover:bg-red-200 border border-red-200 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm focus:outline-none"
                                     >
                                         Marcar Esgotado
+                                    </button>
+                                    <div className="h-6 w-px bg-gray-200 mx-1"></div>
+                                    <button 
+                                        onClick={() => {
+                                            setEditedMassStock(prev => {
+                                                const next = { ...prev };
+                                                selectedMassStockIds.forEach(id => {
+                                                    const p = products.find(prod => prod.id === id);
+                                                    if (!p) return;
+                                                    const existing = next[id] || { stockQuantity: p.stockQuantity, unit: p.unit, inStock: p.inStock, sku: p.sku || '', showInMenu: p.show_in_menu };
+                                                    const newState = { ...existing, showInMenu: true };
+                                                    if (newState.stockQuantity === p.stockQuantity && newState.unit === p.unit && newState.inStock === p.inStock && newState.sku === (p.sku || '') && newState.showInMenu === p.show_in_menu) {
+                                                        delete next[id];
+                                                    } else {
+                                                        next[id] = newState;
+                                                    }
+                                                });
+                                                return next;
+                                            });
+                                        }}
+                                        className="bg-blue-100 text-blue-800 hover:bg-blue-200 border border-blue-200 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm focus:outline-none"
+                                    >
+                                        Mostrar no Menu
+                                    </button>
+                                    <button 
+                                        onClick={() => {
+                                            setEditedMassStock(prev => {
+                                                const next = { ...prev };
+                                                selectedMassStockIds.forEach(id => {
+                                                    const p = products.find(prod => prod.id === id);
+                                                    if (!p) return;
+                                                    const existing = next[id] || { stockQuantity: p.stockQuantity, unit: p.unit, inStock: p.inStock, sku: p.sku || '', showInMenu: p.show_in_menu };
+                                                    const newState = { ...existing, showInMenu: false };
+                                                    if (newState.stockQuantity === p.stockQuantity && newState.unit === p.unit && newState.inStock === p.inStock && newState.sku === (p.sku || '') && newState.showInMenu === p.show_in_menu) {
+                                                        delete next[id];
+                                                    } else {
+                                                        next[id] = newState;
+                                                    }
+                                                });
+                                                return next;
+                                            });
+                                        }}
+                                        className="bg-gray-100 text-gray-800 hover:bg-gray-200 border border-gray-200 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm focus:outline-none"
+                                    >
+                                        Ocultar do Menu
                                     </button>
                                 </div>
                             )}
@@ -3264,8 +3355,33 @@ export const Admin: React.FC = () => {
                                 </button>
                             )}
                         </div>
-                        <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-350px)] custom-scrollbar">
-                            {stockTab === 'pricing' ? (
+                        <div className={stockTab === 'menu' ? 'overflow-y-auto max-h-[calc(100vh-310px)] custom-scrollbar p-4' : 'overflow-x-auto overflow-y-auto max-h-[calc(100vh-350px)] custom-scrollbar'}>
+                            {stockTab === 'menu' ? (
+                                <div>
+                                    <AdminMenuView
+                                        products={products.map((p: any) => ({
+                                            id: p.id,
+                                            name: p.name,
+                                            price: p.price,
+                                            category: p.category || 'Outros',
+                                            description: p.description,
+                                            image_url: p.image,
+                                            inStock: p.inStock,
+                                            showInMenu: p.show_in_menu !== false,
+                                            internal_id: p.internal_id
+                                        }))}
+                                        companyInfo={{
+                                            name: companyInfo.name,
+                                            phone: companyInfo.phone,
+                                            email: companyInfo.email,
+                                            address: companyInfo.address,
+                                            slogan: companyInfo.slogan,
+                                            logo: companyInfo.logo,
+                                            website: companyInfo.website
+                                        }}
+                                    />
+                                </div>
+                            ) : stockTab === 'pricing' ? (
                                 <table className="w-full text-left">
                                     <thead className="bg-[#d9a65a]/10 text-xs uppercase font-bold text-[#3b2f2f] border-b sticky top-0 z-10 backdrop-blur-md">
                                         <tr>
@@ -3492,7 +3608,7 @@ export const Admin: React.FC = () => {
                                                                 if (p) {
                                                                     setEditedMassStock(prev => ({
                                                                         ...prev,
-                                                                        [id]: { ...(prev[id] || { stockQuantity: p.stockQuantity, unit: p.unit, inStock: p.inStock, sku: p.sku || '' }), inStock: val }
+                                                                        [id]: { ...(prev[id] || { stockQuantity: p.stockQuantity, unit: p.unit, inStock: p.inStock, sku: p.sku || '', showInMenu: p.show_in_menu }), inStock: val }
                                                                     }));
                                                                 }
                                                             });
@@ -3501,6 +3617,30 @@ export const Admin: React.FC = () => {
                                                         <option value="">Manter</option>
                                                         <option value="true">Disponível</option>
                                                         <option value="false">Esgotado</option>
+                                                    </select>
+                                                </div>
+
+                                                <div className="flex items-center gap-2">
+                                                    <label className="text-[10px] font-bold text-gray-400 uppercase">No Menu?</label>
+                                                    <select 
+                                                        className="p-1.5 text-xs border border-gray-200 rounded-lg focus:border-[#d9a65a] outline-none"
+                                                        onChange={(e) => {
+                                                            if (!e.target.value) return;
+                                                            const val = e.target.value === 'true';
+                                                            selectedMassStockIds.forEach(id => {
+                                                                const p = filteredProducts.find(prod => prod.id === id);
+                                                                if (p) {
+                                                                    setEditedMassStock(prev => ({
+                                                                        ...prev,
+                                                                        [id]: { ...(prev[id] || { stockQuantity: p.stockQuantity, unit: p.unit, inStock: p.inStock, sku: p.sku || '', showInMenu: p.show_in_menu }), showInMenu: val }
+                                                                    }));
+                                                                }
+                                                            });
+                                                        }}
+                                                    >
+                                                        <option value="">Manter</option>
+                                                        <option value="true">Mostrar</option>
+                                                        <option value="false">Ocultar</option>
                                                     </select>
                                                 </div>
                                             </div>
@@ -3527,7 +3667,8 @@ export const Admin: React.FC = () => {
                                             <th className="p-4 w-32">SKU / Código</th>
                                             <th className="p-4 w-32">Quantidade</th>
                                             <th className="p-4 w-32">Unidade</th>
-                                            <th className="p-4 w-40 text-center">Disponibilidade</th>
+                                            <th className="p-4 w-32 text-center">Disponibilidade</th>
+                                            <th className="p-4 w-32 text-center">No Menu</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-100">
@@ -3536,16 +3677,17 @@ export const Admin: React.FC = () => {
                                             const currentQuantity = editedState ? editedState.stockQuantity : p.stockQuantity;
                                             const currentUnit = editedState ? editedState.unit : p.unit;
                                             const currentAvailability = editedState ? editedState.inStock : p.inStock;
+                                            const currentShowInMenu = editedState ? editedState.showInMenu : p.show_in_menu;
                                             const currentSku = editedState ? editedState.sku : (p.sku || '');
                                             const isEdited = !!editedState;
 
-                                            const updateProduct = (field: 'stockQuantity' | 'unit' | 'inStock' | 'sku', value: any) => {
+                                            const updateProduct = (field: 'stockQuantity' | 'unit' | 'inStock' | 'sku' | 'showInMenu', value: any) => {
                                                 setEditedMassStock(prev => {
-                                                    const existing = prev[p.id] || { stockQuantity: p.stockQuantity, unit: p.unit, inStock: p.inStock, sku: p.sku || '' };
+                                                    const existing = prev[p.id] || { stockQuantity: p.stockQuantity, unit: p.unit, inStock: p.inStock, sku: p.sku || '', showInMenu: p.show_in_menu };
                                                     const newState = { ...existing, [field]: value };
                                                     
                                                     // If new values match original exactly, remove from edits payload
-                                                    if (newState.stockQuantity === p.stockQuantity && newState.unit === p.unit && newState.inStock === p.inStock && newState.sku === (p.sku || '')) {
+                                                    if (newState.stockQuantity === p.stockQuantity && newState.unit === p.unit && newState.inStock === p.inStock && newState.sku === (p.sku || '') && newState.showInMenu === p.show_in_menu) {
                                                         const copy = { ...prev };
                                                         delete copy[p.id];
                                                         return copy;
@@ -3620,12 +3762,20 @@ export const Admin: React.FC = () => {
                                                             {currentAvailability ? 'Disponível' : 'Esgotado'}
                                                         </button>
                                                     </td>
+                                                    <td className="p-4 text-center">
+                                                        <button
+                                                            onClick={() => updateProduct('showInMenu', !currentShowInMenu)}
+                                                            className={`w-full py-2 px-3 rounded-lg text-xs font-bold uppercase tracking-wider transition-all border ${currentShowInMenu ? 'bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-200' : 'bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-200'}`}
+                                                        >
+                                                            {currentShowInMenu ? 'Visível' : 'Oculto'}
+                                                        </button>
+                                                    </td>
                                                 </tr>
                                             );
                                         })}
                                         {filteredProducts.length === 0 && (
                                             <tr>
-                                                <td colSpan={5} className="p-10 text-center text-gray-400 italic">
+                                                <td colSpan={7} className="p-10 text-center text-gray-400 italic">
                                                     Nenhum produto corresponde aos filtros atuais.
                                                 </td>
                                             </tr>
@@ -3634,8 +3784,8 @@ export const Admin: React.FC = () => {
                                     <tfoot className="bg-[#d9a65a]/10 text-[#3b2f2f] font-bold">
                                         <tr>
                                             <td colSpan={2} className="p-4 text-right border-t border-[#d9a65a]/20">TOTAIS (Gestão em Massa)</td>
-                                            <td className="p-4 text-center border-t border-[#d9a65a]/20">{filteredProducts.reduce((sum, p) => sum + (p.stockQuantity || 0), 0)} unidades físicas</td>
-                                            <td colSpan={2} className="border-t border-[#d9a65a]/20"></td>
+                                            <td colSpan={2} className="p-4 text-center border-t border-[#d9a65a]/20">{filteredProducts.reduce((sum, p) => sum + (p.stockQuantity || 0), 0)} unidades físicas</td>
+                                            <td colSpan={3} className="border-t border-[#d9a65a]/20"></td>
                                         </tr>
                                     </tfoot>
                                 </table>
@@ -6406,6 +6556,57 @@ export const Admin: React.FC = () => {
                                                     Guardar Configurações
                                                 </button>
                                             </div>
+
+                                            {/* Maintenance Mode / Resilience Card */}
+                                            <div className="bg-white rounded-3xl p-8 shadow-xl border border-gray-100 flex flex-col h-fit">
+                                                <div className="flex items-center gap-4 mb-8">
+                                                    <div className={`p-3 rounded-2xl transition-colors ${whatsappMenuMode ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
+                                                        <ShieldAlert size={32} />
+                                                    </div>
+                                                    <div>
+                                                        <h2 className="text-2xl font-serif font-bold text-[#3b2f2f]">Resiliência e Continuidade</h2>
+                                                        <p className="text-gray-500 text-sm">Plano de contingência para instabilidade.</p>
+                                                    </div>
+                                                </div>
+
+                                                <div className="space-y-6 flex-1">
+                                                    <div className={`p-6 rounded-2xl border transition-all ${whatsappMenuMode ? 'bg-red-50 border-red-100' : 'bg-gray-50 border-gray-100'}`}>
+                                                        <div className="flex items-center justify-between mb-4">
+                                                            <div className="flex items-center gap-3">
+                                                                <Phone size={20} className={whatsappMenuMode ? 'text-red-600' : 'text-gray-400'} />
+                                                                <span className="font-bold text-[#3b2f2f]">Menu de Emergência (WhatsApp)</span>
+                                                            </div>
+                                                            <label className="relative inline-flex items-center cursor-pointer">
+                                                                <input 
+                                                                    type="checkbox" 
+                                                                    className="sr-only peer"
+                                                                    checked={whatsappMenuMode}
+                                                                    onChange={(e) => handleUpdateMaintenanceMode(e.target.checked)}
+                                                                    disabled={isUpdatingMaintenance}
+                                                                />
+                                                                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-600"></div>
+                                                            </label>
+                                                        </div>
+                                                        <p className="text-xs text-gray-500 leading-relaxed">
+                                                            Quando ativo, redireciona o fluxo público de pedidos para um menu simplificado no WhatsApp. Use em caso de instabilidades críticas no sistema de pedidos ou infraestrutura.
+                                                        </p>
+                                                        {whatsappMenuMode && (
+                                                            <div className="mt-4 flex items-center gap-2 bg-red-100 text-red-700 p-3 rounded-xl text-[10px] font-bold uppercase tracking-wider animate-pulse">
+                                                                <ShieldAlert size={14} /> Sistema em Modo de Contingência
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                    <div className="bg-amber-50 border border-amber-100 p-4 rounded-xl">
+                                                        <div className="flex gap-3">
+                                                            <div className="text-amber-600 mt-1"><Sparkles size={16} /></div>
+                                                            <div className="text-[11px] text-amber-800 leading-relaxed font-medium">
+                                                                Dica: Ative o modo WhatsApp se detectar latência alta ou falhas persistentes na gravação de pedidos no POS. Os clientes verão um menu otimizado para fechar pedido via chat.
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
                                         </div>
                                     )}
 
@@ -6842,29 +7043,45 @@ export const Admin: React.FC = () => {
                                         const { generateReceipt } = await import('../services/supabase');
                                         const { notifyPaymentConfirmed } = await import('../services/sms');
 
+                                        const customerName = selectedOrder.customer?.name || selectedOrder.customer_name || 'Venda Local (Balcão)';
+                                        const customerPhone = selectedOrder.customer?.phone || selectedOrder.customer_phone || '';
+                                        const deliveryType = selectedOrder.customer?.type || selectedOrder.delivery_type || 'takeaway';
+
                                         const receiptRes = await generateReceipt(
                                             selectedOrder.id,
                                             selectedOrder.orderId,
                                             selectedOrder.customer_id,
-                                            selectedOrder.customer.name,
+                                            customerName,
                                             selectedOrder.items,
                                             selectedOrder.total
                                         );
 
                                         if (receiptRes.success && receiptRes.data) {
-                                            await notifyPaymentConfirmed(selectedOrder.orderId, selectedOrder.customer.phone);
+                                            await notifyPaymentConfirmed(selectedOrder.orderId, customerPhone);
 
                                             try {
-                                                const { notifyCustomerNewOrderWhatsApp } = await import('../services/whatsapp');
+                                                const { notifyCustomerNewOrderWhatsApp, notifyAdminNewOrderWhatsApp, notifyKitchenNewOrderWhatsApp } = await import('../services/whatsapp');
                                                 const compatOrder = {
                                                     id: selectedOrder.id,
                                                     short_id: selectedOrder.orderId,
-                                                    customer_name: selectedOrder.customer.name,
-                                                    customer_phone: selectedOrder.customer.phone,
-                                                    total_amount: selectedOrder.total
+                                                    customer_name: customerName,
+                                                    customer_phone: customerPhone,
+                                                    total_amount: selectedOrder.total,
+                                                    delivery_type: deliveryType
                                                 };
-                                                notifyCustomerNewOrderWhatsApp(compatOrder, selectedOrder.items).catch(e => console.error("WA err", e));
-                                            } catch (e) {}
+                                                
+                                                // Alert the customer (if they have a phone)
+                                                if (customerPhone && customerPhone.length > 5) {
+                                                    notifyCustomerNewOrderWhatsApp(compatOrder, selectedOrder.items).catch(e => console.error("WA err cust", e));
+                                                }
+                                                
+                                                // Alert Admin & Kitchen about the confirmed receipt
+                                                notifyAdminNewOrderWhatsApp(compatOrder, selectedOrder.items).catch(e => console.error("WA err admin", e));
+                                                notifyKitchenNewOrderWhatsApp(compatOrder, selectedOrder.items).catch(e => console.error("WA err kitchen", e));
+                                                
+                                            } catch (e) {
+                                                console.error("Erro notifications", e);
+                                            }
 
                                             // Map to standardized receipt state and show modal
                                             setLastOrderData({
@@ -6873,9 +7090,9 @@ export const Admin: React.FC = () => {
                                                 amount_paid: selectedOrder.total,
                                                 balance: 0,
                                                 payment_method: 'online',
-                                                customer_name: selectedOrder.customer.name,
-                                                customer_phone: selectedOrder.customer.phone,
-                                                delivery_type: selectedOrder.customer.type
+                                                customer_name: customerName,
+                                                customer_phone: customerPhone,
+                                                delivery_type: deliveryType
                                             });
                                             setLastOrderItems(selectedOrder.items.map(i => ({
                                                 name: i.name,
@@ -6886,7 +7103,8 @@ export const Admin: React.FC = () => {
                                             setSelectedOrder(null); // Close the drawer
                                             loadOrders();
                                         } else {
-                                            alert('Erro ao gerar recibo.');
+                                            console.error("Receipt error:", receiptRes.error);
+                                            alert('Erro ao gerar recibo: ' + (receiptRes.error?.message || receiptRes.error || 'Desconhecido'));
                                         }
                                     }} className="w-full p-3 mb-4 rounded-xl text-sm font-bold bg-[#d9a65a] text-[#3b2f2f] hover:brightness-110 shadow-lg">
                                         Confirmar Pagamento (Gerar Recibo)

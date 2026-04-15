@@ -184,7 +184,6 @@ export const generateReceipt = async (
             customer_id: customerId,
             customer_name: customerName,
             receipt_no: primaryNo,
-            date: new Date().toISOString().split('T')[0],
             total_amount: totalAmount,
             currency: 'MT',
             document_type: documentType,
@@ -377,6 +376,7 @@ export const saveOrderToSupabase = async (orderData: any, items: any[]) => {
             .from('customers')
             .upsert({
                 contact_no: orderData.customer_phone,
+                phone: orderData.customer_phone,
                 name: orderData.customer_name,
                 email: orderData.customer_email || null,
                 whatsapp: orderData.customer_whatsapp || null,

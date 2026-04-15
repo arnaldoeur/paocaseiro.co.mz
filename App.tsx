@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from './services/supabase';
 import { Navbar } from './components/Navbar';
 import { Footer } from './components/Footer';
@@ -9,6 +10,7 @@ import { Blog } from './pages/Blog';
 import { BlogPost } from './pages/BlogPost';
 import { Gallery } from './pages/Gallery';
 import { Admin } from './pages/Admin';
+import { MaintenanceMenu } from './pages/MaintenanceMenu';
 import { Cart } from './components/Cart';
 import { CartProvider } from './context/CartContext';
 import { Language } from './translations';
@@ -80,9 +82,10 @@ const RouteMetadata: React.FC<{ language: Language }> = ({ language }) => {
   return null;
 };
 
-const MaintenanceGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+const MaintenanceGuard: React.FC<{ children: React.ReactNode, language: Language }> = ({ children, language }) => {
   const [isMaintenance, setIsMaintenance] = useState(false);
   const [isPanic, setIsPanic] = useState(false);
+  const [isWAOnly, setIsWAOnly] = useState(false);
   const [loading, setLoading] = useState(true);
   const [debugStatus, setDebugStatus] = useState("Inicializando...");
   const location = useLocation();
@@ -113,7 +116,7 @@ const MaintenanceGuard: React.FC<{ children: React.ReactNode }> = ({ children })
         }
 
         setDebugStatus("Lendo definições de sistema...");
-        const { data, error } = await supabase.from('system_settings').select('key, value').in('key', ['maintenance_mode', 'panic_mode']);
+        const { data, error } = await supabase.from('system_settings').select('key, value').in('key', ['maintenance_mode', 'panic_mode', 'whatsapp_menu_mode']);
 
         if (error) {
             console.warn("Could not fetch maintenance status:", error.message);
@@ -124,8 +127,10 @@ const MaintenanceGuard: React.FC<{ children: React.ReactNode }> = ({ children })
         if (data) {
           const maint = data.find(d => d.key === 'maintenance_mode');
           const panic = data.find(d => d.key === 'panic_mode');
+          const waOnly = data.find(d => d.key === 'whatsapp_menu_mode');
           setIsMaintenance(maint?.value?.active === true);
           setIsPanic(panic?.value?.active === true);
+          setIsWAOnly(waOnly?.value?.active === true);
         }
       } catch (e) {
         console.error("Maintenance check error:", e);
@@ -145,9 +150,67 @@ const MaintenanceGuard: React.FC<{ children: React.ReactNode }> = ({ children })
   // We only care about roles if we need to bypass a blocked state.
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#f7f1eb] flex flex-col items-center justify-center p-4">
-        <div className="w-10 h-10 border-4 border-t-transparent border-[#d9a65a] rounded-full animate-spin mb-4"></div>
-        <p className="text-[#3b2f2f] font-medium animate-pulse">{debugStatus}</p>
+      <div className="min-h-screen bg-[#f7f1eb] flex flex-col items-center justify-center p-4 relative overflow-hidden">
+        {/* Dynamic Background Gradient */}
+        <motion.div
+          className="absolute inset-0 opacity-10 pointer-events-none"
+          animate={{
+            background: [
+              "radial-gradient(circle at 10% 20%, #d9a65a 0%, transparent 40%)",
+              "radial-gradient(circle at 90% 80%, #d9a65a 0%, transparent 40%)",
+              "radial-gradient(circle at 10% 80%, #d9a65a 0%, transparent 40%)",
+              "radial-gradient(circle at 90% 20%, #d9a65a 0%, transparent 40%)",
+              "radial-gradient(circle at 10% 20%, #d9a65a 0%, transparent 40%)"
+            ].join(', ')
+          }}
+          transition={{ duration: 15, repeat: Infinity, ease: "linear" }}
+        />
+        
+        <motion.div
+          initial={{ scale: 0.8, opacity: 0, y: 20 }}
+          animate={{ scale: 1, opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, type: "spring", bounce: 0.4 }}
+          className="relative z-10 flex flex-col items-center max-w-sm w-full"
+        >
+          {/* Animated Logo */}
+          <motion.img 
+            src="/images/logo-official.png" 
+            alt="Pão Caseiro Logo" 
+            className="w-40 md:w-48 h-auto mb-6 drop-shadow-2xl"
+            animate={{ y: [0, -8, 0] }}
+            transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+          />
+
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2, duration: 0.6 }}
+            className="text-center w-full"
+          >
+            <h2 className="text-[#3b2f2f] text-2xl font-bold font-display mb-1">Bem-vindo</h2>
+            <p className="text-[#d9a65a] italic font-medium mb-8">"O sabor que aquece o coração"</p>
+          </motion.div>
+
+          {/* Fluid Loader Indicator */}
+          <div className="flex items-center gap-2 mb-4">
+            {[0, 1, 2].map((i) => (
+              <motion.div
+                key={i}
+                className="w-2.5 h-2.5 bg-[#d9a65a] rounded-full"
+                animate={{ y: [0, -8, 0], opacity: [0.4, 1, 0.4] }}
+                transition={{ duration: 0.8, repeat: Infinity, delay: i * 0.15 }}
+              />
+            ))}
+          </div>
+
+          <motion.p 
+            className="text-[#3b2f2f]/60 font-medium text-xs tracking-widest uppercase"
+            animate={{ opacity: [0.5, 1, 0.5] }}
+            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+          >
+            {debugStatus}
+          </motion.p>
+        </motion.div>
       </div>
     );
   }
@@ -201,6 +264,12 @@ const MaintenanceGuard: React.FC<{ children: React.ReactNode }> = ({ children })
     );
   }
 
+  // If WhatsApp Only mode is active, show the Maintenance Menu for public users
+  const shouldShowWAMenu = isWAOnly && !isIT && !isAdmin && !isITPath && location.pathname !== '/admin';
+  if (shouldShowWAMenu) {
+    return <MaintenanceMenu language={language} />;
+  }
+
   return <>{children}</>;
 };
 
@@ -217,7 +286,7 @@ const App: React.FC = () => {
         <RouteMetadata language={language} />
         <ScrollToTop />
         <div className="min-h-screen bg-[#f7f1eb] text-[#3b2f2f] font-sans">
-          <MaintenanceGuard>
+          <MaintenanceGuard language={language}>
             <ErrorBoundary>
               <Routes>
                 {/* Standalone Pages (No Navbar/Footer) */}

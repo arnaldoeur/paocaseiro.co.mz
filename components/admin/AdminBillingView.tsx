@@ -246,10 +246,11 @@ const CreateDocumentModal = ({ type, onClose, onSuccess }: { type: 'Receipt'|'In
             const { data } = await supabase.from('customers').upsert({
                  name: customerName, 
                  contact_no: customerPhone || `MANUAL-${shortId}`,
+                 phone: customerPhone || `MANUAL-${shortId}`,
                  nuit: customerNuit,
                  address: customerLocation,
                  email: customerEmail
-            }, { on_conflict: 'contact_no' }).select().single();
+            }, { onConflict: 'contact_no' }).select().single();
             
             const customerId = data?.id || 'manual-customer';
             
