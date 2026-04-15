@@ -217,6 +217,9 @@ export const notifyCustomerNewOrderWhatsApp = async (order: any, items: any[], c
     const firstName = getFirstName(order);
     const message = `*🍞 Pão Caseiro — Encomenda Confirmada!*\n\nOlá ${firstName}, muito obrigado por escolher o sabor do nosso coração! 🤎\n\n📦 *Pedido:* #${order.short_id || order.orderId || (order.id ? order.id.slice(-6).toUpperCase() : '')}\n💰 *Total:* ${total} MT\n\n📝 *Artigos:*\n${itemsText}\n\n🔗 *Ver Recibo Online:*\n${url}\n\n_Enviamos em anexo a sua Fatura-Recibo oficial._\n\n*O sabor que aquece o seu coração!*`;
 
+    // A very short non-intrusive caption to embed directly below the Receipt PDF.
+    const pdfCaption = `*🍞 Pão Caseiro* — Fatura/Recibo anexo. Obrigado pela preferência!`;
+
     try {
         const { generateFormalInvoicePDF } = await import('./pdfGenerator');
         
@@ -238,7 +241,7 @@ export const notifyCustomerNewOrderWhatsApp = async (order: any, items: any[], c
             customerPhone,
             'document',
             `Fatura-Recibo-PaoCaseiro-${order.short_id || order.id.slice(-6).toUpperCase()}.pdf`,
-            message,
+            pdfCaption,
             pdfBase64
         );
     } catch(err) {

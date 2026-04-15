@@ -416,13 +416,13 @@ export const generateFormalInvoicePDF = async (order: any, items: any[], company
         const logoUrl = companyInfo.logo || (typeof window !== 'undefined' ? `${window.location.origin}/images/logo_receipt.png` : '/images/logo_receipt.png');
         const logoBase64 = await getBase64ImageFromUrl(logoUrl);
         if (logoBase64) {
-            pdf.addImage(logoBase64, 'PNG', (pageWidth - 50) / 2, currentY, 50, 50);
-            currentY += 55;
-        } else {
+            pdf.addImage(logoBase64, 'PNG', (pageWidth - 35) / 2, currentY, 35, 35);
             currentY += 40;
+        } else {
+            currentY += 25;
         }
     } catch (e) {
-        currentY += 40;
+        currentY += 25;
     }
 
     // 2. Subtitle & Branding Headers
@@ -431,7 +431,7 @@ export const generateFormalInvoicePDF = async (order: any, items: any[], company
     pdf.setTextColor(217, 166, 90); // #d9a65a
     const subtitle = companyInfo.legalName?.toUpperCase() || companyInfo.name?.toUpperCase() || "PADARIA E PASTELARIA PÃO CASEIRO";
     pdf.text(subtitle, pageWidth / 2, currentY, { align: 'center' });
-    currentY += 8;
+    currentY += 6;
 
     pdf.setFont('helvetica', 'normal');
     pdf.setFontSize(10);
@@ -444,16 +444,16 @@ export const generateFormalInvoicePDF = async (order: any, items: any[], company
     if (companyInfo.nuit) {
         pdf.setFont('helvetica', 'bold');
         pdf.text(`NUIT: ${companyInfo.nuit}`, pageWidth / 2, currentY, { align: 'center' });
-        currentY += 8;
+        currentY += 6;
     } else {
-        currentY += 4;
+        currentY += 3;
     }
 
     // 3. Line separator
     pdf.setDrawColor(217, 166, 90);
     pdf.setLineWidth(0.5);
     pdf.line(15, currentY, pageWidth - 15, currentY);
-    currentY += 10;
+    currentY += 8;
 
     // 4. Two columns header (Customer & Order Info)
     pdf.setFont('helvetica', 'bold');
@@ -537,13 +537,13 @@ export const generateFormalInvoicePDF = async (order: any, items: any[], company
     
     pdf.setDrawColor(230, 230, 230);
     pdf.setFillColor(252, 252, 252);
-    pdf.roundedRect(15, currentY, pageWidth - 30, 15, 3, 3, 'FD');
+    pdf.roundedRect(15, currentY, pageWidth - 30, 12, 2, 2, 'FD');
     pdf.setFont('helvetica', 'bold');
-    pdf.setFontSize(12);
+    pdf.setFontSize(11);
     pdf.setTextColor(59, 47, 47);
     // Center it horizontally and vertically within the Box
-    pdf.text(`${deliveryType}`, pageWidth / 2, currentY + 10, { align: 'center' });
-    currentY += 25;
+    pdf.text(`${deliveryType}`, pageWidth / 2, currentY + 6.5, { align: 'center' });
+    currentY += 14;
 
     // 6. Items Table
     const tableData = items.map(i => [
@@ -558,8 +558,8 @@ export const generateFormalInvoicePDF = async (order: any, items: any[], company
         head: [['Descrição', 'Qtd', 'Preço Unit.', 'Total']],
         body: tableData,
         theme: 'plain',
-        headStyles: { textColor: [150, 150, 150], fontSize: 11, fontStyle: 'bold' },
-        bodyStyles: { textColor: [59, 47, 47], fontSize: 12 },
+        headStyles: { textColor: [150, 150, 150], fontSize: 10, fontStyle: 'bold' },
+        bodyStyles: { textColor: [59, 47, 47], fontSize: 11 },
         columnStyles: {
             0: { cellWidth: 'auto', halign: 'left' },
             1: { cellWidth: 20, halign: 'center' },
@@ -577,55 +577,55 @@ export const generateFormalInvoicePDF = async (order: any, items: any[], company
         }
     });
 
-    currentY = (pdf as any).lastAutoTable.finalY + 10;
+    currentY = (pdf as any).lastAutoTable.finalY + 6;
 
     // Subtotal
     const totalAmount = order.total_amount || order.total || 0;
     pdf.setDrawColor(230, 230, 230);
     pdf.line(15, currentY, pageWidth - 15, currentY);
-    currentY += 8;
+    currentY += 6;
     
     pdf.setFont('helvetica', 'normal');
-    pdf.setFontSize(11);
+    pdf.setFontSize(10);
     pdf.setTextColor(150, 150, 150);
     pdf.text("Subtotal", 15, currentY);
     pdf.text(`${totalAmount.toLocaleString()} MT`, pageWidth - 15, currentY, { align: 'right' });
-    currentY += 8;
+    currentY += 6;
 
     // Total line
     pdf.line(15, currentY, pageWidth - 15, currentY);
-    currentY += 10;
+    currentY += 8;
     
     pdf.setFont('helvetica', 'bold');
-    pdf.setFontSize(16);
+    pdf.setFontSize(14);
     pdf.setTextColor(59, 47, 47);
-    pdf.text("TOTAL Pagar", 15, currentY);
+    pdf.text("TOTAL PAGO", 15, currentY);
     pdf.text(`${totalAmount.toLocaleString()} MT`, pageWidth - 15, currentY, { align: 'right' });
-    currentY += 10;
+    currentY += 8;
     
     pdf.setFont('helvetica', 'italic');
-    pdf.setFontSize(10);
+    pdf.setFontSize(9);
     pdf.setTextColor(100, 100, 100);
     const extensoText = numeroPorExtenso(totalAmount);
     // Capitalize first letter
     const extensoCap = extensoText.charAt(0).toUpperCase() + extensoText.slice(1);
     pdf.text(`Valor por extenso: ${extensoCap}`, 15, currentY);
-    currentY += 15;
+    currentY += 8;
 
-    // Pago status
-    const paymentStatus = order.payment_status || order.status;
-    if (paymentStatus === 'paid' || paymentStatus === 'completed' || order.amount_paid >= totalAmount) {
+    // 7. Payment Status & Method (left side)
+    const paymentStatus = order.payment_status || order.status || 'pending';
+    if (paymentStatus === 'paid' || paymentStatus === 'completed') {
         pdf.setFont('helvetica', 'bold');
-        pdf.setFontSize(14);
+        pdf.setFontSize(12);
         pdf.setTextColor(34, 197, 94); // Green 500
         pdf.text("Estado: Pago", 15, currentY);
     } else {
         pdf.setFont('helvetica', 'bold');
-        pdf.setFontSize(14);
+        pdf.setFontSize(12);
         pdf.setTextColor(239, 68, 68); // Red 500
         pdf.text("Estado: A Prazo / Por Pagar", 15, currentY);
     }
-    currentY += 8;
+    currentY += 6;
 
     const paymentMethodMapA4: Record<string, string> = {
         'mpesa': 'M-Pesa',
@@ -638,23 +638,23 @@ export const generateFormalInvoicePDF = async (order: any, items: any[], company
     const rawPaymentMethodA4 = order.payment_method || order.method || '';
     if (rawPaymentMethodA4) {
         pdf.setFont('helvetica', 'normal');
-        pdf.setFontSize(11);
+        pdf.setFontSize(10);
         pdf.setTextColor(100, 100, 100);
         pdf.text(`Método de Pagamento: ${paymentMethodMapA4[rawPaymentMethodA4] || rawPaymentMethodA4}`, 15, currentY);
     }
     
-    currentY += 12;
+    currentY += 8;
 
     // Dotted separator
     pdf.setLineDashPattern([1.5, 1.5], 0);
     pdf.setDrawColor(200, 200, 200);
     pdf.line(15, currentY, pageWidth - 15, currentY);
     pdf.setLineDashPattern([], 0);
-    currentY += 12;
+    currentY += 8;
 
     // ── FOOTER ──────────────────────────────────────────────────────────────
     const pageHeightA4 = pdf.internal.pageSize.getHeight();
-    let footerYA4 = pageHeightA4 - 55; 
+    let footerYA4 = pageHeightA4 - 45; 
 
     // Prevent overlap
     if (footerYA4 < currentY + 15) {
