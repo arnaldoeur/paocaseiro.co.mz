@@ -38,7 +38,7 @@ import { AdminEmailPipelineView } from '../components/admin/AdminEmailPipelineVi
 import { generateMasterReport } from '../services/reportGenerator';
 import { sendSMS, sendWhatsApp, notifyCustomer } from '../services/sms';
 import { sendEmail, sendTeamWelcomeEmail } from '../services/email';
-import { supabase, getConnectionMode, setConnectionMode, refreshSupabaseClient, type ConnectionMode } from '../services/supabase';
+import { supabase, getConnectionMode, setConnectionMode, refreshSupabaseClient, type ConnectionMode, getPublicUrlSafely } from '../services/supabase';
 import { printerService } from '../services/printer';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -291,11 +291,13 @@ export const Admin: React.FC = () => {
 
     // Data State
     const [products, setProducts] = useState<any[]>([]);
+    const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
 
     // Logistics State
     const [logisticsTab, setLogisticsTab] = useState<'dashboard' | 'deliveries' | 'drivers'>('dashboard');
     const [drivers, setDrivers] = useState<Driver[]>([]);
     const [isAddingDriver, setIsAddingDriver] = useState(false);
+    const [selectedDriverFile, setSelectedDriverFile] = useState<File | null>(null);
     const [isSupportTicketOpen, setIsSupportTicketOpen] = useState(false);
     const [supportForm, setSupportForm] = useState({ subject: '', message: '', image: null as File | null });
     const [isAddingDelivery, setIsAddingDelivery] = useState(false);
@@ -521,6 +523,7 @@ export const Admin: React.FC = () => {
     const [isEditingProduct, setIsEditingProduct] = useState(false);
     const [currentProduct, setCurrentProduct] = useState<any>(null);
     const [previewImage, setPreviewImage] = useState('');
+    const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
     const [productVariations, setProductVariations] = useState<any[]>([]);
     const [isEditingMember, setIsEditingMember] = useState(false);
     const [currentMember, setCurrentMember] = useState<any>(null);
@@ -1059,28 +1062,33 @@ export const Admin: React.FC = () => {
         }
     };
 
-    const handleDriverImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleDriverImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files || e.target.files.length === 0) return;
         const file = e.target.files[0];
-        const fileExt = file.name.split('.').pop();
-        const fileName = `driver-${Date.now()}.${fileExt}`;
-
-        const { error: uploadError } = await supabase.storage.from('products').upload(fileName, file);
-        if (uploadError) {
-            console.error('Upload Error:', uploadError);
-            alert('Erro ao fazer upload da imagem.');
-            return;
-        }
-
-        const { data } = supabase.storage.from('products').getPublicUrl(fileName);
-    if (typeof data !== 'undefined' && data && data.publicUrl && data.publicUrl.includes('/supabase-proxy')) {
-        data.publicUrl = data.publicUrl.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bbvowyztvzselxphbqmt.supabase.co');
-    }
-        setDriverForm({ ...driverForm, avatar_url: data.publicUrl });
+        setSelectedDriverFile(file);
+        // Instant local preview
+        setDriverForm({ ...driverForm, avatar_url: URL.createObjectURL(file) });
     };
 
     const handleSaveDriver = async (e: React.FormEvent) => {
         e.preventDefault();
+        
+        let finalAvatarUrl = driverForm.avatar_url;
+
+        // Deferred upload for Driver photo
+        if (selectedDriverFile) {
+            try {
+                const fileExt = selectedDriverFile.name.split('.').pop();
+                const fileName = `driver_${Date.now()}.${fileExt}`;
+                const { error: uploadErr } = await supabase.storage.from('products').upload(fileName, selectedDriverFile);
+                if (uploadErr) throw uploadErr;
+                
+                finalAvatarUrl = getPublicUrlSafely('products', fileName);
+            } catch (err: any) {
+                alert('Erro ao carregar foto do motorista: ' + err.message);
+                return;
+            }
+        }
 
         const driverData = {
             name: driverForm.name,
@@ -1089,20 +1097,28 @@ export const Admin: React.FC = () => {
             base_location: driverForm.base_location,
             email: driverForm.email,
             alternative_phone: driverForm.alternative_phone,
-            avatar_url: driverForm.avatar_url,
-            status: 'available' // default
+            avatar_url: finalAvatarUrl,
+            status: 'available'
         };
 
-        if (selectedDriver) {
-            await supabase.from('logistics_drivers').update(driverData).eq('id', selectedDriver.id);
-        } else {
-            await supabase.from('logistics_drivers').insert(driverData);
+        try {
+            if (selectedDriver) {
+                const { error } = await supabase.from('logistics_drivers').update(driverData).eq('id', selectedDriver.id);
+                if (error) throw error;
+            } else {
+                const { error } = await supabase.from('logistics_drivers').insert([driverData]);
+                if (error) throw error;
+            }
+            
+            setIsAddingDriver(false);
+            setSelectedDriverFile(null);
+            setSelectedDriver(null);
+            setDriverForm({ name: '', phone: '', vehicle: '', base_location: '', email: '', alternative_phone: '', avatar_url: '' });
+            loadDrivers();
+        } catch (err) {
+            console.error('Error saving driver:', err);
+            alert('Erro ao salvar motorista.');
         }
-
-        loadDrivers();
-        setIsAddingDriver(false);
-        setSelectedDriver(null);
-        setDriverForm({ name: '', phone: '', vehicle: '', base_location: '', email: '', alternative_phone: '', avatar_url: '' });
     };
 
     const handleDeleteDriver = async (id: string) => {
@@ -1353,11 +1369,8 @@ export const Admin: React.FC = () => {
         if (error) {
             alert('Erro ao enviar foto: ' + error.message);
         } else {
-            const { data } = supabase.storage.from('products').getPublicUrl(fileName);
-    if (typeof data !== 'undefined' && data && data.publicUrl && data.publicUrl.includes('/supabase-proxy')) {
-        data.publicUrl = data.publicUrl.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bbvowyztvzselxphbqmt.supabase.co');
-    }
-            setUserForm(prev => ({ ...prev, photo: data.publicUrl }));
+            const publicUrl = getPublicUrlSafely('products', fileName);
+            setUserForm(prev => ({ ...prev, photo: publicUrl }));
         }
     };
 
@@ -1743,42 +1756,12 @@ export const Admin: React.FC = () => {
         }
     };
 
-    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files || e.target.files.length === 0) return;
         const file = e.target.files[0];
-        const fileExt = file.name.split('.').pop();
-        const fileName = `${Date.now()}.${fileExt}`;
-        const filePath = `${fileName}`;
-
-        const { error: uploadError } = await supabase.storage.from('products').upload(filePath, file);
-
-        if (uploadError) {
-            console.error('Upload Error:', uploadError);
-            alert('Erro ao fazer upload da imagem.');
-            return;
-        }
-
-        const { data } = supabase.storage.from('products').getPublicUrl(filePath);
-    if (typeof data !== 'undefined' && data && data.publicUrl && data.publicUrl.includes('/supabase-proxy')) {
-        data.publicUrl = data.publicUrl.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bbvowyztvzselxphbqmt.supabase.co');
-    }
-
-        // Auto-sync with Drive module (Fotos de Produtos)
-        try {
-            const { data: folderInfo } = await supabase.from('drive_folders').select('id').eq('name', 'Fotos de Produtos').maybeSingle();
-            await supabase.from('drive_files').insert({
-                name: file.name,
-                path: filePath,
-                size: file.size,
-                type: file.type || 'image/jpeg',
-                folder_id: folderInfo?.id || null,
-                uploaded_by: 'admin'
-            });
-        } catch (syncErr) {
-            console.error("Failed to sync image with Drive:", syncErr);
-        }
-
-        setPreviewImage(data.publicUrl);
+        setSelectedImageFile(file);
+        // Instant local preview
+        setPreviewImage(URL.createObjectURL(file));
     };
 
     const handleSaveMember = async (e: React.FormEvent) => {
@@ -1860,9 +1843,39 @@ export const Admin: React.FC = () => {
             description_en: form.description_en?.value || null
         };
 
-        // ONLY update image if a new one was uploaded
-        if (previewImage) {
-            productData.image = previewImage; // Fixed: use 'image' column
+        // Deferred Image Upload
+        if (selectedImageFile) {
+            try {
+                const fileExt = selectedImageFile.name.split('.').pop();
+                const fileName = `product_${Date.now()}.${fileExt}`;
+                const { error: uploadError } = await supabase.storage.from('products').upload(fileName, selectedImageFile);
+                if (uploadError) throw uploadError;
+                
+                // Use safe public URL helper
+                productData.image = getPublicUrlSafely('products', fileName);
+
+                // Auto-sync with Drive module (Fotos de Produtos)
+                try {
+                    const { data: folderInfo } = await supabase.from('drive_folders').select('id').eq('name', 'Fotos de Produtos').maybeSingle();
+                    await supabase.from('drive_files').insert({
+                        name: selectedImageFile.name,
+                        path: fileName,
+                        size: selectedImageFile.size,
+                        type: selectedImageFile.type || 'image/jpeg',
+                        folder_id: folderInfo?.id || null,
+                        uploaded_by: 'admin'
+                    });
+                } catch (driveErr) {
+                    console.error("Non-critical drive sync error:", driveErr);
+                }
+            } catch (err: any) {
+                alert('Erro ao carregar imagem: ' + err.message);
+                setIsSubmitting(false);
+                return;
+            }
+        } else if (previewImage) {
+            // Keep existing image if no new file selected
+            productData.image = previewImage;
         }
 
         try {
@@ -2235,11 +2248,7 @@ export const Admin: React.FC = () => {
             const file = supportForm.image;
             const filePath = `tickets/${Date.now()}_${file.name}`;
             await supabase.storage.from('support-tickets').upload(filePath, file);
-            const { data } = supabase.storage.from('support-tickets').getPublicUrl(filePath);
-    if (typeof data !== 'undefined' && data && data.publicUrl && data.publicUrl.includes('/supabase-proxy')) {
-        data.publicUrl = data.publicUrl.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bbvowyztvzselxphbqmt.supabase.co');
-    }
-            imageUrl = data.publicUrl;
+            imageUrl = getPublicUrlSafely('support-tickets', filePath);
         }
 
         const body = `*Novo Ticket de Suporte*\n\n*Assunto:* ${supportForm.subject}\n*Mensagem:* ${supportForm.message}\n\n*Imagem:* ${imageUrl || 'N/A'}\n\n*Enviado por:* ${localStorage.getItem('admin_user')}`;
@@ -3552,7 +3561,7 @@ export const Admin: React.FC = () => {
                                             
                                             <div className="flex items-center gap-4">
                                                 <div className="flex items-center gap-2">
-                                                    <label className="text-[10px] font-bold text-gray-400 uppercase">Definir Qtd</label>
+                                                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Definir Qtd</label>
                                                     <input 
                                                         type="number" 
                                                         placeholder="Ex: 10" 
@@ -3574,7 +3583,7 @@ export const Admin: React.FC = () => {
                                                 </div>
                                                 
                                                 <div className="flex items-center gap-2">
-                                                    <label className="text-[10px] font-bold text-gray-400 uppercase">Unidade</label>
+                                                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Unidade</label>
                                                     <select 
                                                         className="p-1.5 text-xs border border-gray-200 rounded-lg focus:border-[#d9a65a] outline-none"
                                                         onChange={(e) => {
@@ -3600,7 +3609,7 @@ export const Admin: React.FC = () => {
                                                 </div>
 
                                                 <div className="flex items-center gap-2">
-                                                    <label className="text-[10px] font-bold text-gray-400 uppercase">Estado</label>
+                                                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Estado</label>
                                                     <select 
                                                         className="p-1.5 text-xs border border-gray-200 rounded-lg focus:border-[#d9a65a] outline-none"
                                                         onChange={(e) => {
@@ -3624,7 +3633,7 @@ export const Admin: React.FC = () => {
                                                 </div>
 
                                                 <div className="flex items-center gap-2">
-                                                    <label className="text-[10px] font-bold text-gray-400 uppercase">No Menu?</label>
+                                                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">No Menu?</label>
                                                     <select 
                                                         className="p-1.5 text-xs border border-gray-200 rounded-lg focus:border-[#d9a65a] outline-none"
                                                         onChange={(e) => {
@@ -4226,11 +4235,7 @@ export const Admin: React.FC = () => {
                                                     const fileName = `avatars/${Date.now()}_${file.name}`;
                                                     const { error } = await supabase.storage.from('products').upload(fileName, file);
                                                     if (error) return alert('Erro: ' + error.message);
-                                                    const { data } = supabase.storage.from('products').getPublicUrl(fileName);
-                                                    let url = data.publicUrl;
-                                                    if (url.includes('/supabase-proxy')) {
-                                                        url = url.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bbvowyztvzselxphbqmt.supabase.co');
-                                                    }
+                                                    const url = getPublicUrlSafely('products', fileName);
                                                     setMemberAvatar(url);
                                                 }}
                                             />

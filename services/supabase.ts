@@ -62,6 +62,32 @@ const getSupabaseKey = () => {
 const SUPABASE_URL = getSupabaseUrl();
 const SUPABASE_KEY = getSupabaseKey();
 
+/**
+ * Ensures a Supabase public URL always uses the active project ID (bbvowyztvzselxphbqmt)
+ * and strips any broken proxy prefixes.
+ */
+export const getPublicUrlSafely = (bucket: string, path: string): string => {
+    const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+    const ACTIVE_PROJECT_URL = 'https://bbvowyztvzselxphbqmt.supabase.co';
+    
+    if (!data?.publicUrl) return '';
+    
+    let url = data.publicUrl;
+    
+    // Safety 1: If it contains '/supabase-proxy', replace with real URL
+    if (url.includes('/supabase-proxy')) {
+        url = url.replace(/.*\/supabase-proxy/, `${ACTIVE_PROJECT_URL}/storage/v1/object/public`);
+    }
+    
+    // Safety 2: Ensure it doesn't contain the old project ID
+    const OLD_ID = 'bqiegszufcqimlvucrpm';
+    if (url.includes(OLD_ID)) {
+        url = url.replace(OLD_ID, 'bbvowyztvzselxphbqmt');
+    }
+    
+    return url;
+};
+
 if (!SUPABASE_URL || !SUPABASE_KEY) {
     console.error("Supabase configuration missing and fallback failed! The app will likely crash.");
 }

@@ -6,7 +6,7 @@ import {
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 import { motion, AnimatePresence } from 'framer-motion';
-import { supabase } from '../../services/supabase';
+import { supabase, getPublicUrlSafely } from '../../services/supabase';
 import { AdminNewsletterView } from './AdminNewsletterView';
 import { AdminEmailPipelineView } from './AdminEmailPipelineView';
 
@@ -37,6 +37,8 @@ export function AdminBlogView() {
     const [seoTitle, setSeoTitle] = useState('');
     const [seoDescription, setSeoDescription] = useState('');
     const [status, setStatus] = useState<'draft'|'published'>('draft');
+    const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
+    const [previewImageUrl, setPreviewImageUrl] = useState('');
 
     const imageHandler = React.useCallback(() => {
         const input = document.createElement('input');
@@ -55,13 +57,8 @@ export function AdminBlogView() {
                 const { error } = await supabase.storage.from('products').upload(fileName, file);
                 if (error) throw error;
                 
-                const { data } = supabase.storage.from('products').getPublicUrl(fileName);
-                
-                const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://bbvowyztvzselxphbqmt.supabase.co';
-                let finalUrl = data.publicUrl;
-                if (finalUrl.includes('localhost') && finalUrl.includes('/supabase-proxy')) {
-                    finalUrl = finalUrl.replace(/^http:\/\/(localhost|127\.0\.0\.1):\d+\/supabase-proxy/, supabaseUrl);
-                }
+                // Use safe public URL helper
+                const finalUrl = getPublicUrlSafely('products', fileName);
                 
                 const quill = quillRef.current?.getEditor();
                 if (quill) {
@@ -299,36 +296,37 @@ export function AdminBlogView() {
         else loadPosts();
     };
 
-    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
         
-        setIsUploadingImage(true);
-        try {
-            const fileExt = file.name.split('.').pop();
-            const fileName = `blog_cover_${Date.now()}.${fileExt}`;
-            
-            const { error: uploadError } = await supabase.storage.from('products').upload(`blog_media/${fileName}`, file);
-            if (uploadError) throw uploadError;
-            
-            const { data } = supabase.storage.from('products').getPublicUrl(`blog_media/${fileName}`);
-            
-            const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://bbvowyztvzselxphbqmt.supabase.co';
-            let finalUrl = data.publicUrl;
-            if (finalUrl.includes('localhost') && finalUrl.includes('/supabase-proxy')) {
-                finalUrl = finalUrl.replace(/^http:\/\/(localhost|127\.0\.0\.1):\d+\/supabase-proxy/, supabaseUrl);
-            }
-            
-            setImageUrl(finalUrl);
-        } catch (err: any) {
-            alert('Erro ao carregar imagem: ' + err.message);
-        } finally {
-            setIsUploadingImage(false);
-        }
+        setSelectedImageFile(file);
+        // Instant local preview
+        setPreviewImageUrl(URL.createObjectURL(file));
+        setImageUrl(URL.createObjectURL(file)); // Show in existing UI
     };
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
+        setLoading(true);
+
+        let finalImageUrl = imageUrl;
+
+        // Deferred upload for Blog Cover
+        if (selectedImageFile) {
+            try {
+                const fileExt = selectedImageFile.name.split('.').pop();
+                const fileName = `blog_cover_${Date.now()}.${fileExt}`;
+                const { error: uploadError } = await supabase.storage.from('products').upload(`blog_media/${fileName}`, selectedImageFile);
+                if (uploadError) throw uploadError;
+                
+                finalImageUrl = getPublicUrlSafely('products', `blog_media/${fileName}`);
+            } catch (err: any) {
+                alert('Erro ao carregar imagem de capa: ' + err.message);
+                setLoading(false);
+                return;
+            }
+        }
         
         const slugStr = currentPost ? currentPost.slug : title.toLowerCase()
             .normalize('NFD').replace(/[\u0300-\u036f]/g, "")
@@ -340,7 +338,7 @@ export function AdminBlogView() {
             slug: slugStr,
             content,
             excerpt,
-            image_url: imageUrl,
+            image_url: finalImageUrl,
             category,
             tags: tags.split(',').map(t => t.trim()).filter(Boolean),
             status,
