@@ -57,7 +57,7 @@ export function AdminBlogView() {
                 
                 const { data } = supabase.storage.from('products').getPublicUrl(fileName);
                 
-                const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co';
+                const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://bbvowyztvzselxphbqmt.supabase.co';
                 let finalUrl = data.publicUrl;
                 if (finalUrl.includes('localhost') && finalUrl.includes('/supabase-proxy')) {
                     finalUrl = finalUrl.replace(/^http:\/\/(localhost|127\.0\.0\.1):\d+\/supabase-proxy/, supabaseUrl);
@@ -313,7 +313,7 @@ export function AdminBlogView() {
             
             const { data } = supabase.storage.from('products').getPublicUrl(`blog_media/${fileName}`);
             
-            const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co';
+            const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://bbvowyztvzselxphbqmt.supabase.co';
             let finalUrl = data.publicUrl;
             if (finalUrl.includes('localhost') && finalUrl.includes('/supabase-proxy')) {
                 finalUrl = finalUrl.replace(/^http:\/\/(localhost|127\.0\.0\.1):\d+\/supabase-proxy/, supabaseUrl);

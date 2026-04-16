@@ -55,15 +55,25 @@ export const Blog: React.FC<{ language: Language }> = ({ language }) => {
 
     useEffect(() => {
         const fetchPosts = async () => {
-            const { invokeHostingerDB } = await import('../services/supabase');
-            const result = await invokeHostingerDB('fetch_blog');
+            setLoading(true);
+            try {
+                const { data, error } = await supabase
+                    .from('blog_posts')
+                    .select('*')
+                    .order('created_at', { ascending: false });
 
-            if (result.success && result.data) {
-                setPosts(result.data);
-                const cats = Array.from(new Set(result.data.map((p: any) => p.category).filter(Boolean))) as string[];
-                setCategories(cats);
+                if (error) throw error;
+
+                if (data) {
+                    setPosts(data);
+                    const cats = Array.from(new Set(data.map((p: any) => p.category).filter(Boolean))) as string[];
+                    setCategories(cats);
+                }
+            } catch (err) {
+                console.error('Error fetching posts:', err);
+            } finally {
+                setLoading(false);
             }
-            setLoading(false);
         };
         fetchPosts();
     }, []);

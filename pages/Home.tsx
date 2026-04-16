@@ -7,12 +7,12 @@ import {
 import { LandingLaunchPopup } from '../components/LandingLaunchPopup';
 import { translations, Language } from '../translations';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '../services/supabase';
 import { sendEmail } from '../services/email';
 import { sendSMS } from '../services/sms';
 import { notifyAdminSystemsAlert } from '../services/whatsapp';
 
-const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY);
+// client imported from services/supabase
 
 interface HomeProps {
     language: Language;

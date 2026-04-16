@@ -28,8 +28,15 @@ export const setConnectionMode = (mode: ConnectionMode) => {
 const getSupabaseUrl = () => {
     // Hardcoded production fallback
     const HARDCODED_URL = 'https://bbvowyztvzselxphbqmt.supabase.co';
+    const OLD_ID = 'bqiegszufcqimlvucrpm';
     
-    const directUrl = import.meta.env.VITE_SUPABASE_URL || process.env.VITE_SUPABASE_URL || HARDCODED_URL;
+    let directUrl = import.meta.env.VITE_SUPABASE_URL || process.env.VITE_SUPABASE_URL || HARDCODED_URL;
+    
+    // Safety check: If the URL is explicitly the old one, override it with the new one
+    if (directUrl.includes(OLD_ID)) {
+        console.warn('Stale project ID detected in ENV, overriding with active project.');
+        directUrl = HARDCODED_URL;
+    }
     
     if (import.meta.env.DEV && currentMode === 'proxy') {
         return `${window.location.origin}/supabase-proxy`;
@@ -37,12 +44,23 @@ const getSupabaseUrl = () => {
     return directUrl;
 };
 
+const getSupabaseKey = () => {
+    // Hardcoded production fallback for PUBLIC Anon Key
+    const HARDCODED_KEY = 'sb_publishable_usLS1fQUcQkjo9PUJG7jxw_p_2Y7cCW';
+    const OLD_KEY_START = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJxaWVnc3p1'; // Partial check for old key
+    
+    let key = import.meta.env.VITE_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || HARDCODED_KEY;
+    
+    // Safety check: If using old legacy key from previous project, override
+    if (key.includes('bqiegsz')) {
+        key = HARDCODED_KEY;
+    }
+    
+    return key;
+};
+
 const SUPABASE_URL = getSupabaseUrl();
-
-// Hardcoded production fallback for PUBLIC Anon Key
-const HARDCODED_KEY = 'sb_publishable_usLS1fQUcQkjo9PUJG7jxw_p_2Y7cCW';
-
-const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || HARDCODED_KEY;
+const SUPABASE_KEY = getSupabaseKey();
 
 if (!SUPABASE_URL || !SUPABASE_KEY) {
     console.error("Supabase configuration missing and fallback failed! The app will likely crash.");

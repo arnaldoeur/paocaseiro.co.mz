@@ -1074,7 +1074,7 @@ export const Admin: React.FC = () => {
 
         const { data } = supabase.storage.from('products').getPublicUrl(fileName);
     if (typeof data !== 'undefined' && data && data.publicUrl && data.publicUrl.includes('/supabase-proxy')) {
-        data.publicUrl = data.publicUrl.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co');
+        data.publicUrl = data.publicUrl.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bbvowyztvzselxphbqmt.supabase.co');
     }
         setDriverForm({ ...driverForm, avatar_url: data.publicUrl });
     };
@@ -1355,7 +1355,7 @@ export const Admin: React.FC = () => {
         } else {
             const { data } = supabase.storage.from('products').getPublicUrl(fileName);
     if (typeof data !== 'undefined' && data && data.publicUrl && data.publicUrl.includes('/supabase-proxy')) {
-        data.publicUrl = data.publicUrl.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co');
+        data.publicUrl = data.publicUrl.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bbvowyztvzselxphbqmt.supabase.co');
     }
             setUserForm(prev => ({ ...prev, photo: data.publicUrl }));
         }
@@ -1760,7 +1760,7 @@ export const Admin: React.FC = () => {
 
         const { data } = supabase.storage.from('products').getPublicUrl(filePath);
     if (typeof data !== 'undefined' && data && data.publicUrl && data.publicUrl.includes('/supabase-proxy')) {
-        data.publicUrl = data.publicUrl.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co');
+        data.publicUrl = data.publicUrl.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bbvowyztvzselxphbqmt.supabase.co');
     }
 
         // Auto-sync with Drive module (Fotos de Produtos)
@@ -2237,7 +2237,7 @@ export const Admin: React.FC = () => {
             await supabase.storage.from('support-tickets').upload(filePath, file);
             const { data } = supabase.storage.from('support-tickets').getPublicUrl(filePath);
     if (typeof data !== 'undefined' && data && data.publicUrl && data.publicUrl.includes('/supabase-proxy')) {
-        data.publicUrl = data.publicUrl.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co');
+        data.publicUrl = data.publicUrl.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bbvowyztvzselxphbqmt.supabase.co');
     }
             imageUrl = data.publicUrl;
         }
@@ -2308,7 +2308,7 @@ export const Admin: React.FC = () => {
     const handleTestDirectConnection = async () => {
         setDbStatus({ status: 'loading', message: "A testar ligação direta..." });
         try {
-            const directUrl = import.meta.env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co';
+            const directUrl = import.meta.env.VITE_SUPABASE_URL || 'https://bbvowyztvzselxphbqmt.supabase.co';
             const res = await fetch(`${directUrl}/rest/v1/`, {
                 headers: { 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY }
             });
@@ -4229,7 +4229,7 @@ export const Admin: React.FC = () => {
                                                     const { data } = supabase.storage.from('products').getPublicUrl(fileName);
                                                     let url = data.publicUrl;
                                                     if (url.includes('/supabase-proxy')) {
-                                                        url = url.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co');
+                                                        url = url.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bbvowyztvzselxphbqmt.supabase.co');
                                                     }
                                                     setMemberAvatar(url);
                                                 }}
@@ -6128,7 +6128,7 @@ export const Admin: React.FC = () => {
                                                                         if (error) return alert('Erro: ' + error.message);
                                                                         const { data } = supabase.storage.from('products').getPublicUrl(fileName);
     if (typeof data !== 'undefined' && data && data.publicUrl && data.publicUrl.includes('/supabase-proxy')) {
-        data.publicUrl = data.publicUrl.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bqiegszufcqimlvucrpm.supabase.co');
+        data.publicUrl = data.publicUrl.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bbvowyztvzselxphbqmt.supabase.co');
     }
                                                                         setCompanyInfo(prev => ({ ...prev, logo: data.publicUrl }));
                                                                     }}
