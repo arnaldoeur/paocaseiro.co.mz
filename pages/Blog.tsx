@@ -128,18 +128,14 @@ export const Blog: React.FC<{ language: Language }> = ({ language }) => {
 
                     <div className="w-full md:w-1/2">
                         <div className="w-full aspect-video rounded-[2rem] overflow-hidden shadow-2xl relative bg-[#3b2f2f] group">
-                            <video 
-                                src="/videos/video_paocaseiro.mp4" 
-                                className="w-full h-full object-cover"
-                                autoPlay 
-                                muted 
-                                loop 
-                                controls
-                                playsInline
-                                preload="metadata"
-                                poster="/images/about-process.jpeg"
-                                crossOrigin="anonymous"
-                            ></video>
+                            <iframe
+                                src="https://www.youtube-nocookie.com/embed/ApNnaPfh_o8?rel=0&modestbranding=1&showinfo=0"
+                                className="w-full h-full"
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                allowFullScreen
+                                title="Pão Caseiro - Bastidores"
+                                style={{ border: 'none' }}
+                            ></iframe>
                             <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent pointer-events-none group-hover:opacity-0 transition-opacity"></div>
                             <div className="absolute bottom-6 left-6 pointer-events-none text-white font-bold tracking-widest uppercase text-xs flex items-center gap-2 group-hover:opacity-0 transition-opacity">
                                 <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div>

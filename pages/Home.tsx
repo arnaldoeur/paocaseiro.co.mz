@@ -343,57 +343,41 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
             </section>
 
             {/* --- VIDEO SECTION --- */}
-            < section className="relative min-h-screen bg-[#3b2f2f] flex items-center justify-center overflow-hidden" >
-                {/* Video Container */}
-                < div className={`absolute inset-0 transition-opacity duration-500 ${isPlayingWithSound ? 'opacity-100 z-20 bg-black' : 'opacity-60'}`} >
-                    <video
-                        ref={videoRef}
-                        src="/videos/video_paocaseiro.mp4"
-                        autoPlay
-                        loop
-                        muted
-                        playsInline
-                        preload="metadata"
-                        poster="/images/about-process.jpeg"
-                        crossOrigin="anonymous"
-                        className={`w-full h-full transition-all duration-500 ${isPlayingWithSound ? 'object-contain' : 'object-cover pointer-events-none'}`}
-                        controls={isPlayingWithSound}
+            <section className="relative min-h-screen bg-[#3b2f2f] flex items-center justify-center overflow-hidden">
+                {/* YouTube Background - zero Supabase egress */}
+                <div className="absolute inset-0 opacity-60 pointer-events-none">
+                    <iframe
+                        src="https://www.youtube-nocookie.com/embed/ApNnaPfh_o8?autoplay=1&mute=1&loop=1&playlist=ApNnaPfh_o8&controls=0&playsinline=1&rel=0&modestbranding=1&showinfo=0&iv_load_policy=3&disablekb=1"
+                        className="absolute top-1/2 left-1/2 w-[300%] h-[300%] -translate-x-1/2 -translate-y-1/2"
+                        allow="autoplay; encrypted-media"
+                        allowFullScreen
+                        title="Pão Caseiro vídeo"
+                        style={{ border: 'none' }}
+                    />
+                </div>
+
+                {/* Overlay Content */}
+                <div className="relative z-10 container mx-auto px-6 text-center text-[#f7f1eb] animate-in fade-in duration-500">
+                    <h2 className="font-serif text-4xl md:text-6xl mb-6">{t.video.title}</h2>
+                    <p className="text-lg md:text-xl font-light mb-12 max-w-2xl mx-auto text-[#f7f1eb]/80">
+                        {t.video.subtitle}
+                    </p>
+
+                    <motion.a
+                        href="https://youtu.be/ApNnaPfh_o8"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        whileHover={{ scale: 1.1 }}
+                        whileTap={{ scale: 0.95 }}
+                        className="w-24 h-24 bg-[#f7f1eb] rounded-full flex items-center justify-center text-[#3b2f2f] shadow-[0_0_30px_rgba(217,166,90,0.5)] mx-auto group hover:bg-[#d9a65a] transition-colors relative z-10"
+                        style={{ willChange: "transform" }}
                     >
-                        Seu navegador não suporta a reprodução de vídeo.
-                    </video>
-                </div >
+                        <Play className="w-10 h-10 ml-1 fill-current" />
+                    </motion.a>
+                    <p className="mt-4 uppercase tracking-widest text-xs font-bold">{t.video.play}</p>
+                </div>
+            </section>
 
-                {!isPlayingWithSound && (
-                    <div className="relative z-10 container mx-auto px-6 text-center text-[#f7f1eb] animate-in fade-in duration-500">
-                        <h2 className="font-serif text-4xl md:text-6xl mb-6">{t.video.title}</h2>
-                        <p className="text-lg md:text-xl font-light mb-12 max-w-2xl mx-auto text-[#f7f1eb]/80">
-                            {t.video.subtitle}
-                        </p>
-
-                        <motion.button
-                            whileHover={{ scale: 1.1 }}
-                            whileTap={{ scale: 0.95 }}
-                            onClick={handlePlayWithSound}
-                            className="w-24 h-24 bg-[#f7f1eb] rounded-full flex items-center justify-center text-[#3b2f2f] shadow-[0_0_30px_rgba(217,166,90,0.5)] mx-auto group hover:bg-[#d9a65a] transition-colors relative z-10 pointer-events-auto"
-                            style={{ willChange: "transform" }}
-                        >
-                            <Play className="w-10 h-10 ml-1 fill-current" />
-                        </motion.button>
-                        <p className="mt-4 uppercase tracking-widest text-xs font-bold relative z-10">{t.video.play}</p>
-                    </div>
-                )}
-
-                {isPlayingWithSound && (
-                    <button
-                        onClick={handleCloseVideo}
-                        title={language === 'pt' ? 'Mudo / Fundo' : 'Mute / Background'}
-                        className="absolute top-24 md:top-8 right-6 md:right-8 text-white hover:text-[#d9a65a] transition-colors z-[30] bg-black/50 p-2 rounded-full backdrop-blur-md animate-in fade-in zoom-in duration-300"
-                        aria-label="Voltar para plano de fundo"
-                    >
-                        <X className="w-8 h-8" />
-                    </button>
-                )}
-            </section >
 
             {/* --- ABOUT SECTION --- */}
             < section id="about" className="min-h-screen flex items-center py-20 bg-[#f7f1eb]" >
