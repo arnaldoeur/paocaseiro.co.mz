@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Phone, KeyRound, Loader, AlertTriangle, CheckCircle, UserPlus, ShieldAlert, Scale, ScrollText } from 'lucide-react';
+import { X, Phone, KeyRound, Loader, AlertTriangle, CheckCircle, UserPlus, ShieldAlert, Scale, ScrollText, Lock, User } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { useNavigate } from 'react-router-dom';
 import { sendSMS } from '../services/sms';
@@ -8,6 +8,7 @@ import { sendOTPEmail } from '../services/email';
 import { logAudit } from '../services/audit';
 import { sendWhatsAppMessage } from '../services/whatsapp';
 import { NotificationService } from '../services/NotificationService';
+import { normalizeIdentifier } from '../src/utils/phone';
 
 interface ClientLoginModalProps {
     isOpen: boolean;
@@ -22,6 +23,7 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
     const [password, setPassword] = useState('');
     const [otp, setOtp] = useState('');
     const [loading, setLoading] = useState(false);
+    const [pendingReset, setPendingReset] = useState(false);
     const [error, setError] = useState('');
     const [successMsg, setSuccessMsg] = useState('');
     const [acceptedTerms, setAcceptedTerms] = useState(false);
@@ -47,19 +49,8 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
         setSuccessMsg('');
 
         try {
-            // Normalize identifier (if it looks like a phone number)
-            let formattedIdentifier = identifier.trim();
+            const formattedIdentifier = normalizeIdentifier(identifier);
             const isEmail = formattedIdentifier.includes('@');
-
-            if (!isEmail) {
-                formattedIdentifier = formattedIdentifier.replace(/\D/g, '');
-                if (formattedIdentifier.length >= 9) {
-                    if (!formattedIdentifier.startsWith('258')) {
-                        formattedIdentifier = '258' + formattedIdentifier;
-                    }
-                    formattedIdentifier = '+' + formattedIdentifier;
-                }
-            }
 
             if (mode === 'password') {
                 // Check if user exists by email or phone
@@ -78,6 +69,24 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
 
                 if (!customerData.password) {
                     throw new Error('Esta conta não tem uma palavra-passe definida. Use o acesso via OTP.');
+                }
+
+                if (pendingReset) {
+                    setIdentifier(formattedIdentifier);
+                    // Manually calling reset logic
+                    const code = Math.floor(100000 + Math.random() * 900000).toString();
+                    setGeneratedOtp(code);
+                    
+                    if (isEmail) {
+                        await sendOTPEmail(formattedIdentifier, code);
+                        setSuccessMsg(language === 'en' ? 'Reset code sent via Email.' : 'Código de recuperação enviado por Email.');
+                    } else {
+                        await NotificationService.sendOTP(formattedIdentifier, code);
+                        setSuccessMsg(language === 'en' ? 'Reset code sent! Check your phone.' : 'Código de recuperação enviado! Verifique o telemóvel.');
+                    }
+                    setStep('reset-otp');
+                    setPendingReset(false);
+                    return;
                 }
 
                 setExistingCustomer(customerData);
@@ -143,7 +152,7 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                 }
 
                 if (formattedIdentifier.length < 12) {
-                    throw new Error('Introduza um número de telemóvel válido.');
+                    throw new Error('Introduza um número de telemóvel válido (ex: 84/85/86/87...).');
                 }
 
                 // Check if already exists
@@ -205,7 +214,7 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
             const { data: customers, error: dbError } = await supabase
                 .from('customers')
                 .select('*')
-                .or(`contact_no.eq."${identifier}",email.eq."${identifier}"`)
+                .or(`contact_no.eq."${normalizeIdentifier(identifier)}",email.eq."${normalizeIdentifier(identifier)}"`)
                 .eq('password', password)
                 .limit(1);
 
@@ -240,37 +249,21 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
         setError('');
         setSuccessMsg('');
         try {
-            const isEmail = identifier.includes('@');
+            const formattedIdentifier = normalizeIdentifier(identifier);
+            const isEmail = formattedIdentifier.includes('@');
             const code = Math.floor(100000 + Math.random() * 900000).toString();
             setGeneratedOtp(code);
             
             if (isEmail) {
-                await sendOTPEmail(identifier, code);
+                await sendOTPEmail(formattedIdentifier, code);
                 setSuccessMsg(language === 'en' ? 'Reset code sent via Email.' : 'Código de recuperação enviado por Email.');
             } else {
-                const smsBody = `Pao Caseiro: Seu codigo de recuperacao e ${code}.`;
-                
-                let smsSent = false;
-                let waSent = false;
-
                 try {
-                    await sendSMS(identifier.replace('+', ''), smsBody);
-                    smsSent = true;
+                    await NotificationService.sendOTP(formattedIdentifier, code);
                 } catch (e) {
-                    console.error('[AUTH] Reset SMS failed:', e);
-                }
-
-                try {
-                    const waRes = await sendWhatsAppMessage(identifier.replace('+', ''), `Pão Caseiro: O seu código de recuperação de palavra-passe é *${code}*.`);
-                    if (waRes && waRes.success) waSent = true;
-                } catch (e) {
-                    console.error('[AUTH] Reset WhatsApp failed:', e);
-                }
-
-                if (!smsSent && !waSent) {
+                    console.error('[AUTH] Reset OTP failed:', e);
                     throw new Error(language === 'en' ? 'Failed to send recovery code.' : 'Erro ao enviar código de recuperação.');
                 }
-
                 setSuccessMsg(language === 'en' ? 'Reset code sent! Check your phone.' : 'Código de recuperação enviado! Verifique o telemóvel.');
             }
             setStep('reset-otp');
@@ -298,7 +291,8 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
         setLoading(true);
         setError('');
         try {
-            const { error } = await supabase.from('customers').update({ password }).eq('contact_no', existingCustomer?.contact_no || identifier);
+            const formattedId = normalizeIdentifier(identifier);
+            const { error } = await supabase.from('customers').update({ password }).or(`contact_no.eq."${formattedId}",email.eq."${formattedId}"`);
             if (error) throw error;
             
             setSuccessMsg(language === 'en' ? 'Password updated successfully! Please log in.' : 'Palavra-passe atualizada com sucesso! Por favor, entre na sua conta.');
@@ -353,16 +347,17 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
         setError('');
 
         try {
+            const formattedIdentifier = normalizeIdentifier(identifier);
             const { error: upsertError } = await supabase
                 .from('customers')
                 .upsert({
-                    contact_no: identifier.includes('@') ? (whatsapp || identifier) : identifier,
+                    contact_no: formattedIdentifier,
                     name: name,
                     email: email || null,
                     date_of_birth: dob || null,
                     address: address || null,
                     nuit: nuit || null,
-                    whatsapp: whatsapp || null,
+                    whatsapp: whatsapp ? normalizeIdentifier(whatsapp) : null,
                     password: password,
                     updated_at: new Date().toISOString()
                 }, { onConflict: 'contact_no' });
@@ -372,12 +367,12 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
             const { data: customers } = await supabase
                 .from('customers')
                 .select('*')
-                .eq('contact_no', identifier)
+                .eq('contact_no', formattedIdentifier)
                 .limit(1);
 
             const customerData = customers?.[0];
 
-            await sendSMS(identifier.replace('+', ''), `Olá ${name.split(' ')[0]}, o seu registo na Pão Caseiro foi concluído com sucesso!`);
+            await NotificationService.sendCustomNotification(formattedIdentifier, `Olá ${name.split(' ')[0]}, o seu registo na Pão Caseiro foi concluído com sucesso!`);
 
             const phoneToSave = customerData?.contact_no && !customerData?.contact_no?.includes('@') ? customerData.contact_no : (!identifier.includes('@') ? identifier : whatsapp || '');
             if (phoneToSave) localStorage.setItem('pc_auth_phone', phoneToSave);
@@ -480,7 +475,7 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                                 <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <button
-                                            onClick={() => { setMode('register'); setStep('input'); }}
+                                            onClick={() => { setMode('register'); setStep('input'); setPendingReset(false); }}
                                             className="relative overflow-hidden group p-1 w-full rounded-[2rem] transition-all"
                                         >
                                             <div className="absolute inset-0 bg-gradient-to-br from-[#d9a65a] to-[#b88a4a] opacity-0 group-hover:opacity-10 transition-opacity" />
@@ -490,35 +485,48 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                                                 </div>
                                                 <div className="text-center">
                                                     <h4 className="font-serif text-xl text-[#3b2f2f] mb-1">{language === 'en' ? 'Create Account' : 'Criar Conta'}</h4>
-                                                    <p className="text-xs text-gray-500 font-medium px-4">{language === 'en' ? 'Join it and get exclusive discounts' : 'Registe-se e receba descontos exclusivos'}</p>
+                                                    <p className="text-xs text-gray-500 font-medium px-4">{language === 'en' ? 'Manage your orders and track deliveries.' : 'Gira os seus pedidos e acompanhe as suas entregas.'}</p>
                                                 </div>
                                             </div>
                                         </button>
 
                                         <div className="grid grid-cols-1 gap-4">
-                                            <button
-                                                onClick={() => { setMode('password'); setStep('input'); }}
-                                                className="group p-6 rounded-3xl border border-gray-100 bg-white hover:border-[#d9a65a] hover:bg-gray-50 transition-all flex items-center gap-4 text-left shadow-sm hover:shadow-md"
-                                            >
-                                                <div className="w-12 h-12 rounded-2xl bg-[#f7f1eb] flex items-center justify-center text-[#d9a65a] group-hover:bg-[#d9a65a] group-hover:text-white transition-all">
-                                                    <KeyRound className="w-6 h-6" />
-                                                </div>
-                                                <div>
-                                                    <p className="font-bold text-[#3b2f2f]">{language === 'en' ? 'Password' : 'Palavra-passe'}</p>
-                                                    <p className="text-[10px] text-gray-400 font-medium uppercase tracking-widest">{language === 'en' ? 'Phone or Email' : 'Telemóvel ou Email'}</p>
-                                                </div>
-                                            </button>
+                                            <div className="relative group">
+                                                <button
+                                                    onClick={() => { setMode('password'); setStep('input'); setPendingReset(false); }}
+                                                    className="w-full p-6 rounded-3xl border border-gray-100 bg-white hover:border-[#d9a65a] hover:bg-gray-50 transition-all flex items-center gap-4 text-left shadow-sm hover:shadow-md"
+                                                >
+                                                    <div className="w-12 h-12 rounded-2xl bg-[#f7f1eb] flex items-center justify-center text-[#d9a65a] group-hover:bg-[#d9a65a] group-hover:text-white transition-all">
+                                                        <KeyRound className="w-6 h-6" />
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <p className="font-bold text-[#3b2f2f]">{language === 'en' ? 'Password' : 'Palavra-passe'}</p>
+                                                        <p className="text-[10px] text-gray-400 font-medium uppercase tracking-widest">{language === 'en' ? 'Quick access with your secure password.' : 'Aceda rapidamente com a sua senha segura.'}</p>
+                                                    </div>
+                                                </button>
+                                                <button 
+                                                    onClick={(e) => { 
+                                                        e.stopPropagation(); 
+                                                        setMode('password'); 
+                                                        setStep('input'); 
+                                                        setPendingReset(true); 
+                                                    }}
+                                                    className="absolute bottom-2 right-4 text-[9px] font-black text-[#d9a65a] hover:brightness-110 uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-opacity"
+                                                >
+                                                    {language === 'en' ? 'Forgot?' : 'Esqueci a senha?'}
+                                                </button>
+                                            </div>
 
                                             <button
-                                                onClick={() => { setMode('otp'); setStep('input'); }}
+                                                onClick={() => { setMode('otp'); setStep('input'); setPendingReset(false); }}
                                                 className="group p-6 rounded-3xl border border-gray-100 bg-white hover:border-[#d9a65a] hover:bg-gray-50 transition-all flex items-center gap-4 text-left shadow-sm hover:shadow-md"
                                             >
                                                 <div className="w-12 h-12 rounded-2xl bg-[#f7f1eb] flex items-center justify-center text-[#d9a65a] group-hover:bg-[#d9a65a] group-hover:text-white transition-all">
                                                     <ShieldAlert className="w-6 h-6" />
                                                 </div>
                                                 <div>
-                                                    <p className="font-bold text-[#3b2f2f]">{language === 'en' ? 'OTP Access' : 'Acesso Rápido'}</p>
-                                                    <p className="text-[10px] text-gray-400 font-medium uppercase tracking-widest">{language === 'en' ? 'SMS or WhatsApp' : 'SMS ou WhatsApp'}</p>
+                                                    <p className="font-bold text-[#3b2f2f]">{language === 'en' ? 'OTP Access' : 'Acesso OTP'}</p>
+                                                    <p className="text-[10px] text-gray-400 font-medium uppercase tracking-widest">{language === 'en' ? 'Secure passwordless entry via WhatsApp or SMS.' : 'Entrada segura sem senha via WhatsApp ou SMS.'}</p>
                                                 </div>
                                             </button>
                                         </div>
@@ -889,7 +897,7 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                                         <button type="button" onClick={() => setStep('choice')} className="w-full text-[10px] font-black text-gray-400 hover:text-[#3b2f2f] uppercase tracking-[0.2em]">{language === 'en' ? 'Cancel Registration' : 'Cancelar Registo'}</button>
                                     </div>
                                 </form>
-                            )}
+                            ) : null}
                         </div>
 
                         <AnimatePresence>

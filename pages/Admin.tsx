@@ -139,6 +139,28 @@ export const Admin: React.FC = () => {
         return () => { document.head.removeChild(styleTag); };
     }, []);
 
+    useEffect(() => {
+        const fetchEmailStatus = async () => {
+            try {
+                const { data } = await supabase
+                    .from('system_settings')
+                    .select('value')
+                    .eq('key', 'email_status')
+                    .maybeSingle();
+                
+                if (data?.value) {
+                    setEmailStatus(data.value);
+                }
+            } catch (err) {
+                console.error("Error fetching email status:", err);
+            }
+        };
+
+        fetchEmailStatus();
+        const interval = setInterval(fetchEmailStatus, 5 * 60 * 1000); // 5 min
+        return () => clearInterval(interval);
+    }, []);
+
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [userId, setUserId] = useState('');
     const [username, setUsername] = useState('');
@@ -151,6 +173,7 @@ export const Admin: React.FC = () => {
     const [soundEnabled, setSoundEnabled] = useState(() => localStorage.getItem('admin_sound') !== 'false');
     const [whatsappMenuMode, setWhatsappMenuMode] = useState(false);
     const [isUpdatingMaintenance, setIsUpdatingMaintenance] = useState(false);
+    const [emailStatus, setEmailStatus] = useState<{ mode: 'production' | 'sandbox' | 'error' | 'unknown', last_checked?: string }>({ mode: 'unknown' });
 
     // Sidebar/View State
     const [activeView, setActiveView] = useState<'dashboard' | 'orders' | 'kitchen' | 'stock' | 'pos' | 'delivery' | 'settings' | 'customers' | 'team' | 'logistics' | 'support' | 'support_ai' | 'billing' | 'documents' | 'messages' | 'blog' | 'newsletter' | 'queue' | 'notificacoes'>('dashboard');
@@ -296,7 +319,6 @@ export const Admin: React.FC = () => {
 
     // Data State
     const [products, setProducts] = useState<any[]>([]);
-    const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
 
     // Logistics State
     const [logisticsTab, setLogisticsTab] = useState<'dashboard' | 'deliveries' | 'drivers'>('dashboard');
@@ -2935,6 +2957,31 @@ export const Admin: React.FC = () => {
                         </p>
                     </div>
                     <div className="flex items-center gap-4">
+                        {/* Email Service Status Badge */}
+                        <div 
+                            onClick={() => setActiveView('notificacoes')}
+                            className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border cursor-pointer transition-all hover:brightness-110 ${
+                                emailStatus.mode === 'production' ? 'bg-green-50 border-green-100 text-green-600' :
+                                emailStatus.mode === 'sandbox' ? 'bg-amber-50 border-amber-100 text-amber-600' :
+                                emailStatus.mode === 'error' ? 'bg-red-50 border-red-100 text-red-600 animate-pulse' :
+                                'bg-gray-50 border-gray-100 text-gray-400 opacity-60'
+                            }`}
+                            title={`Email Status: ${emailStatus.mode.toUpperCase()}${emailStatus.last_checked ? ` (Last: ${new Date(emailStatus.last_checked).toLocaleTimeString()})` : ''}`}
+                        >
+                            <div className={`w-2 h-2 rounded-full ${
+                                emailStatus.mode === 'production' ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' :
+                                emailStatus.mode === 'sandbox' ? 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]' :
+                                emailStatus.mode === 'error' ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]' :
+                                'bg-gray-300'
+                            } ${emailStatus.mode !== 'unknown' ? 'animate-pulse' : ''}`}></div>
+                            <span className="text-[10px] font-black uppercase tracking-widest hidden lg:block">Email: {
+                                emailStatus.mode === 'production' ? 'Produção' :
+                                emailStatus.mode === 'sandbox' ? 'Sandbox' :
+                                emailStatus.mode === 'error' ? 'Erro Crítico' :
+                                'A verificar...'
+                            }</span>
+                        </div>
+
                         <button 
                             onClick={toggleSound} 
                             className={`p-3 rounded-2xl transition-all shadow-sm ${soundEnabled ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'}`}

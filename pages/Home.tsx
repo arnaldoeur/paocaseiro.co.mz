@@ -3,12 +3,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     Play, Wheat, Coffee, Cake, Croissant,
     MapPin, ZoomIn, ChevronLeft, ChevronRight, X, Phone, Mail, ShoppingBag,
-    Star, MessageSquare, Truck, Clock, Instagram, Facebook, ArrowRight
+    Star, MessageSquare, Truck, Clock, Instagram, Facebook, ArrowRight, ChevronDown
 } from 'lucide-react';
 import { LandingLaunchPopup } from '../components/LandingLaunchPopup';
 import { translations, Language } from '../translations';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
-import { TestimonialCard } from '../components/TestimonialCard';
+
 import { supabase } from '../services/supabase';
 import { sendEmail } from '../services/email';
 import { sendSMS } from '../services/sms';
@@ -281,64 +281,65 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
     return (
         <>
             {/* --- HERO SECTION --- */}
-            <section id="hero" className="relative min-h-[90vh] flex items-center pt-28 overflow-hidden bg-[#fdfcfb]">
-                <div className="container mx-auto px-6 md:px-12 grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-                    <motion.div 
-                        initial={{ opacity: 0, x: -30 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ duration: 0.8 }}
-                        className="z-10 text-center lg:text-left"
-                    >
-                        <div className="inline-block px-4 py-1.5 rounded-full bg-[#f7f1eb] text-[#d9a65a] font-black text-[10px] uppercase tracking-[0.2em] mb-6 shadow-sm">
-                            🍞 O Melhor Pão de Maputo
-                        </div>
-                        <h1 className="font-serif text-5xl md:text-7xl lg:text-8xl text-[#3b2f2f] leading-tight mb-8">
-                            Sabor que <span className="text-[#d9a65a] italic">Conecta</span> Famílias
-                        </h1>
-                        <p className="text-lg md:text-xl text-[#3b2f2f]/70 mb-10 max-w-xl mx-auto lg:mx-0 leading-relaxed font-light">
-                            Descubra o prazer de acordar com pão artesanal fresquinho na sua porta. Tradição moçambicana com um toque de elegância moderna.
-                        </p>
-                        <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
-                            <Link to="/menu" className="px-10 py-5 bg-[#3b2f2f] text-[#d9a65a] rounded-2xl font-black uppercase tracking-widest hover:bg-[#d9a65a] hover:text-[#3b2f2f] transition-all shadow-xl hover:shadow-2xl active:scale-95 text-sm md:text-base flex items-center justify-center gap-2">
-                                <ShoppingBag className="w-5 h-5" /> Fazer Pedido
-                            </Link>
-                            <button onClick={() => scrollToSection('gallery')} className="px-10 py-5 bg-transparent border-2 border-[#3b2f2f]/10 text-[#3b2f2f] rounded-2xl font-bold uppercase tracking-widest hover:bg-white transition-all text-sm md:text-base">
-                                Galeria
-                            </button>
-                        </div>
-                    </motion.div>
-
-                    <div className="relative lg:block hidden">
-                        <motion.div
-                            initial={{ opacity: 0, scale: 0.8, rotate: 5 }}
-                            animate={{ opacity: 1, scale: 1, rotate: 3 }}
-                            transition={{ duration: 1, type: "spring" }}
-                            className="relative z-10"
-                        >
-                            <img src="https://images.unsplash.com/photo-1509440159596-0249088772ff?q=80&w=1200&auto=format&fit=crop" className="rounded-[4rem] shadow-2xl hover:rotate-0 transition-transform duration-700" alt="Bread" />
-                            
-                            <motion.div 
-                                animate={{ y: [0, -10, 0] }}
-                                transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-                                className="absolute -bottom-10 -left-10 bg-white p-8 rounded-[2rem] shadow-2xl border border-gray-50"
-                            >
-                                <div className="flex items-center gap-4 text-[#3b2f2f]">
-                                    <div className="w-12 h-12 bg-[#d9a65a]/10 rounded-full flex items-center justify-center">
-                                        <Star className="text-[#d9a65a] fill-[#d9a65a] w-6 h-6" />
-                                    </div>
-                                    <div>
-                                        <p className="font-black text-2xl">4.9/5</p>
-                                        <p className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Avaliação Média</p>
-                                    </div>
-                                </div>
-                            </motion.div>
-                        </motion.div>
-                    </div>
+            <section id="hero" className="relative min-h-screen flex items-center justify-center overflow-hidden pt-20">
+                <div className="absolute inset-0 z-0">
+                    {/* Hero Background Image instead of Video */}
+                    <div className="w-full h-full bg-cover bg-center hero-bg-section" />
+                    <div className="absolute inset-0 bg-black/50" />
                 </div>
 
-                {/* Abstract Background Elements */}
-                <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] bg-[#d9a65a]/5 rounded-full blur-3xl -z-10 animate-pulse"></div>
-                <div className="absolute bottom-[10%] left-[-5%] w-[300px] h-[300px] bg-[#3b2f2f]/5 rounded-full blur-3xl -z-10"></div>
+                <motion.div
+                    initial={{ opacity: 0, y: 30 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.8 }}
+                    style={{ willChange: "transform, opacity" }}
+                    className="relative z-10 container mx-auto px-6 text-center text-[#f7f1eb]"
+                >
+                    <h1 className="font-serif text-5xl md:text-7xl lg:text-8xl mb-6 drop-shadow-md">
+                        {t.hero.title}
+                    </h1>
+                    <p className="text-xl md:text-3xl font-light mb-8 max-w-3xl mx-auto leading-relaxed drop-shadow-sm">
+                        {t.hero.subtitle}
+                    </p>
+                    <p className="text-base md:text-lg mb-12 max-w-2xl mx-auto opacity-90 leading-relaxed font-light">
+                        {t.hero.description}
+                    </p>
+
+                    <div className="flex flex-col md:flex-row gap-4 justify-center items-center">
+                        {/* [NEW] Primary Button: Ver Menu */}
+                        <button
+                            onClick={() => navigate('/menu')}
+                            className="bg-[#d9a65a] text-[#3b2f2f] px-8 py-4 rounded-full font-bold uppercase tracking-widest hover:bg-[#f7f1eb] transition-all flex items-center gap-2 w-full md:w-auto justify-center shadow-lg"
+                        >
+                            {language === 'pt' ? 'Ver Menu' : 'View Menu'}
+                        </button>
+                        <button
+                            onClick={() => navigate('/blog')}
+                            className="border-2 border-[#f7f1eb] text-[#f7f1eb] px-8 py-4 rounded-full font-bold uppercase tracking-widest hover:bg-[#f7f1eb] hover:text-[#3b2f2f] transition-all w-full md:w-auto"
+                        >
+                            {t.hero.gallery}
+                        </button>
+                    </div>
+
+                    <a
+                        href="https://wa.me/258846930960?text=Olá%20Pão%20Caseiro!%20Gostaria%20de%20fazer%20uma%20encomenda."
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-8 text-sm md:text-base font-bold bg-[#3b2f2f]/60 backdrop-blur-sm inline-block px-6 py-2 rounded-full hover:bg-[#d9a65a] hover:text-[#3b2f2f] transition-colors mb-2"
+                    >
+                        {t.hero.call}: <span className="text-[#d9a65a]">+258 84 693 0960</span>
+                    </a>
+                </motion.div>
+
+                {/* Scrolldown Indicator */}
+                <motion.div
+                    animate={{ y: [0, 10, 0] }}
+                    transition={{ duration: 2, repeat: Infinity }}
+                    className="absolute bottom-10 left-1/2 -translate-x-1/2 z-10 text-white/50 cursor-pointer"
+                    onClick={() => scrollToSection('about')}
+                >
+                    <ChevronDown className="w-8 h-8" />
+                </motion.div>
             </section>
 
             {/* --- VIDEO SECTION --- */}
@@ -487,7 +488,7 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                                 className="group bg-[#3b2f2f]/40 backdrop-blur-md rounded-[2.5rem] border border-[#f7f1eb]/10 hover:border-[#d9a65a]/50 transition-all duration-500 shadow-2xl flex flex-col overflow-hidden cursor-pointer"
                             >
                                 <div className="p-8 pb-4 flex flex-col items-center text-center flex-grow">
-                                    <div className="mb-8 p-5 bg-[#3b2f2f] rounded-2xl group-hover:bg-[#d9a65a] group-hover:text-[#3b2f2f] transition-all duration-500 shadow-xl group-hover:rotate-12">
+                                    <div className="mb-8 p-5 bg-[#3b2f2f] rounded-2xl group-hover:bg-[#d9a65a] group-hover:text-[#3b2f2f] transition-all duration-500 shadow-xl">
                                         <service.icon className="w-10 h-10" />
                                     </div>
                                     <h3 className="font-serif text-2xl mb-4 text-[#f7f1eb] tracking-tight group-hover:text-[#d9a65a] transition-colors">{t.services.items[idx].title}</h3>
@@ -767,133 +768,8 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                 </div>
             </section >
 
-            {/* --- TESTIMONIALS SECTION --- */}
-            <section className="py-32 bg-[#fdfcfb] px-6 md:px-12 relative overflow-hidden">
-                <div className="absolute top-1/2 left-0 -translate-y-1/2 w-64 h-64 bg-[#d9a65a]/5 rounded-full blur-[100px] -ml-32"></div>
-                <div className="max-w-7xl mx-auto relative z-10">
-                    <div className="mb-20 text-center">
-                        <span className="text-[#d9a65a] font-black text-[10px] uppercase tracking-[0.3em] mb-4 block">Feedbacks Reais</span>
-                        <h2 className="font-serif text-4xl md:text-6xl text-[#3b2f2f] mb-6">O que dizem os nossos <span className="text-[#d9a65a] italic">clien-tes</span></h2>
-                        <div className="w-24 h-1.5 bg-[#d9a65a] mx-auto rounded-full"></div>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                        <TestimonialCard 
-                            name="Ancha Atumane"
-                            role="Cliente Fiel"
-                            content="O pão é simplesmente divino. O aroma que sinto quando chego em casa com o pão quentinho me faz lembrar da minha infância. A equipe é muito atenciosa e o serviço impecável."
-                            avatar="https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=200&auto=format&fit=crop"
-                        />
-                        <TestimonialCard 
-                            name="Eduardo Mondlane Jr."
-                            role="Crítico Gastronómico"
-                            content="A Pão Caseiro elevou o nível da panificação em Maputo. Ingredientes de qualidade superior e uma técnica que respeita a tradição. Recomendo vivamente a focaccia de alecrim."
-                            avatar="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=200&auto=format&fit=crop"
-                        />
-                        <TestimonialCard 
-                            name="Sérgio Mazive"
-                            role="Cliente corporativo"
-                            content="Melhor lugar para encomendar para eventos. O buffet de pães e salgados é sempre elogiado. Instalações ótimas e serviço de primeira qualidade em cada entrega realizada."
-                            avatar="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=200&auto=format&fit=crop"
-                        />
-                    </div>
-                </div>
-            </section>
 
-            {/* --- DIFERENCIAIS SECTION --- */}
-            <section className="py-32 bg-white px-6 md:px-12">
-                <div className="max-w-7xl mx-auto">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-16">
-                        <div className="text-center group">
-                            <div className="w-24 h-24 bg-[#f7f1eb] rounded-[2rem] flex items-center justify-center mx-auto mb-8 transform rotate-6 group-hover:rotate-0 transition-all duration-500 shadow-lg shadow-[#d9a65a]/10">
-                                <Truck className="w-10 h-10 text-[#d9a65a]" />
-                            </div>
-                            <h3 className="font-serif text-2xl text-[#3b2f2f] mb-4">Entrega em Maputo</h3>
-                            <p className="text-[#3b2f2f]/60 leading-relaxed text-sm">
-                                O seu pão chega ainda quentinho em menos de 45 minutos em toda a cidade de Maputo e arredores.
-                            </p>
-                        </div>
-                        <div className="text-center group">
-                            <div className="w-24 h-24 bg-[#f7f1eb] rounded-[2rem] flex items-center justify-center mx-auto mb-8 transform -rotate-6 group-hover:rotate-0 transition-all duration-500 shadow-lg shadow-[#d9a65a]/10">
-                                <Star className="w-10 h-10 text-[#d9a65a] fill-[#d9a65a]/20" />
-                            </div>
-                            <h3 className="font-serif text-2xl text-[#3b2f2f] mb-4">Ingredientes Top</h3>
-                            <p className="text-[#3b2f2f]/60 leading-relaxed text-sm">
-                                Usamos apenas as melhores farinhas moçambicanas e processos de fermentação natural longa sem aditivos.
-                            </p>
-                        </div>
-                        <div className="text-center group">
-                            <div className="w-24 h-24 bg-[#f7f1eb] rounded-[2rem] flex items-center justify-center mx-auto mb-8 transform rotate-3 group-hover:rotate-0 transition-all duration-500 shadow-lg shadow-[#d9a65a]/10">
-                                <Clock className="w-10 h-10 text-[#d9a65a]" />
-                            </div>
-                            <h3 className="font-serif text-2xl text-[#3b2f2f] mb-4">Aberto das 06h às 21h</h3>
-                            <p className="text-[#3b2f2f]/60 leading-relaxed text-sm">
-                                Prontos para lhe servir no café da manhã e jantar, com produtos sempre saindo do forno agora.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            </section>
 
-            {/* --- FOOTER --- */}
-            <footer className="bg-[#3b2f2f] text-white/80 py-24 px-6 md:px-12 border-t border-white/5 relative overflow-hidden">
-                <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-16 relative z-10">
-                    <div className="col-span-1 md:col-span-1">
-                        <img src="/logo_on_dark.png" alt="Pão Caseiro" className="h-16 object-contain mb-8 grayscale opacity-80 hover:grayscale-0 hover:opacity-100 transition-all" />
-                        <p className="text-sm leading-relaxed mb-8 font-light text-white/50">
-                            Levamos o sabor autêntico do pão artesanal para a sua mesa, com todo o carinho e tradição que a sua família merece.
-                        </p>
-                        <div className="flex gap-4">
-                            <a href="#" className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center hover:bg-[#d9a65a] hover:text-[#3b2f2f] transition-all duration-300">
-                                <Instagram className="w-5 h-5" />
-                            </a>
-                            <a href="#" className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center hover:bg-[#d9a65a] hover:text-[#3b2f2f] transition-all duration-300">
-                                <Facebook className="w-5 h-5" />
-                            </a>
-                        </div>
-                    </div>
-                    
-                    <div>
-                        <h3 className="text-white font-serif text-xl mb-8">Navegação</h3>
-                        <ul className="space-y-4 text-sm font-medium">
-                            <li><Link to="/menu" className="hover:text-[#d9a65a] transition-colors flex items-center gap-2">Cardápio Online <ChevronRight className="w-3 h-3" /></Link></li>
-                            <li><Link to="/blog" className="hover:text-[#d9a65a] transition-colors flex items-center gap-2">Notícias & Blog <ChevronRight className="w-3 h-3" /></Link></li>
-                            <li><Link to="/gallery" className="hover:text-[#d9a65a] transition-colors flex items-center gap-2">Galeria de Fotos <ChevronRight className="w-3 h-3" /></Link></li>
-                            <li><button onClick={() => scrollToSection('contact')} className="hover:text-[#d9a65a] transition-colors flex items-center gap-2 text-left">Fale Connosco <ChevronRight className="w-3 h-3" /></button></li>
-                        </ul>
-                    </div>
-
-                    <div>
-                        <h3 className="text-white font-serif text-xl mb-8">Contacto</h3>
-                        <p className="text-sm leading-loose font-light">
-                            Av. de Almagro, Maputo<br />
-                            Moçambique<br /><br />
-                            Atendimento Geral:<br />
-                            <span className="text-[#d9a65a] font-black text-lg">+258 87 9146 662</span>
-                        </p>
-                    </div>
-
-                    <div>
-                        <h3 className="text-white font-serif text-xl mb-8">Newsletter</h3>
-                        <p className="text-xs mb-6 font-light">Receba avisos de pão fresquinho e promoções exclusivas.</p>
-                        <div className="flex gap-2">
-                            <input 
-                                type="email" 
-                                placeholder="Seu email" 
-                                className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm w-full outline-none focus:border-[#d9a65a] transition-all"
-                            />
-                            <button className="bg-[#d9a65a] text-[#3b2f2f] px-4 rounded-xl font-bold text-sm hover:bg-white transition-all">OK</button>
-                        </div>
-                    </div>
-                </div>
-                
-                <div className="max-w-7xl mx-auto pt-16 mt-16 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-4 text-[10px] text-white/30 uppercase tracking-[0.2em] font-black">
-                    <p>© {new Date().getFullYear()} Pão Caseiro Almagro. Todos os direitos reservados.</p>
-                    <div className="flex gap-8">
-                        <a href="#" className="hover:text-white transition-colors">Privacidade</a>
-                        <a href="#" className="hover:text-white transition-colors">Termos</a>
-                    </div>
-                </div>
-            </footer>
 
             <AnimatePresence>
                 {

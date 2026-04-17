@@ -87,22 +87,33 @@ export const AdminNotifications: React.FC = () => {
         }
     };
 
-    const getIcon = (type: string) => {
+    const getIcon = (type: string, title: string = '') => {
+        const isError = title.toLowerCase().includes('erro') || title.toLowerCase().includes('falha') || title.toLowerCase().includes('critical');
+        
         switch (type.toLowerCase()) {
             case 'order': return <ShoppingBag className="w-5 h-5 text-emerald-500" />;
             case 'support': return <MessageSquare className="w-5 h-5 text-blue-500" />;
             case 'ticket': return <Ticket className="w-5 h-5 text-amber-500" />;
             case 'user': return <Users className="w-5 h-5 text-indigo-500" />;
-            default: return <Settings className="w-5 h-5 text-gray-500" />;
+            case 'system': 
+                return isError 
+                    ? <AlertTriangle className="w-5 h-5 text-rose-500 animate-pulse" /> 
+                    : <Settings className="w-5 h-5 text-gray-500" />;
+            default: return <Info className="w-5 h-5 text-gray-400" />;
         }
     };
 
-    const getSeverityBadge = (type: string) => {
-        // Since notifications table doesn't have 'level', we infer from type or just use standard
+    const getSeverityBadge = (type: string, title: string = '') => {
+        const isError = title.toLowerCase().includes('erro') || title.toLowerCase().includes('falha') || title.toLowerCase().includes('critical');
+
         switch (type.toLowerCase()) {
             case 'order': return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-600 uppercase">Novo Pedido</span>;
             case 'support': return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-600 uppercase">Suporte</span>;
-            case 'system': return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-600 uppercase">Sistema</span>;
+            case 'system': 
+                return isError
+                    ? <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-600 uppercase flex items-center gap-1"><AlertTriangle size={10} /> Crítico</span>
+                    : <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-600 uppercase">Sistema</span>;
+            case 'user': return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-600 uppercase">Utilizador</span>;
             default: return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 text-gray-600 uppercase">Info</span>;
         }
     };
@@ -195,7 +206,7 @@ export const AdminNotifications: React.FC = () => {
                                         <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-110 ${
                                             notif.read ? 'bg-gray-50' : 'bg-[#d9a65a]/10'
                                         }`}>
-                                            {getIcon(notif.type)}
+                                            {getIcon(notif.type, notif.title)}
                                         </div>
                                         
                                         <div className="flex-1 min-w-0">
@@ -204,7 +215,7 @@ export const AdminNotifications: React.FC = () => {
                                                     <h3 className={`text-sm md:text-base font-black tracking-tight underline-offset-4 ${notif.read ? 'text-gray-500' : 'text-[#3b2f2f]'}`}>
                                                         {notif.title}
                                                     </h3>
-                                                    {getSeverityBadge(notif.type)}
+                                                    {getSeverityBadge(notif.type, notif.title)}
                                                 </div>
                                                 <div className="flex items-center gap-1.5 px-2 py-1 bg-gray-50 rounded-lg shrink-0">
                                                     <Clock size={10} className="text-gray-400" />

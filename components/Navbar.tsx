@@ -123,7 +123,7 @@ export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
 
   const Logo = ({ className = "h-12", variant = 'light' }: { className?: string, variant?: 'light' | 'dark' }) => (
     <img
-      src="/logo_on_dark.png"
+      src={variant === 'light' ? "/logo_on_light.png" : "/logo_on_dark.png"}
       alt="Pão Caseiro Logo"
       className={`object-contain ${className}`}
     />
@@ -193,19 +193,7 @@ export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
                 className="flex items-center gap-2 text-[#3b2f2f] px-4 py-2 rounded-full font-bold hover:bg-[#d9a65a]/10 transition-all border border-[#d9a65a]/20 bg-[#d9a65a]/5 group"
                 aria-label={t.nav.myAccount}
               >
-                <div className="w-8 h-8 rounded-full bg-[#d9a65a] flex items-center justify-center text-[#3b2f2f] group-hover:bg-[#3b2f2f] group-hover:text-[#d9a65a] transition-colors overflow-hidden">
-                  {userData?.avatar_url ? (
-                    <img
-                      src={userData.avatar_url}
-                      alt="Profile"
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <span className="text-xs font-black uppercase">
-                      {(user?.email || manualUserPhone || '?')[0].toUpperCase()}
-                    </span>
-                  )}
-                </div>
+                <User className="w-5 h-5 text-[#d9a65a]" />
                 <span className="hidden xl:inline">{t.nav.myAccount}</span>
               </button>
             ) : (
@@ -215,22 +203,19 @@ export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
                 className="flex items-center gap-2 text-[#3b2f2f] px-4 py-2 rounded-full font-bold hover:bg-[#d9a65a] hover:text-[#3b2f2f] transition-all border border-[#3b2f2f]/10"
                 aria-label={t.nav.login}
               >
-                <div className="w-8 h-8 rounded-full bg-[#3b2f2f]/5 flex items-center justify-center">
-                  <User className="w-4 h-4 text-[#d9a65a]" />
-                </div>
+                <User className="w-5 h-5 text-[#d9a65a]" />
                 <span>{t.nav.login}</span>
               </button>
             )}
 
             <a
               href="tel:+258879146662"
-              className="flex items-center gap-2 xl:gap-3 bg-[#d9a65a] text-[#3b2f2f] px-4 xl:px-6 py-3 rounded-xl font-bold hover:bg-[#c2934f] transition-all text-sm whitespace-nowrap"
+              className="hidden sm:flex items-center gap-3 border border-[#3b2f2f]/10 px-6 py-2 rounded-full font-bold text-[#3b2f2f] hover:bg-white transition-all shadow-sm bg-white/50"
               title={t.nav.callUs}
               aria-label={t.nav.callUs}
             >
-              <Phone className="w-4 h-4" />
-              <span className="hidden sm:inline">+258 87 9146 662</span>
-              <span className="sm:hidden">Ligar</span>
+              <Phone className="w-4 h-4 text-[#d9a65a]" />
+              <span className="text-sm tracking-wide">+258 87 9146 662</span>
             </a>
           </div>
 

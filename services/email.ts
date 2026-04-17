@@ -58,9 +58,41 @@ export const sendEmail = async (to: string[], subject: string, html: string, rep
             body: payload
         });
 
-        if (error) {
-            console.error('Supabase Email Function Error:', error);
-            throw error;
+        // 403 Forbidden specifically indicates domain verification issues in Resend
+        if (error || (data && (data.statusCode === 403 || data.error?.includes('403') || data.code === 403))) {
+            const err = error || new Error(data.message || 'Resend: Domain Verification Required (403)');
+            console.error('❌ [EMAIL SERVICE] Critical Failure:', err);
+            
+            // Log actionable system event for admin visibility
+            NotificationService.logSystemEvent(
+                'Falha Crítica no Email',
+                'O domínio "paocaseiro.co.mz" não está verificado no Resend (Erro 403). Por favor, configure as entradas DNS.',
+                'SYSTEM',
+                'error'
+            ).catch(e => console.error("Failed to log system notification:", e));
+
+            // Update system settings to reflect critical error
+            supabase.from('system_settings')
+                .upsert({ key: 'email_status', value: { mode: 'error', last_checked: new Date().toISOString() } })
+                .catch(e => console.error("Failed to update email status:", e));
+
+            throw err;
+        }
+
+        // Check for sandbox flag from the Edge Function
+        if (data && data._fallback) {
+            console.warn('⚠️ [EMAIL SERVICE] Sandbox Mode Active: Delivery may be limited to the account owner.');
+            
+            // Periodically log sandbox reminder if not already noted today? 
+            // For now just update the status setting
+            supabase.from('system_settings')
+                .upsert({ key: 'email_status', value: { mode: 'sandbox', last_checked: new Date().toISOString() } })
+                .catch(e => console.error("Failed to update email status:", e));
+        } else if (data && !data.error) {
+            // Success mode
+            supabase.from('system_settings')
+                .upsert({ key: 'email_status', value: { mode: 'production', last_checked: new Date().toISOString() } })
+                .catch(e => console.error("Failed to update email status:", e));
         }
 
         const responseData = data;
