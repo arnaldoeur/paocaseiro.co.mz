@@ -21,7 +21,7 @@ const mapPinIcon = new L.DivIcon({
 });
 
 const QuillBase = ReactQuill as any;
-import { Eye, EyeOff, Sparkles, MessageSquare, Trash2, Upload, Send, CheckCircle, Package, TrendingUp, User, LogOut, ShoppingBag, Clock, Menu, X, ChevronRight, Search, Plus, Calendar, MapPin, Truck, Smartphone, Users, MessageCircle, Mail, Download, ChevronLeft, Loader, ShoppingCart, Lock, Unlock, XCircle, CreditCard, Banknote, Printer, FileText, Key, Edit3, Usb, Wifi, Share2, RefreshCw, UserPlus, Bell, Award, BarChart3, ShieldCheck, MailPlus, Box, Store, Zap, LineChart, AlertTriangle, Star, Save, Bot, RotateCw, Image as ImageIcon, Paperclip, ExternalLink, Tv, Settings, Sliders, LayoutDashboard } from 'lucide-react';
+import { Eye, EyeOff, Sparkles, MessageSquare, Trash2, Upload, Send, CheckCircle, Package, TrendingUp, User, LogOut, ShoppingBag, Clock, Menu, X, ChevronRight, Search, Plus, Calendar, MapPin, Truck, Smartphone, Users, MessageCircle, Mail, Download, ChevronLeft, Loader, ShoppingCart, Lock, Unlock, XCircle, CreditCard, Banknote, Printer, FileText, Key, Edit3, Usb, Wifi, Share2, RefreshCw, UserPlus, Bell, Award, BarChart3, ShieldCheck, MailPlus, Box, Store, Zap, LineChart, AlertTriangle, Star, Save, Bot, RotateCw, Image as ImageIcon, Paperclip, ExternalLink, Tv, Settings, Sliders, LayoutDashboard, Globe } from 'lucide-react';
 import { AdminSupportAI } from '../components/AdminSupportAI';
 import { logAudit } from '../services/audit';
 import { Kitchen } from './Kitchen';
@@ -156,10 +156,15 @@ export const Admin: React.FC = () => {
     const [activeView, setActiveView] = useState<'dashboard' | 'orders' | 'kitchen' | 'stock' | 'pos' | 'delivery' | 'settings' | 'customers' | 'team' | 'logistics' | 'support' | 'support_ai' | 'billing' | 'documents' | 'messages' | 'blog' | 'newsletter' | 'queue' | 'notificacoes'>('dashboard');
 
     // Real-time Data Hooks
+    const [activeToast, setActiveToast] = useState<any>(null);
     const { orders, loading: ordersLoading, refresh: refreshOrders } = useRealtimeOrders((newOrder) => {
         if (newOrder.id) announceOrder(newOrder.id);
     });
-    const { notifications: systemLogs, loading: logsLoading } = useRealtimeNotifications();
+    const { notifications: systemLogs, loading: logsLoading } = useRealtimeNotifications((newNotif) => {
+        setActiveToast(newNotif);
+        // Auto-dismiss after 6 seconds
+        setTimeout(() => setActiveToast(null), 6000);
+    });
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(window.innerWidth < 768);
     
     // Auto-close sidebar on mobile after navigation
@@ -7212,78 +7217,128 @@ export const Admin: React.FC = () => {
                         <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
                             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white rounded-2xl p-6 w-full max-w-lg shadow-2xl overflow-y-auto max-h-[90vh]">
                                 <h3 className="font-bold text-lg mb-4 text-[#3b2f2f]">{currentProduct ? 'Editar' : 'Novo'} Produto</h3>
-                                <form onSubmit={handleSaveProduct} className="space-y-3">
-                                    <input name="name" defaultValue={currentProduct?.name} placeholder="Nome do Produto" className="w-full p-2 border rounded-lg focus:border-[#d9a65a] outline-none" required />
-                                    <input name="category" defaultValue={currentProduct?.category || 'Pães'} placeholder="Categoria" className="w-full p-2 border rounded-lg focus:border-[#d9a65a] outline-none" required />
-                                    
-                                    {/* IVA Configuration */}
-                                    <div className="flex flex-col mb-1">
-                                        <label className="text-xs font-bold text-gray-500 uppercase mb-1">Configuração de IVA</label>
-                                        <select name="taxType" defaultValue={currentProduct?.taxType || 'incluso'} className="w-full p-2 border rounded-lg focus:border-[#d9a65a] outline-none text-sm bg-white">
-                                            <option value="incluso">IVA Incluso (Stock/Pronto)</option>
-                                            <option value="exclusivo">IVA Exclusivo (Acréscimo +16%)</option>
-                                            <option value="isento">Isento de IVA</option>
-                                        </select>
-                                    </div>
-
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <input name="price" type="number" defaultValue={currentProduct?.price} placeholder="Preço Base (MT)" className="w-full p-2 border rounded-lg focus:border-[#d9a65a] outline-none" required />
-                                        <div className="grid grid-cols-2 gap-2">
-                                            <input name="stockQuantity" type="number" defaultValue={currentProduct?.stockQuantity} placeholder="Stock" className="w-full p-2 border rounded-lg focus:border-[#d9a65a] outline-none" />
-                                            <input name="unit" defaultValue={currentProduct?.unit || 'un'} placeholder="Unidade (kg, un)" className="w-full p-2 border rounded-lg focus:border-[#d9a65a] outline-none" />
-                                        </div>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <input name="prepTime" defaultValue={currentProduct?.prepTime} placeholder="Tempo Prep (ex: 20min)" className="w-full p-2 border rounded-lg focus:border-[#d9a65a] outline-none" />
-                                        <input name="deliveryTime" defaultValue={currentProduct?.deliveryTime} placeholder="Entrega (ex: 40min)" className="w-full p-2 border rounded-lg focus:border-[#d9a65a] outline-none" />
-                                    </div>
-
-                                    {/* English Translations */}
-                                    <div className="border p-2 rounded-lg bg-gray-50 space-y-2">
-                                        <p className="text-xs font-bold text-gray-500 uppercase">Tradução (Inglês)</p>
-                                        <input name="name_en" defaultValue={currentProduct?.name_en} placeholder="Product Name (English)" className="w-full p-2 border rounded-lg focus:border-[#d9a65a] outline-none text-sm" />
-                                        <textarea name="description_en" defaultValue={currentProduct?.description_en} placeholder="Description (English)" className="w-full p-2 border rounded-lg focus:border-[#d9a65a] outline-none text-sm" rows={2} />
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        <input type="file" title="Upload de Imagem" accept="image/*" onChange={handleImageUpload} className="w-full p-2 border rounded-lg focus:border-[#d9a65a] outline-none text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-[#d9a65a]/10 file:text-[#d9a65a] hover:file:bg-[#d9a65a]/20" />
-                                        {previewImage && (
-                                            <div className="w-full h-32 rounded-xl overflow-hidden bg-gray-50 border relative">
-                                                <img src={previewImage} alt="Preview" className="w-full h-full object-cover" />
+                                <form onSubmit={handleSaveProduct} className="space-y-5">
+                                    <div className="space-y-4">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Nome do Produto</label>
+                                                <input name="name" defaultValue={currentProduct?.name} placeholder="Ex: Pão de Água" className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl focus:border-[#d9a65a] focus:ring-4 focus:ring-[#d9a65a]/10 outline-none transition-all font-bold" required />
                                             </div>
-                                        )}
-                                    </div>
-
-                                    {/* Variations Section */}
-                                    <div className="border-t border-b border-gray-100 py-3">
-                                        <div className="flex justify-between items-center mb-2">
-                                            <label className="text-sm font-bold text-gray-500 uppercase">Variedades</label>
-                                            <button type="button" onClick={() => setProductVariations([...productVariations, { name: '', price: 0 }])} title="Adicionar Variedade" className="text-[#d9a65a] hover:bg-[#d9a65a]/10 p-1 rounded transition-colors"><Plus size={16} /></button>
+                                            <div>
+                                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Categoria</label>
+                                                <input name="category" defaultValue={currentProduct?.category || 'Pães'} placeholder="Categoria" className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl focus:border-[#d9a65a] focus:ring-4 focus:ring-[#d9a65a]/10 outline-none transition-all font-bold" required />
+                                            </div>
                                         </div>
-                                        <div className="space-y-2 max-h-32 overflow-y-auto pr-1">
-                                            {productVariations.map((v, idx) => (
-                                                <div key={idx} className="flex gap-2 items-center">
-                                                    <input value={v.name} title="Nome da Variedade" onChange={e => { const n = [...productVariations]; n[idx].name = e.target.value; setProductVariations(n); }} placeholder="Nome (ex: Grande)" className="flex-1 p-2 border rounded-lg text-sm" />
-                                                    <input type="number" title="Pre\u00e7o da Variedade" value={v.price} onChange={e => { const n = [...productVariations]; n[idx].price = e.target.value; setProductVariations(n); }} placeholder="MT" className="w-20 p-2 border rounded-lg text-sm" />
-                                                    <button type="button" onClick={() => setProductVariations(productVariations.filter((_, i) => i !== idx))} title="Remover Variedade" className="text-red-400 hover:text-red-600"><Trash2 size={16} /></button>
+                                        
+                                        <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                                            <h4 className="text-[10px] font-black text-[#d9a65a] uppercase tracking-widest mb-3">Definições Operacionais</h4>
+                                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                                                <div>
+                                                    <label className="text-[9px] font-black text-gray-400 uppercase mb-1 block">Preço Base (MT)</label>
+                                                    <input name="price" type="number" defaultValue={currentProduct?.price} placeholder="0 MT" className="w-full p-2.5 bg-white border border-gray-100 rounded-lg focus:border-[#d9a65a] outline-none text-sm font-bold" required />
                                                 </div>
-                                            ))}
-                                            {productVariations.length === 0 && <p className="text-xs text-gray-400 italic">Sem variedades.</p>}
+                                                <div>
+                                                    <label className="text-[9px] font-black text-gray-400 uppercase mb-1 block">Stock Atual</label>
+                                                    <input name="stockQuantity" type="number" defaultValue={currentProduct?.stockQuantity} placeholder="0" className="w-full p-2.5 bg-white border border-gray-100 rounded-lg focus:border-[#d9a65a] outline-none text-sm font-bold" />
+                                                </div>
+                                                <div>
+                                                    <label className="text-[9px] font-black text-gray-400 uppercase mb-1 block">Tempo Prep.</label>
+                                                    <input name="prepTime" defaultValue={currentProduct?.prepTime} placeholder="ex: 20min" className="w-full p-2.5 bg-white border border-gray-100 rounded-lg focus:border-[#d9a65a] outline-none text-sm font-bold" />
+                                                </div>
+                                                <div>
+                                                    <label className="text-[9px] font-black text-gray-400 uppercase mb-1 block">Entrega Est.</label>
+                                                    <input name="deliveryTime" defaultValue={currentProduct?.deliveryTime} placeholder="ex: 40min" className="w-full p-2.5 bg-white border border-gray-100 rounded-lg focus:border-[#d9a65a] outline-none text-sm font-bold" />
+                                                </div>
+                                            </div>
+                                            
+                                            <div className="mt-4 grid grid-cols-2 gap-3">
+                                                <div>
+                                                    <label className="text-[9px] font-black text-gray-400 uppercase mb-1 block">Configuração IVA</label>
+                                                    <select name="taxType" defaultValue={currentProduct?.taxType || 'incluso'} className="w-full p-2.5 bg-white border border-gray-100 rounded-lg focus:border-[#d9a65a] outline-none text-xs font-bold">
+                                                        <option value="incluso">IVA Incluso (Padrão)</option>
+                                                        <option value="exclusivo">IVA Exclusivo (+16%)</option>
+                                                        <option value="isento">Isento de IVA</option>
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label className="text-[9px] font-black text-gray-400 uppercase mb-1 block">Unidade</label>
+                                                    <input name="unit" defaultValue={currentProduct?.unit || 'un'} placeholder="Ex: kg, un" className="w-full p-2.5 bg-white border border-gray-100 rounded-lg focus:border-[#d9a65a] outline-none text-xs font-bold" />
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* English Translations */}
+                                        <div className="p-4 bg-blue-50/30 rounded-2xl border border-blue-100/50">
+                                            <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                                                <Globe size={10} /> English Content
+                                            </p>
+                                            <div className="space-y-2">
+                                                <input name="name_en" defaultValue={currentProduct?.name_en} placeholder="Product Name (English)" className="w-full p-2.5 bg-white border border-blue-50 rounded-lg focus:border-blue-400 outline-none text-sm font-medium" />
+                                                <textarea name="description_en" defaultValue={currentProduct?.description_en} placeholder="Description (English)" className="w-full p-2.5 bg-white border border-blue-50 rounded-lg focus:border-blue-400 outline-none text-sm font-medium" rows={2} />
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-3">
+                                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Imagem do Produto</label>
+                                            <div className="flex flex-col gap-3">
+                                                <input type="file" title="Upload de Imagem" accept="image/*" onChange={handleImageUpload} className="w-full text-xs file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-black file:bg-[#d9a65a]/10 file:text-[#d9a65a] hover:file:bg-[#d9a65a]/20 cursor-pointer" />
+                                                {previewImage && (
+                                                    <div className="w-full h-40 rounded-2xl overflow-hidden bg-gray-50 border-2 border-dashed border-gray-100 relative group">
+                                                        <img src={previewImage} alt="Preview" className="w-full h-full object-cover transition-transform group-hover:scale-105" />
+                                                        <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                                            <p className="text-white text-[10px] font-black uppercase tracking-widest">Visualização</p>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Variations Section */}
+                                        <div className="pt-4 border-t border-gray-100">
+                                            <div className="flex justify-between items-center mb-3">
+                                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Variedades de Tamanho/Tipo</label>
+                                                <button type="button" onClick={() => setProductVariations([...productVariations, { name: '', price: 0 }])} title="Adicionar Variedade" className="bg-[#d9a65a]/10 text-[#d9a65a] p-2 rounded-xl hover:bg-[#d9a65a]/20 transition-all flex items-center gap-1 text-[10px] font-black uppercase">
+                                                    <Plus size={14} /> Novo
+                                                </button>
+                                            </div>
+                                            <div className="space-y-2 max-h-40 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-gray-200">
+                                                {productVariations.map((v, idx) => (
+                                                    <div key={idx} className="flex gap-2 items-center bg-gray-50 p-2 rounded-xl border border-gray-100 animate-fade-in">
+                                                        <input value={v.name} title="Nome" onChange={e => { const n = [...productVariations]; n[idx].name = e.target.value; setProductVariations(n); }} placeholder="Pequeno, Médio..." className="flex-1 p-2 bg-white border border-gray-100 rounded-lg text-xs font-bold" />
+                                                        <div className="relative">
+                                                            <input type="number" title="Preço" value={v.price} onChange={e => { const n = [...productVariations]; n[idx].price = e.target.value; setProductVariations(n); }} placeholder="MT" className="w-24 p-2 pl-7 bg-white border border-gray-100 rounded-lg text-xs font-bold" />
+                                                            <span className="absolute left-2 top-2 text-[10px] text-gray-400 font-bold">MT</span>
+                                                        </div>
+                                                        <button type="button" onClick={() => setProductVariations(productVariations.filter((_, i) => i !== idx))} title="Remover" className="p-2 text-red-100 bg-red-500 rounded-lg hover:bg-red-600 transition-colors shadow-sm"><Trash2 size={14} /></button>
+                                                    </div>
+                                                ))}
+                                                {productVariations.length === 0 && (
+                                                    <div className="text-center py-4 border-2 border-dashed border-gray-100 rounded-xl">
+                                                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Sem Variedades Adicionadas</p>
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
 
-                                    {/* Image Download */}
-                                    {currentProduct?.image && (
-                                        <div className="flex justify-end">
-                                            <a href={currentProduct.image} download target="_blank" rel="noopener noreferrer" className="text-xs flex items-center gap-1 text-[#d9a65a] hover:underline font-bold"><Download size={12} /> Baixar Imagem Atual</a>
+                                    <div className="flex items-center justify-between pt-6 border-t border-gray-100">
+                                        <div className="flex items-center gap-2">
+                                            <div className="relative inline-flex items-center cursor-pointer">
+                                                <input type="checkbox" name="inStock" defaultChecked={currentProduct?.inStock} className="sr-only peer" />
+                                                <div onClick={(e) => {
+                                                    const checkbox = (e.currentTarget.previousElementSibling as HTMLInputElement);
+                                                    checkbox.checked = !checkbox.checked;
+                                                }} className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                                                <span className="ml-3 text-[10px] font-black text-gray-400 uppercase tracking-widest">Disponível</span>
+                                            </div>
                                         </div>
-                                    )}
-                                    <label className="flex items-center gap-2 bg-gray-50 p-2 rounded-lg cursor-pointer"><input type="checkbox" name="inStock" defaultChecked={currentProduct?.inStock} className="w-4 h-4 text-[#d9a65a]" /> <span className="text-sm font-bold text-gray-600">Disponível para venda</span></label>
-                                    <div className="flex gap-2 pt-2">
-                                        <button type="button" onClick={() => setIsEditingProduct(false)} className="flex-1 bg-gray-100 py-2 rounded-lg font-bold text-gray-500 hover:bg-gray-200">Cancelar</button>
-                                        <button type="submit" className="flex-1 bg-[#3b2f2f] text-[#d9a65a] py-2 rounded-lg font-bold hover:brightness-110">Salvar</button>
+                                        <div className="flex gap-3">
+                                            <button type="button" onClick={() => setIsEditingProduct(false)} className="px-6 py-3 rounded-xl font-black uppercase tracking-widest text-[#3b2f2f] hover:bg-gray-100 transition-all text-[11px]">Cancelar</button>
+                                            <button type="submit" className="px-8 py-3 bg-[#3b2f2f] text-[#d9a65a] rounded-xl font-black uppercase tracking-widest hover:brightness-110 shadow-lg text-[11px] shadow-[#3b2f2f]/20">Salvar Produto</button>
+                                        </div>
                                     </div>
                                 </form>
+
                             </motion.div>
                         </div>
                     )}
@@ -7694,6 +7749,46 @@ export const Admin: React.FC = () => {
                             </div>
                         </div>
                 )}
+                {/* Global Notification Toast */}
+                <AnimatePresence>
+                    {activeToast && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 50, scale: 0.9, x: '-50%' }}
+                            animate={{ opacity: 1, y: 0, scale: 1, x: '-50%' }}
+                            exit={{ opacity: 0, scale: 0.8, transition: { duration: 0.2 } }}
+                            onClick={() => {
+                                setActiveView('notificacoes');
+                                setActiveToast(null);
+                            }}
+                            className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] w-[95%] max-w-md cursor-pointer"
+                        >
+                            <div className="bg-[#3b2f2f] text-white p-4 rounded-3xl shadow-2xl border border-[#d9a65a]/30 backdrop-blur-xl flex items-center gap-4 group">
+                                <div className="w-12 h-12 bg-[#d9a65a]/20 rounded-2xl flex items-center justify-center shrink-0 border border-[#d9a65a]/20 group-hover:scale-110 transition-transform">
+                                    <Bell className="text-[#d9a65a] w-6 h-6 animate-bounce" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <h4 className="text-[#d9a65a] font-black text-xs uppercase tracking-widest mb-0.5">Novo Alerta de Sistema</h4>
+                                    <p className="font-bold text-sm truncate">{activeToast.title}</p>
+                                    <p className="text-[10px] text-gray-400 truncate opacity-80">{activeToast.message}</p>
+                                </div>
+                                <button 
+                                    onClick={(e) => { e.stopPropagation(); setActiveToast(null); }}
+                                    className="p-2 hover:bg-white/10 rounded-xl text-gray-400 hover:text-white transition-colors"
+                                >
+                                    <X size={18} />
+                                </button>
+                                
+                                {/* Progress bar */}
+                                <motion.div 
+                                    initial={{ width: '100%' }}
+                                    animate={{ width: '0%' }}
+                                    transition={{ duration: 6, ease: 'linear' }}
+                                    className="absolute bottom-0 left-0 h-1 bg-[#d9a65a]/50 rounded-full"
+                                />
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
             </div>
         </div>
     );

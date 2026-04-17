@@ -477,76 +477,86 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                             )}
 
                             {step === 'choice' ? (
-                                <div className="space-y-6">
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <button
                                             onClick={() => { setMode('register'); setStep('input'); }}
-                                            className="flex flex-col items-center gap-3 p-6 rounded-2xl border-2 border-[#d9a65a] bg-[#f7f1eb] hover:bg-[#d9a65a]/10 transition-all group text-center shadow-lg transform scale-105 z-10"
+                                            className="relative overflow-hidden group p-1 w-full rounded-[2rem] transition-all"
                                         >
-                                            <div className="w-12 h-12 rounded-full bg-[#d9a65a] flex items-center justify-center text-[#3b2f2f] transition-colors">
-                                                <UserPlus className="w-6 h-6" />
-                                            </div>
-                                            <div>
-                                                <p className="font-bold text-[#3b2f2f] text-sm md:text-base">{language === 'en' ? 'Create Account' : 'Criar Conta'}</p>
-                                                <p className="text-[10px] md:text-xs text-gray-500">{language === 'en' ? 'Get Launch Discounts' : 'Ganhe Descontos de Lançamento'}</p>
+                                            <div className="absolute inset-0 bg-gradient-to-br from-[#d9a65a] to-[#b88a4a] opacity-0 group-hover:opacity-10 transition-opacity" />
+                                            <div className="relative bg-[#f7f1eb] border-2 border-[#d9a65a] p-8 rounded-[1.9rem] flex flex-col items-center gap-4 transition-all group-hover:shadow-xl group-hover:-translate-y-1">
+                                                <div className="w-16 h-16 rounded-2xl bg-[#d9a65a] flex items-center justify-center text-[#3b2f2f] shadow-lg shadow-[#d9a65a]/20">
+                                                    <UserPlus className="w-8 h-8" />
+                                                </div>
+                                                <div className="text-center">
+                                                    <h4 className="font-serif text-xl text-[#3b2f2f] mb-1">{language === 'en' ? 'Create Account' : 'Criar Conta'}</h4>
+                                                    <p className="text-xs text-gray-500 font-medium px-4">{language === 'en' ? 'Join it and get exclusive discounts' : 'Registe-se e receba descontos exclusivos'}</p>
+                                                </div>
                                             </div>
                                         </button>
 
-                                        <button
-                                            onClick={() => { setMode('password'); setStep('input'); }}
-                                            className="flex flex-col items-center gap-3 p-6 rounded-2xl border border-gray-100 hover:border-[#d9a65a] hover:bg-[#f7f1eb]/50 transition-all group text-center"
-                                        >
-                                            <div className="w-12 h-12 rounded-full bg-[#f7f1eb] flex items-center justify-center group-hover:bg-[#d9a65a]/20 transition-colors">
-                                                <KeyRound className="w-6 h-6 text-[#d9a65a]" />
-                                            </div>
-                                            <div>
-                                                <p className="font-bold text-[#3b2f2f] text-sm md:text-base">{language === 'en' ? 'Password' : 'Palavra-passe'}</p>
-                                                <p className="text-[10px] md:text-xs text-gray-500">{language === 'en' ? 'Phone or Email' : 'Telemóvel ou Email'}</p>
-                                            </div>
-                                        </button>
+                                        <div className="grid grid-cols-1 gap-4">
+                                            <button
+                                                onClick={() => { setMode('password'); setStep('input'); }}
+                                                className="group p-6 rounded-3xl border border-gray-100 bg-white hover:border-[#d9a65a] hover:bg-gray-50 transition-all flex items-center gap-4 text-left shadow-sm hover:shadow-md"
+                                            >
+                                                <div className="w-12 h-12 rounded-2xl bg-[#f7f1eb] flex items-center justify-center text-[#d9a65a] group-hover:bg-[#d9a65a] group-hover:text-white transition-all">
+                                                    <KeyRound className="w-6 h-6" />
+                                                </div>
+                                                <div>
+                                                    <p className="font-bold text-[#3b2f2f]">{language === 'en' ? 'Password' : 'Palavra-passe'}</p>
+                                                    <p className="text-[10px] text-gray-400 font-medium uppercase tracking-widest">{language === 'en' ? 'Phone or Email' : 'Telemóvel ou Email'}</p>
+                                                </div>
+                                            </button>
 
-                                        <button
-                                            onClick={() => { setMode('otp'); setStep('input'); }}
-                                            className="flex flex-col items-center gap-3 p-6 rounded-2xl border border-gray-100 hover:border-[#d9a65a] hover:bg-[#f7f1eb]/50 transition-all group text-center"
-                                        >
-                                            <div className="w-12 h-12 rounded-full bg-[#f7f1eb] flex items-center justify-center group-hover:bg-[#d9a65a]/20 transition-colors">
-                                                <ShieldAlert className="w-6 h-6 text-[#d9a65a]" />
-                                            </div>
-                                            <div>
-                                                <p className="font-bold text-[#3b2f2f] text-sm md:text-base">{language === 'en' ? 'OTP Access' : 'Acesso OTP'}</p>
-                                                <p className="text-[10px] md:text-xs text-gray-500">{language === 'en' ? 'Phone or Email' : 'Telemóvel ou Email'}</p>
-                                            </div>
-                                        </button>
+                                            <button
+                                                onClick={() => { setMode('otp'); setStep('input'); }}
+                                                className="group p-6 rounded-3xl border border-gray-100 bg-white hover:border-[#d9a65a] hover:bg-gray-50 transition-all flex items-center gap-4 text-left shadow-sm hover:shadow-md"
+                                            >
+                                                <div className="w-12 h-12 rounded-2xl bg-[#f7f1eb] flex items-center justify-center text-[#d9a65a] group-hover:bg-[#d9a65a] group-hover:text-white transition-all">
+                                                    <ShieldAlert className="w-6 h-6" />
+                                                </div>
+                                                <div>
+                                                    <p className="font-bold text-[#3b2f2f]">{language === 'en' ? 'OTP Access' : 'Acesso Rápido'}</p>
+                                                    <p className="text-[10px] text-gray-400 font-medium uppercase tracking-widest">{language === 'en' ? 'SMS or WhatsApp' : 'SMS ou WhatsApp'}</p>
+                                                </div>
+                                            </button>
+                                        </div>
                                     </div>
 
-                                    {/* Google Login Button */}
-                                    <div className="mt-4">
+                                    <div className="relative">
+                                        <div className="absolute inset-0 flex items-center">
+                                            <div className="w-full border-t border-gray-100"></div>
+                                        </div>
+                                        <div className="relative flex justify-center text-xs uppercase tracking-widest font-black text-gray-300 bg-white px-4">
+                                            {language === 'en' ? 'Social Login' : 'Ou aceder com'}
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-4">
                                         <button
                                             onClick={async () => {
                                                 try {
                                                     if (!acceptedTerms) {
-                                                        setError('Deve aceitar os Termos e a Política de Privacidade antes de continuar com o Google.');
+                                                        setError('Deve aceitar os Termos e a Política de Privacidade antes de continuar.');
                                                         return;
                                                     }
                                                     setLoading(true);
                                                     setError('');
                                                     const { error } = await supabase.auth.signInWithOAuth({
                                                         provider: 'google',
-                                                        options: {
-                                                            redirectTo: `${window.location.origin}/dashboard`
-                                                        }
+                                                        options: { redirectTo: `${window.location.origin}/dashboard` }
                                                     });
                                                     if (error) throw error;
                                                 } catch (err: any) {
-                                                    console.error('Google Auth Error:', err);
-                                                    setError(err.message || 'Erro ao iniciar sessão com o Google.');
+                                                    setError(err.message || 'Erro ao iniciar sessão.');
                                                     setLoading(false);
                                                 }
                                             }}
                                             disabled={loading}
-                                            className="w-full py-4 px-6 rounded-2xl border flex items-center justify-center gap-3 transition-all bg-white border-gray-200 hover:bg-gray-50 hover:border-gray-300 disabled:opacity-70"
+                                            className="w-full py-4 px-6 rounded-2xl border-2 border-gray-100 flex items-center justify-center gap-4 transition-all bg-white hover:bg-gray-50 hover:border-gray-200 disabled:opacity-70 group"
                                         >
-                                            <svg viewBox="0 0 24 24" width="24" height="24" xmlns="http://www.w3.org/2000/svg">
+                                            <svg viewBox="0 0 24 24" width="24" height="24" xmlns="http://www.w3.org/2000/svg" className="group-hover:scale-110 transition-transform">
                                                 <g transform="matrix(1, 0, 0, 1, 27.009001, -39.238998)">
                                                     <path fill="#4285F4" d="M -3.264 51.509 C -3.264 50.719 -3.334 49.969 -3.454 49.239 L -14.754 49.239 L -14.754 53.749 L -8.284 53.749 C -8.574 55.229 -9.424 56.479 -10.684 57.329 L -10.684 60.329 L -6.824 60.329 C -4.564 58.239 -3.264 55.159 -3.264 51.509 Z" />
                                                     <path fill="#34A853" d="M -14.754 63.239 C -11.514 63.239 -8.804 62.159 -6.824 60.329 L -10.684 57.329 C -11.764 58.049 -13.134 58.489 -14.754 58.489 C -17.884 58.489 -20.534 56.379 -21.484 53.529 L -25.464 53.529 L -25.464 56.619 C -23.494 60.539 -19.444 63.239 -14.754 63.239 Z" />
@@ -554,12 +564,10 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                                                     <path fill="#EA4335" d="M -14.754 43.989 C -12.984 43.989 -11.404 44.599 -10.154 45.789 L -6.734 42.369 C -8.804 40.429 -11.514 39.239 -14.754 39.239 C -19.444 39.239 -23.494 41.939 -25.464 45.859 L -21.484 48.949 C -20.534 46.099 -17.884 43.989 -14.754 43.989 Z" />
                                                 </g>
                                             </svg>
-                                            <span className="font-bold text-gray-700 text-sm md:text-base">{language === 'en' ? 'Continue with Google' : 'Continuar com o Google'}</span>
+                                            <span className="font-black uppercase tracking-widest text-[#3b2f2f] text-xs">{language === 'en' ? 'Continue with Google' : 'Continuar com o Google'}</span>
                                         </button>
-                                    </div>
 
-                                    <div className="mt-6">
-                                        <label className="flex items-center gap-3 cursor-pointer group justify-center">
+                                        <label className="flex items-center gap-3 cursor-pointer group justify-center pt-2">
                                             <div className="relative">
                                                 <input
                                                     type="checkbox"
@@ -567,52 +575,60 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                                                     onChange={(e) => setAcceptedTerms(e.target.checked)}
                                                     className="sr-only peer"
                                                 />
-                                                <div className="w-5 h-5 border-2 border-gray-200 rounded-md peer-checked:bg-[#d9a65a] peer-checked:border-[#d9a65a] transition-all flex items-center justify-center">
+                                                <div className="w-5 h-5 border-2 border-gray-200 rounded-lg peer-checked:bg-[#d9a65a] peer-checked:border-[#d9a65a] transition-all flex items-center justify-center">
                                                     <div className="w-2 h-3 border-r-2 border-b-2 border-white rotate-45 mb-1 hidden peer-checked:block"></div>
                                                 </div>
                                             </div>
-                                            <span className="text-xs text-gray-500">
-                                                Aceito os <button type="button" onClick={() => setActiveLegalView('terms')} className="text-[#d9a65a] hover:underline font-bold">{language === 'en' ? 'Terms' : 'Termos'}</button> e a <button type="button" onClick={() => setActiveLegalView('privacy')} className="text-[#d9a65a] hover:underline font-bold">{language === 'en' ? 'Privacy' : 'Privacidade'}</button>
+                                            <span className="text-[10px] text-gray-400 font-bold uppercase tracking-tight">
+                                                {language === 'en' ? 'I accept the' : 'Aceito os'} <button type="button" onClick={() => setActiveLegalView('terms')} className="text-[#d9a65a] hover:underline">{language === 'en' ? 'Terms' : 'Termos'}</button> {language === 'en' ? 'and' : 'e a'} <button type="button" onClick={() => setActiveLegalView('privacy')} className="text-[#d9a65a] hover:underline">{language === 'en' ? 'Privacy Policy' : 'Política de Privacidade'}</button>
                                             </span>
                                         </label>
                                     </div>
-
-                                    <div className="pb-4"></div>
                                 </div>
                             ) : step === 'input' ? (
-                                <form onSubmit={handleCheckUser} className="space-y-4">
-                                    <div className="relative">
-                                        <label htmlFor="identifier-input" className="text-sm font-bold text-[#3b2f2f]/80">
+                                <form onSubmit={handleCheckUser} className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                                    <div className="space-y-2">
+                                        <label htmlFor="identifier-input" className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">
                                             {mode === 'password' || mode === 'otp' ? language === 'en' ? 'Phone or Email' : 'Telemóvel ou Email' : mode === 'register' ? language === 'en' ? 'Phone Number' : 'Número de Telemóvel' : language === 'en' ? 'Email Address' : 'Endereço de Email'}
                                         </label>
-                                        <div className="relative mt-1">
-                                            {mode === 'otp' ? <ShieldAlert className="absolute left-3 top-3 text-[#d9a65a] w-5 h-5" /> : <Phone className="absolute left-3 top-3 text-[#d9a65a] w-5 h-5" />}
+                                        <div className="relative">
+                                            <div className="absolute left-4 top-1/2 -translate-y-1/2 w-8 h-8 rounded-lg bg-[#f7f1eb] flex items-center justify-center text-[#d9a65a]">
+                                                {mode === 'otp' ? <ShieldAlert className="w-4 h-4" /> : <Phone className="w-4 h-4" />}
+                                            </div>
                                             <input
-                                                type={mode === 'otp' ? 'text' : 'text'}
+                                                type="text"
                                                 required
                                                 id="identifier-input"
                                                 value={identifier}
                                                 onChange={(e) => setIdentifier(e.target.value)}
                                                 placeholder={mode === 'password' || mode === 'otp' ? '84... ou seu@email.com' : mode === 'register' ? '84/85 xxx xxxx' : 'seu@email.com'}
-                                                className="w-full pl-10 p-3 rounded-xl border border-gray-200 focus:border-[#d9a65a] focus:ring-2 focus:ring-[#d9a65a]/20 outline-none transition-all"
+                                                className="w-full pl-14 p-4 bg-gray-50 border border-gray-100 rounded-2xl focus:border-[#d9a65a] focus:bg-white focus:ring-4 focus:ring-[#d9a65a]/10 outline-none transition-all text-sm font-bold"
                                             />
                                         </div>
                                     </div>
-                                    <button
-                                        type="submit"
-                                        disabled={loading || identifier.length < 3}
-                                        className="w-full bg-[#3b2f2f] text-[#d9a65a] py-3 rounded-xl font-bold uppercase tracking-widest hover:bg-[#d9a65a] hover:text-[#3b2f2f] transition-all flex justify-center items-center disabled:opacity-70"
-                                    >
-                                        {loading ? <Loader className="w-6 h-6 animate-spin" /> : (mode === 'password' ? 'Continuar' : 'Receber Código')}
-                                    </button>
-                                    <button type="button" onClick={() => setStep('choice')} className="w-full text-sm text-gray-500 hover:text-[#3b2f2f] underline mt-2">{language === 'en' ? 'Back' : 'Voltar'}</button>
+                                    <div className="space-y-4">
+                                        <button
+                                            type="submit"
+                                            disabled={loading || identifier.length < 3}
+                                            className="w-full bg-[#3b2f2f] text-[#d9a65a] py-4 rounded-2xl font-black uppercase tracking-widest hover:brightness-110 transition-all flex justify-center items-center disabled:opacity-50 shadow-xl shadow-[#3b2f2f]/20"
+                                        >
+                                            {loading ? <Loader className="w-6 h-6 animate-spin" /> : (mode === 'password' ? 'Continuar' : 'Receber Código')}
+                                        </button>
+                                        <button type="button" onClick={() => setStep('choice')} className="w-full text-[10px] font-black text-gray-400 hover:text-[#3b2f2f] uppercase tracking-[0.2em]">
+                                            {language === 'en' ? 'Back to Options' : 'Voltar às Opções'}
+                                        </button>
+                                    </div>
                                 </form>
                             ) : step === 'password' ? (
-                                <form onSubmit={handlePasswordLogin} className="space-y-4">
-                                    <div className="relative">
-                                        <label htmlFor="password-input" className="text-sm font-bold text-[#3b2f2f]/80">{language === 'en' ? 'Password' : 'Palavra-passe'}</label>
-                                        <div className="relative mt-1">
-                                            <KeyRound className="absolute left-3 top-3 text-[#d9a65a] w-5 h-5" />
+                                <form onSubmit={handlePasswordLogin} className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                                    <div className="space-y-2">
+                                        <label htmlFor="password-input" className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">
+                                            {language === 'en' ? 'Password' : 'Palavra-passe'}
+                                        </label>
+                                        <div className="relative">
+                                            <div className="absolute left-4 top-1/2 -translate-y-1/2 w-8 h-8 rounded-lg bg-[#f7f1eb] flex items-center justify-center text-[#d9a65a]">
+                                                <KeyRound className="w-4 h-4" />
+                                            </div>
                                             <input
                                                 type="password"
                                                 required
@@ -620,55 +636,68 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                                                 value={password}
                                                 onChange={(e) => setPassword(e.target.value)}
                                                 placeholder="••••••••"
-                                                className="w-full pl-10 p-3 rounded-xl border border-gray-200 focus:border-[#d9a65a] focus:ring-2 focus:ring-[#d9a65a]/20 outline-none transition-all"
+                                                className="w-full pl-14 p-4 bg-gray-50 border border-gray-100 rounded-2xl focus:border-[#d9a65a] focus:bg-white focus:ring-4 focus:ring-[#d9a65a]/10 outline-none transition-all text-sm font-bold"
                                             />
                                         </div>
                                     </div>
-                                    <button
-                                        type="submit"
-                                        disabled={loading || password.length < 4}
-                                        className="w-full bg-[#3b2f2f] text-[#d9a65a] py-3 rounded-xl font-bold uppercase tracking-widest hover:bg-[#d9a65a] hover:text-[#3b2f2f] transition-all flex justify-center items-center disabled:opacity-70"
-                                    >
-                                        {loading ? <Loader className="w-6 h-6 animate-spin" /> : 'Entrar'}
-                                    </button>
-                                    <div className="flex flex-col gap-2 mt-4">
-                                        <button type="button" onClick={handleResetPasswordRequest} className="w-full text-sm text-[#d9a65a] font-bold hover:underline">
-                                            {language === 'en' ? 'Forgot Password?' : 'Esqueci a Palavra-passe'}
+                                    <div className="space-y-4">
+                                        <button
+                                            type="submit"
+                                            disabled={loading || password.length < 4}
+                                            className="w-full bg-[#3b2f2f] text-[#d9a65a] py-4 rounded-2xl font-black uppercase tracking-widest hover:brightness-110 transition-all flex justify-center items-center disabled:opacity-50 shadow-xl shadow-[#3b2f2f]/20"
+                                        >
+                                            {loading ? <Loader className="w-6 h-6 animate-spin" /> : 'Entrar'}
                                         </button>
-                                        <button type="button" onClick={() => setStep('input')} className="w-full text-sm text-gray-500 hover:text-[#3b2f2f] underline">{language === 'en' ? 'Back' : 'Voltar'}</button>
+                                        <div className="flex flex-col gap-4 text-center">
+                                            <button type="button" onClick={handleResetPasswordRequest} className="text-[10px] font-black text-[#d9a65a] hover:brightness-110 uppercase tracking-widest">
+                                                {language === 'en' ? 'Forgot Password?' : 'Esqueci a Palavra-passe'}
+                                            </button>
+                                            <button type="button" onClick={() => setStep('input')} className="text-[10px] font-black text-gray-400 hover:text-[#3b2f2f] uppercase tracking-[0.2em]">
+                                                {language === 'en' ? 'Back' : 'Voltar'}
+                                            </button>
+                                        </div>
                                     </div>
                                 </form>
                             ) : step === 'reset-otp' ? (
-                                <form onSubmit={handleVerifyResetOtp} className="space-y-4">
-                                    <div className="relative">
-                                        <label htmlFor="reset-otp-input" className="sr-only">Código OTP</label>
-                                        <KeyRound className="absolute left-3 top-3 text-[#d9a65a] w-5 h-5" />
-                                        <input
-                                            type="text"
-                                            required
-                                            id="reset-otp-input"
-                                            value={otp}
-                                            onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-                                            maxLength={6}
-                                            placeholder={language === 'en' ? '6-digit code' : 'Código de 6 dígitos'}
-                                            className="w-full pl-10 p-3 rounded-xl border border-gray-200 focus:border-[#d9a65a] focus:ring-2 focus:ring-[#d9a65a]/20 outline-none transition-all text-center tracking-[0.5em] text-lg font-bold"
-                                        />
+                                <form onSubmit={handleVerifyResetOtp} className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                                    <div className="space-y-4 text-center">
+                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Insira o código enviado</p>
+                                        <div className="relative">
+                                            <input
+                                                type="text"
+                                                required
+                                                id="reset-otp-input"
+                                                value={otp}
+                                                onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
+                                                maxLength={6}
+                                                placeholder="000000"
+                                                className="w-full p-5 bg-gray-50 border-2 border-dashed border-gray-200 rounded-2xl focus:border-[#d9a65a] focus:bg-white outline-none transition-all text-center tracking-[0.8em] text-2xl font-black text-[#3b2f2f]"
+                                            />
+                                        </div>
                                     </div>
-                                    <button
-                                        type="submit"
-                                        disabled={otp.length < 6}
-                                        className="w-full bg-[#3b2f2f] text-[#d9a65a] py-3 rounded-xl font-bold uppercase tracking-widest hover:bg-[#d9a65a] hover:text-[#3b2f2f] transition-all flex justify-center items-center disabled:opacity-70"
-                                    >
-                                        {language === 'en' ? 'Verify Code' : 'Verificar Código'}
-                                    </button>
-                                    <button type="button" onClick={() => setStep('password')} className="w-full text-sm text-gray-500 hover:text-[#3b2f2f] underline mt-2">{language === 'en' ? 'Cancel' : 'Cancelar'}</button>
+                                    <div className="space-y-4">
+                                        <button
+                                            type="submit"
+                                            disabled={otp.length < 6}
+                                            className="w-full bg-[#3b2f2f] text-[#d9a65a] py-4 rounded-2xl font-black uppercase tracking-widest hover:brightness-110 transition-all flex justify-center items-center disabled:opacity-50 shadow-xl shadow-[#3b2f2f]/20"
+                                        >
+                                            {language === 'en' ? 'Verify Code' : 'Verificar Código'}
+                                        </button>
+                                        <button type="button" onClick={() => setStep('password')} className="w-full text-[10px] font-black text-gray-400 hover:text-[#3b2f2f] uppercase tracking-[0.2em]">
+                                            {language === 'en' ? 'Cancel' : 'Cancelar'}
+                                        </button>
+                                    </div>
                                 </form>
                             ) : step === 'reset-password' ? (
-                                <form onSubmit={handleUpdatePassword} className="space-y-4">
-                                    <div className="relative">
-                                        <label htmlFor="new-password-input" className="text-sm font-bold text-[#3b2f2f]/80">{language === 'en' ? 'New Password' : 'Nova Palavra-passe'}</label>
-                                        <div className="relative mt-1">
-                                            <KeyRound className="absolute left-3 top-3 text-[#d9a65a] w-5 h-5" />
+                                <form onSubmit={handleUpdatePassword} className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                                    <div className="space-y-2">
+                                        <label htmlFor="new-password-input" className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">
+                                            {language === 'en' ? 'New Password' : 'Nova Palavra-passe'}
+                                        </label>
+                                        <div className="relative">
+                                            <div className="absolute left-4 top-1/2 -translate-y-1/2 w-8 h-8 rounded-lg bg-[#f7f1eb] flex items-center justify-center text-[#d9a65a]">
+                                                <KeyRound className="w-4 h-4" />
+                                            </div>
                                             <input
                                                 type="password"
                                                 required
@@ -676,107 +705,163 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                                                 value={password}
                                                 onChange={(e) => setPassword(e.target.value)}
                                                 placeholder="••••••••"
-                                                className="w-full pl-10 p-3 rounded-xl border border-gray-200 focus:border-[#d9a65a] focus:ring-2 focus:ring-[#d9a65a]/20 outline-none transition-all"
+                                                className="w-full pl-14 p-4 bg-gray-50 border border-gray-100 rounded-2xl focus:border-[#d9a65a] focus:bg-white focus:ring-4 focus:ring-[#d9a65a]/10 outline-none transition-all text-sm font-bold"
                                             />
                                         </div>
                                     </div>
                                     <button
                                         type="submit"
                                         disabled={loading || password.length < 4}
-                                        className="w-full bg-[#3b2f2f] text-[#d9a65a] py-3 rounded-xl font-bold uppercase tracking-widest hover:bg-[#d9a65a] hover:text-[#3b2f2f] transition-all flex justify-center items-center disabled:opacity-70"
+                                        className="w-full bg-[#3b2f2f] text-[#d9a65a] py-4 rounded-2xl font-black uppercase tracking-widest hover:brightness-110 transition-all flex justify-center items-center disabled:opacity-50 shadow-xl shadow-[#3b2f2f]/20"
                                     >
                                         {loading ? <Loader className="w-6 h-6 animate-spin" /> : (language === 'en' ? 'Save Password' : 'Guardar Palavra-passe')}
                                     </button>
                                 </form>
                             ) : step === 'otp' ? (
-                                <form onSubmit={handleVerifyOtp} className="space-y-4">
-                                    <div className="relative">
-                                        <label htmlFor="otp-input" className="sr-only">Código OTP</label>
-                                        <KeyRound className="absolute left-3 top-3 text-[#d9a65a] w-5 h-5" />
-                                        <input
-                                            type="text"
-                                            required
-                                            id="otp-input"
-                                            value={otp}
-                                            onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-                                            maxLength={6}
-                                            placeholder={language === 'en' ? '6-digit code' : 'Código de 6 dígitos'}
-                                            className="w-full pl-10 p-3 rounded-xl border border-gray-200 focus:border-[#d9a65a] focus:ring-2 focus:ring-[#d9a65a]/20 outline-none transition-all text-center tracking-[0.5em] text-lg font-bold"
-                                        />
+                                <form onSubmit={handleVerifyOtp} className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                                    <div className="space-y-4 text-center">
+                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Código de Acesso</p>
+                                        <div className="relative">
+                                            <input
+                                                type="text"
+                                                required
+                                                id="otp-input"
+                                                value={otp}
+                                                onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
+                                                maxLength={6}
+                                                placeholder="000000"
+                                                className="w-full p-5 bg-gray-50 border-2 border-dashed border-gray-200 rounded-2xl focus:border-[#d9a65a] focus:bg-white outline-none transition-all text-center tracking-[0.8em] text-2xl font-black text-[#3b2f2f]"
+                                            />
+                                        </div>
                                     </div>
-                                    <button
-                                        type="submit"
-                                        disabled={loading || otp.length < 6}
-                                        className="w-full bg-[#3b2f2f] text-[#d9a65a] py-3 rounded-xl font-bold uppercase tracking-widest hover:bg-[#d9a65a] hover:text-[#3b2f2f] transition-all flex justify-center items-center disabled:opacity-70"
-                                    >
-                                        {loading ? <Loader className="w-6 h-6 animate-spin" /> : 'Verificar'}
-                                    </button>
-                                    <button type="button" onClick={() => setStep('choice')} className="w-full text-sm text-gray-500 hover:text-[#3b2f2f] underline mt-2">{language === 'en' ? 'Back' : 'Voltar'}</button>
+                                    <div className="space-y-4">
+                                        <button
+                                            type="submit"
+                                            disabled={loading || otp.length < 6}
+                                            className="w-full bg-[#3b2f2f] text-[#d9a65a] py-4 rounded-2xl font-black uppercase tracking-widest hover:brightness-110 transition-all flex justify-center items-center disabled:opacity-50 shadow-xl shadow-[#3b2f2f]/20"
+                                        >
+                                            {loading ? <Loader className="w-6 h-6 animate-spin" /> : 'Verificar Acesso'}
+                                        </button>
+                                        <button type="button" onClick={() => setStep('choice')} className="w-full text-[10px] font-black text-gray-400 hover:text-[#3b2f2f] uppercase tracking-[0.2em]">
+                                            {language === 'en' ? 'Back' : 'Voltar'}
+                                        </button>
+                                    </div>
                                 </form>
-                            ) : (
-                                <form onSubmit={handleRegister} className="space-y-4 max-h-[60vh] overflow-y-auto px-1 pb-4 scrollbar-thin scrollbar-thumb-gray-200">
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div>
-                                            <label htmlFor="reg-name" className="text-xs font-bold text-gray-500 uppercase mb-1 block">{language === 'en' ? 'Full Name *' : 'Nome Completo *'}</label>
-                                            <input type="text" id="reg-name" required value={name} onChange={e => setName(e.target.value)}
-                                                className="w-full p-3 rounded-xl border border-gray-100 focus:border-[#d9a65a] outline-none text-sm"
-                                                placeholder="Nome e Apelido"
-                                            />
+                            ) : step === 'register' ? (
+                                <form onSubmit={handleRegister} className="space-y-6 max-h-[60vh] overflow-y-auto px-4 pb-6 scrollbar-thin scrollbar-thumb-gray-200 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                                    <div className="space-y-6">
+                                        {/* Section: Account Security */}
+                                        <div className="p-5 bg-gray-50 rounded-[2rem] border border-gray-100 space-y-4">
+                                            <div className="flex items-center gap-3 mb-2">
+                                                <div className="w-8 h-8 rounded-xl bg-[#3b2f2f] flex items-center justify-center text-[#d9a65a]">
+                                                    <Lock className="w-4 h-4" />
+                                                </div>
+                                                <h4 className="text-[10px] font-black text-[#3b2f2f] uppercase tracking-widest">Segurança da Conta</h4>
+                                            </div>
+                                            
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <div className="space-y-1">
+                                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Telemóvel (Acesso)</label>
+                                                    <input type="text" value={identifier} disabled className="w-full p-3.5 bg-white border border-gray-200 rounded-2xl outline-none text-sm font-bold text-gray-400 cursor-not-allowed" />
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <label htmlFor="reg-password" className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Definir Senha *</label>
+                                                    <div className="relative">
+                                                        <KeyRound className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#d9a65a]" />
+                                                        <input 
+                                                            type="password" 
+                                                            id="reg-password" 
+                                                            required 
+                                                            value={password} 
+                                                            onChange={e => setPassword(e.target.value)}
+                                                            className="w-full pl-11 p-3.5 bg-white border border-gray-200 rounded-2xl focus:border-[#d9a65a] focus:ring-4 focus:ring-[#d9a65a]/10 outline-none transition-all text-sm font-bold"
+                                                            placeholder="••••••••"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <label htmlFor="reg-email" className="text-xs font-bold text-gray-500 uppercase mb-1 block">{language === 'en' ? 'Email *' : 'Email *'}</label>
-                                            <input type="email" id="reg-email" required value={email} onChange={e => setEmail(e.target.value)}
-                                                className="w-full p-3 rounded-xl border border-gray-100 focus:border-[#d9a65a] outline-none text-sm"
-                                                placeholder="seu@email.com"
-                                            />
+
+                                        {/* Section: Personal Info */}
+                                        <div className="space-y-4 px-1">
+                                            <div className="flex items-center gap-3 mb-2">
+                                                <div className="w-8 h-8 rounded-xl bg-[#f7f1eb] flex items-center justify-center text-[#d9a65a]">
+                                                    <User className="w-4 h-4" />
+                                                </div>
+                                                <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Informação Pessoal</h4>
+                                            </div>
+
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <div className="space-y-1">
+                                                    <label htmlFor="reg-name" className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Nome Completo *</label>
+                                                    <input type="text" id="reg-name" required value={name} onChange={e => setName(e.target.value)}
+                                                        className="w-full p-3.5 bg-gray-50/50 border border-gray-100 rounded-2xl focus:border-[#d9a65a] focus:bg-white outline-none text-sm font-bold transition-all"
+                                                        placeholder="Ex: João Silva"
+                                                    />
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <label htmlFor="reg-email" className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Email de Contacto *</label>
+                                                    <div className="relative">
+                                                        <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" />
+                                                        <input type="email" id="reg-email" required value={email} onChange={e => setEmail(e.target.value)}
+                                                            className="w-full pl-11 p-3.5 bg-gray-50/50 border border-gray-100 rounded-2xl focus:border-[#d9a65a] focus:bg-white outline-none text-sm font-bold transition-all"
+                                                            placeholder="joao@exemplo.com"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div className="space-y-1">
+                                                    <label htmlFor="reg-dob" className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Aniversário</label>
+                                                    <input type="date" id="reg-dob" value={dob} onChange={e => setDob(e.target.value)}
+                                                        className="w-full p-3.5 bg-gray-50/50 border border-gray-100 rounded-2xl focus:border-[#d9a65a] focus:bg-white outline-none text-sm font-bold transition-all"
+                                                    />
+                                                </div>
+                                                <div className="space-y-1 text-right">
+                                                    <label htmlFor="reg-whatsapp" className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">WhatsApp Notificações</label>
+                                                    <div className="relative">
+                                                        <input type="tel" id="reg-whatsapp" value={whatsapp} onChange={e => setWhatsapp(e.target.value)}
+                                                            className="w-full p-3.5 bg-gray-50/50 border border-gray-100 rounded-2xl focus:border-[#d9a65a] focus:bg-white outline-none text-sm font-bold transition-all text-right"
+                                                            placeholder="+258..."
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Section: Delivery & Billing (Optional) */}
+                                        <div className="space-y-4 px-1">
+                                            <div className="flex items-center gap-3 mb-2">
+                                                <div className="w-8 h-8 rounded-xl bg-[#f7f1eb] flex items-center justify-center text-[#d9a65a]">
+                                                    <MapPin className="w-4 h-4" />
+                                                </div>
+                                                <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Entrega e Facturação</h4>
+                                            </div>
+
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <div className="space-y-1">
+                                                    <label htmlFor="reg-address" className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Endereço Principal (Opcional)</label>
+                                                    <input type="text" id="reg-address" value={address} onChange={e => setAddress(e.target.value)}
+                                                        className="w-full p-3.5 bg-gray-50/50 border border-gray-100 rounded-2xl focus:border-[#d9a65a] focus:bg-white outline-none text-sm font-bold transition-all"
+                                                        placeholder="Rua, Bairro..."
+                                                    />
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <label htmlFor="reg-nuit" className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">NUIT (Opcional)</label>
+                                                    <input type="text" id="reg-nuit" value={nuit} onChange={e => setNuit(e.target.value)}
+                                                        maxLength={9}
+                                                        className="w-full p-3.5 bg-gray-50/50 border border-gray-100 rounded-2xl focus:border-[#d9a65a] focus:bg-white outline-none text-sm font-bold transition-all"
+                                                        placeholder="123456789"
+                                                    />
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
 
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <div>
-                                            <label htmlFor="reg-dob" className="text-xs font-bold text-gray-500 uppercase mb-1 block">Nascimento (Opcional)</label>
-                                            <input type="date" id="reg-dob" value={dob} onChange={e => setDob(e.target.value)}
-                                                className="w-full p-3 rounded-xl border border-gray-100 focus:border-[#d9a65a] outline-none text-sm"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label htmlFor="reg-whatsapp" className="text-xs font-bold text-gray-500 uppercase mb-1 block">WhatsApp (Opcional)</label>
-                                            <input type="tel" id="reg-whatsapp" value={whatsapp} onChange={e => setWhatsapp(e.target.value)}
-                                                className="w-full p-3 rounded-xl border border-gray-100 focus:border-[#d9a65a] outline-none text-sm"
-                                                placeholder="84/85..."
-                                            />
-                                        </div>
-                                    </div>
-
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div>
-                                            <label htmlFor="reg-address" className="text-xs font-bold text-gray-500 uppercase mb-1 block">Endereço (Opcional)</label>
-                                            <input type="text" id="reg-address" value={address} onChange={e => setAddress(e.target.value)}
-                                                className="w-full p-3 rounded-xl border border-gray-100 focus:border-[#d9a65a] outline-none text-sm"
-                                                placeholder="Bairro, Rua, Casa..."
-                                            />
-                                        </div>
-                                        <div>
-                                            <label htmlFor="reg-nuit" className="text-xs font-bold text-gray-500 uppercase mb-1 block">NUIT (Opcional)</label>
-                                            <input type="text" id="reg-nuit" value={nuit} onChange={e => setNuit(e.target.value)}
-                                                maxLength={9}
-                                                className="w-full p-3 rounded-xl border border-gray-100 focus:border-[#d9a65a] outline-none text-sm"
-                                                placeholder="123456789"
-                                            />
-                                        </div>
-                                    </div>
-
-                                    <div>
-                                        <label htmlFor="reg-password" className="text-xs font-bold text-gray-500 uppercase mb-1 block">{language === 'en' ? 'Create Password *' : 'Criar Palavra-passe *'}</label>
-                                        <input type="password" id="reg-password" required value={password} onChange={e => setPassword(e.target.value)}
-                                            className="w-full p-3 rounded-xl border border-gray-100 focus:border-[#d9a65a] outline-none text-sm"
-                                            placeholder="Mínimo 4 caracteres"
-                                        />
-                                    </div>
-
-                                    <div className="py-2">
-                                        <label className="flex items-start gap-3 cursor-pointer group">
-                                            <div className="relative mt-0.5">
+                                    <div className="pt-4 space-y-4">
+                                        <label className="flex items-start gap-4 cursor-pointer group bg-[#d9a65a]/5 p-4 rounded-2xl border border-[#d9a65a]/10">
+                                            <div className="relative mt-1">
                                                 <input
                                                     type="checkbox"
                                                     required
@@ -784,24 +869,25 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                                                     onChange={(e) => setAcceptedTerms(e.target.checked)}
                                                     className="sr-only peer"
                                                 />
-                                                <div className="w-5 h-5 border-2 border-gray-200 rounded-md peer-checked:bg-[#d9a65a] peer-checked:border-[#d9a65a] transition-all flex items-center justify-center">
+                                                <div className="w-6 h-6 border-2 border-[#d9a65a]/30 rounded-lg peer-checked:bg-[#d9a65a] peer-checked:border-[#d9a65a] transition-all flex items-center justify-center">
                                                     <div className="w-2 h-3 border-r-2 border-b-2 border-white rotate-45 mb-1 hidden peer-checked:block"></div>
                                                 </div>
                                             </div>
-                                            <span className="text-xs text-gray-500 leading-tight">
-                                                Ao criar conta, eu aceito os <button type="button" onClick={() => setActiveLegalView('terms')} className="text-[#d9a65a] hover:underline">{language === 'en' ? 'Terms of Service' : 'Termos de Serviço'}</button> e a <button type="button" onClick={() => setActiveLegalView('privacy')} className="text-[#d9a65a] hover:underline">{language === 'en' ? 'Privacy Policy' : 'Política de Privacidade'}</button> da Pão Caseiro.
+                                            <span className="text-[10px] text-gray-500 font-bold uppercase tracking-tight leading-relaxed">
+                                                Eu aceito os <button type="button" onClick={() => setActiveLegalView('terms')} className="text-[#d9a65a] hover:underline">Termos de Serviço</button> e a <button type="button" onClick={() => setActiveLegalView('privacy')} className="text-[#d9a65a] hover:underline">Política de Privacidade</button> da Pão Caseiro. *
                                             </span>
                                         </label>
-                                    </div>
 
-                                    <button
-                                        type="submit"
-                                        disabled={loading || !name || password.length < 4 || !acceptedTerms}
-                                        className="w-full bg-[#3b2f2f] text-[#d9a65a] py-3 mt-4 rounded-xl font-bold uppercase tracking-widest hover:bg-[#d9a65a] hover:text-[#3b2f2f] transition-all flex justify-center items-center disabled:opacity-70"
-                                    >
-                                        {loading ? <Loader className="w-6 h-6 animate-spin" /> : (existingCustomer ? 'Concluir Acesso' : 'Concluir Registo')}
-                                    </button>
-                                    <button type="button" onClick={() => setStep('choice')} className="w-full text-sm text-gray-500 hover:text-[#3b2f2f] underline mt-2">{language === 'en' ? 'Back' : 'Voltar'}</button>
+                                        <button
+                                            type="submit"
+                                            disabled={loading || !name || password.length < 4 || !acceptedTerms}
+                                            className="w-full bg-[#3b2f2f] text-[#d9a65a] py-4 rounded-2xl font-black uppercase tracking-widest hover:brightness-110 transition-all flex justify-center items-center disabled:opacity-50 shadow-xl shadow-[#3b2f2f]/20"
+                                        >
+                                            {loading ? <Loader className="w-6 h-6 animate-spin" /> : 'Finalizar Registo'}
+                                        </button>
+                                        
+                                        <button type="button" onClick={() => setStep('choice')} className="w-full text-[10px] font-black text-gray-400 hover:text-[#3b2f2f] uppercase tracking-[0.2em]">{language === 'en' ? 'Cancel Registration' : 'Cancelar Registo'}</button>
+                                    </div>
                                 </form>
                             )}
                         </div>

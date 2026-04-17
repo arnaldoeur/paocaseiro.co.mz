@@ -108,36 +108,43 @@ export const AdminNotifications: React.FC = () => {
     };
 
     return (
-        <div className="flex flex-col h-full bg-gray-50/50 rounded-3xl overflow-hidden border border-gray-100">
+        <div className="flex flex-col h-full bg-gray-50/50 rounded-3xl overflow-hidden border border-gray-100 backdrop-blur-sm">
             {/* Header */}
-            <div className="p-6 bg-white border-b border-gray-100 flex items-center justify-between">
+            <div className="p-4 md:p-6 bg-white border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
                     <div className="relative">
-                        <Bell className="w-6 h-6 text-[#3b2f2f]" />
+                        <div className={`p-2.5 rounded-2xl ${unreadCount > 0 ? 'bg-rose-50 text-rose-500' : 'bg-gray-50 text-gray-400'}`}>
+                            <Bell className="w-6 h-6" />
+                        </div>
                         {unreadCount > 0 && (
-                            <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[10px] font-black w-4 h-4 flex items-center justify-center rounded-full border-2 border-white animate-pulse">
+                            <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[10px] font-black w-5 h-5 flex items-center justify-center rounded-full border-2 border-white shadow-sm animate-pulse">
                                 {unreadCount}
                             </span>
                         )}
                     </div>
                     <div>
-                        <h2 className="text-xl font-black text-[#3b2f2f] tracking-tight">Centro de Notificações</h2>
-                        <p className="text-xs text-gray-400 font-medium lowercase">Feed de eventos do sistema em tempo-real</p>
+                        <h2 className="text-lg md:text-xl font-black text-[#3b2f2f] tracking-tight leading-none">Centro de Notificações</h2>
+                        <p className="text-[10px] md:text-xs text-gray-400 font-bold uppercase tracking-wider mt-1 opacity-70">Monitoria de Eventos em Tempo Real</p>
                     </div>
                 </div>
                 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 justify-end">
                     <button 
                         onClick={() => setSoundEnabled(!soundEnabled)}
-                        className={`p-2 rounded-xl border transition-all ${soundEnabled ? 'bg-amber-50 border-amber-100 text-amber-600' : 'bg-gray-50 border-gray-100 text-gray-400'}`}
-                        title={soundEnabled ? "Desativar Som" : "Ativar Som"}
+                        className={`p-2.5 rounded-xl border transition-all duration-300 flex items-center gap-2 ${
+                            soundEnabled 
+                            ? 'bg-amber-50 border-amber-100 text-amber-600 shadow-sm' 
+                            : 'bg-gray-50 border-gray-100 text-gray-400 opacity-60'
+                        }`}
+                        title={soundEnabled ? "Desativar Alerta Sonoro" : "Ativar Alerta Sonoro"}
                     >
                         <Clock className={`w-4 h-4 ${soundEnabled ? 'animate-pulse' : ''}`} />
+                        <span className="text-[10px] font-black uppercase hidden lg:block">{soundEnabled ? 'Som Ativo' : 'Mudo'}</span>
                     </button>
                     <button 
                         onClick={markAllRead}
                         disabled={unreadCount === 0}
-                        className="px-4 py-2 bg-[#3b2f2f] text-white text-xs font-bold rounded-xl hover:bg-[#4a3b3b] disabled:opacity-50 disabled:grayscale transition-all shadow-md shadow-brown-500/10"
+                        className="px-4 py-2.5 bg-[#3b2f2f] text-white text-xs font-black rounded-xl hover:bg-[#4a3b3b] disabled:opacity-30 disabled:grayscale transition-all shadow-md shadow-brown-500/10 active:scale-95 uppercase tracking-tighter"
                     >
                         Limpar Tudo
                     </button>
@@ -145,73 +152,105 @@ export const AdminNotifications: React.FC = () => {
             </div>
 
             {/* Notifications List */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+            <div className="flex-1 overflow-y-auto p-3 md:p-6 space-y-4 custom-scrollbar bg-white/30">
                 {loading ? (
-                    <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-3">
-                        <div className="w-8 h-8 border-4 border-gray-100 border-t-[#3b2f2f] rounded-full animate-spin"></div>
-                        <p className="text-sm font-medium">A carregar eventos...</p>
+                    <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-4">
+                        <div className="relative">
+                            <div className="w-12 h-12 border-4 border-gray-100 border-t-[#d9a65a] rounded-full animate-spin"></div>
+                            <div className="absolute inset-0 flex items-center justify-center">
+                                <div className="w-2 h-2 bg-[#d9a65a] rounded-full animate-ping"></div>
+                            </div>
+                        </div>
+                        <p className="text-xs font-bold uppercase tracking-widest opacity-50">Sincronizando Sistema...</p>
                     </div>
                 ) : notifications.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-full text-gray-400 py-12">
-                        <Bell className="w-12 h-12 mb-4 opacity-10" />
-                        <p className="text-sm font-medium">Nenhum evento registado</p>
+                    <div className="flex flex-col items-center justify-center h-full text-gray-400 py-12 px-6 text-center">
+                        <div className="w-20 h-20 bg-gray-100/50 rounded-full flex items-center justify-center mb-6">
+                            <Bell className="w-10 h-10 opacity-20" />
+                        </div>
+                        <h3 className="text-[#3b2f2f] font-black text-lg mb-2">Tudo em ordem!</h3>
+                        <p className="text-sm font-medium max-w-[240px] leading-relaxed">Não existem novos eventos ou alertas críticos no sistema no momento.</p>
                     </div>
                 ) : (
-                    <AnimatePresence initial={false}>
-                        {notifications.map((notif) => (
-                            <motion.div
-                                key={notif.id}
-                                initial={{ opacity: 0, y: -20, scale: 0.95 }}
-                                animate={{ opacity: 1, y: 0, scale: 1 }}
-                                exit={{ opacity: 0, scale: 0.9 }}
-                                onClick={() => !notif.read && markAsRead(notif.id)}
-                                className={`group p-4 rounded-2xl border transition-all cursor-pointer relative overflow-hidden ${
-                                    notif.read 
-                                    ? 'bg-white border-gray-100 opacity-70 hover:opacity-100 hover:border-gray-200' 
-                                    : 'bg-white border-[#3b2f2f]/10 shadow-lg shadow-[#3b2f2f]/5 ring-1 ring-[#3b2f2f]/5'
-                                }`}
-                            >
-                                {!notif.read && (
-                                    <div className="absolute top-0 left-0 w-1 h-full bg-[#3b2f2f]" />
-                                )}
-                                
-                                <div className="flex gap-4">
-                                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${
-                                        notif.read ? 'bg-gray-50' : 'bg-[#3b2f2f]/5'
-                                    }`}>
-                                        {getIcon(notif.type)}
-                                    </div>
+                    <div className="grid grid-cols-1 gap-3 max-w-5xl mx-auto">
+                        <AnimatePresence initial={false}>
+                            {notifications.map((notif) => (
+                                <motion.div
+                                    key={notif.id}
+                                    initial={{ opacity: 0, x: -20, scale: 0.98 }}
+                                    animate={{ opacity: 1, x: 0, scale: 1 }}
+                                    exit={{ opacity: 0, x: 20, scale: 0.95 }}
+                                    onClick={() => !notif.read && markAsRead(notif.id)}
+                                    className={`group p-4 md:p-5 rounded-2xl border transition-all duration-300 cursor-pointer relative overflow-hidden backdrop-blur-sm ${
+                                        notif.read 
+                                        ? 'bg-white border-gray-100 hover:border-gray-200 shadow-sm' 
+                                        : 'bg-white border-[#3b2f2f]/10 shadow-xl shadow-[#3b2f2f]/5 ring-1 ring-[#3b2f2f]/5 active:scale-[0.99]'
+                                    }`}
+                                >
+                                    {!notif.read && (
+                                        <div className="absolute top-0 left-0 w-1.5 h-full bg-[#d9a65a] shadow-[2px_0_10px_rgba(217,166,90,0.3)]" />
+                                    )}
                                     
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex items-center justify-between mb-1">
-                                            <h3 className={`text-sm font-black truncate ${notif.read ? 'text-gray-600' : 'text-[#3b2f2f]'}`}>
-                                                {notif.title}
-                                            </h3>
-                                            <span className="text-[10px] font-bold text-gray-400 font-mono">
-                                                {new Date(notif.created_at).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                                            </span>
+                                    <div className="flex flex-col sm:flex-row gap-4">
+                                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-110 ${
+                                            notif.read ? 'bg-gray-50' : 'bg-[#d9a65a]/10'
+                                        }`}>
+                                            {getIcon(notif.type)}
                                         </div>
-                                        <p className={`text-xs leading-relaxed ${notif.read ? 'text-gray-400' : 'text-gray-600'}`}>
-                                            {notif.message}
-                                        </p>
                                         
-                                        <div className="mt-3 flex items-center gap-2">
-                                            {getSeverityBadge(notif.type)}
-                                            <span className="text-[10px] text-gray-300 font-medium">#{notif.type}</span>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex flex-wrap items-center justify-between mb-2 gap-2">
+                                                <div className="flex items-center gap-2">
+                                                    <h3 className={`text-sm md:text-base font-black tracking-tight underline-offset-4 ${notif.read ? 'text-gray-500' : 'text-[#3b2f2f]'}`}>
+                                                        {notif.title}
+                                                    </h3>
+                                                    {getSeverityBadge(notif.type)}
+                                                </div>
+                                                <div className="flex items-center gap-1.5 px-2 py-1 bg-gray-50 rounded-lg shrink-0">
+                                                    <Clock size={10} className="text-gray-400" />
+                                                    <span className="text-[10px] font-bold text-gray-500 font-mono">
+                                                        {new Date(notif.created_at).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <p className={`text-xs md:text-sm leading-relaxed font-medium break-words ${notif.read ? 'text-gray-400' : 'text-gray-600'}`}>
+                                                {notif.message}
+                                            </p>
+                                            
+                                            <div className="mt-4 flex items-center justify-between">
+                                                <div className="flex items-center gap-1.5">
+                                                    <span className="text-[10px] bg-gray-100 text-gray-400 px-2 py-0.5 rounded-md font-bold uppercase tracking-tighter">#{notif.type}</span>
+                                                    {notif.entity_id && (
+                                                        <span className="text-[10px] text-[#d9a65a] font-bold">ID: {notif.entity_id.slice(-8)}</span>
+                                                    )}
+                                                </div>
+                                                {!notif.read && (
+                                                    <span className="text-[10px] text-[#3b2f2f] font-black uppercase tracking-widest flex items-center gap-1">
+                                                        <CheckCircle size={10} /> Marcar como lido
+                                                    </span>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                            </motion.div>
-                        ))}
-                    </AnimatePresence>
+                                </motion.div>
+                            ))}
+                        </AnimatePresence>
+                    </div>
                 )}
             </div>
             
             {/* Footer */}
-            <div className="p-4 bg-white/50 border-t border-gray-100">
-                <p className="text-[10px] text-center text-gray-400 uppercase tracking-widest font-bold">
-                    Monitorização em Tempo Real • Pão Caseiro Platform
-                </p>
+            <div className="p-4 bg-white/60 border-t border-gray-100 backdrop-blur-md">
+                <div className="flex flex-col sm:flex-row justify-between items-center gap-2 max-w-5xl mx-auto">
+                    <p className="text-[10px] text-gray-400 uppercase tracking-widest font-black">
+                        Pão Caseiro Dashboard • 2025
+                    </p>
+                    <div className="flex items-center gap-4 text-[10px] font-bold text-gray-300 uppercase">
+                        <span>Sistema Ativo</span>
+                        <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.5)]"></div>
+                        <span className="hidden sm:inline">Tempo de Resposta: 45ms</span>
+                    </div>
+                </div>
             </div>
         </div>
     );

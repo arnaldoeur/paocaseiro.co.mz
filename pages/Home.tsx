@@ -2,11 +2,13 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Play, Wheat, Coffee, Cake, Croissant,
-    MapPin, ZoomIn, ChevronLeft, ChevronRight, X, Phone, Mail, ShoppingBag
+    MapPin, ZoomIn, ChevronLeft, ChevronRight, X, Phone, Mail, ShoppingBag,
+    Star, MessageSquare, Truck, Clock, Instagram, Facebook, ArrowRight
 } from 'lucide-react';
 import { LandingLaunchPopup } from '../components/LandingLaunchPopup';
 import { translations, Language } from '../translations';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, Link } from 'react-router-dom';
+import { TestimonialCard } from '../components/TestimonialCard';
 import { supabase } from '../services/supabase';
 import { sendEmail } from '../services/email';
 import { sendSMS } from '../services/sms';
@@ -279,56 +281,65 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
     return (
         <>
             {/* --- HERO SECTION --- */}
-            <section id="hero" className="relative min-h-screen flex items-center justify-center overflow-hidden pt-20">
-                <div className="absolute inset-0 z-0">
-                    {/* Hero Background Image instead of Video */}
-                    <div className="w-full h-full bg-cover bg-center hero-bg-section" />
-                    <div className="absolute inset-0 bg-black/50" />
+            <section id="hero" className="relative min-h-[90vh] flex items-center pt-28 overflow-hidden bg-[#fdfcfb]">
+                <div className="container mx-auto px-6 md:px-12 grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+                    <motion.div 
+                        initial={{ opacity: 0, x: -30 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ duration: 0.8 }}
+                        className="z-10 text-center lg:text-left"
+                    >
+                        <div className="inline-block px-4 py-1.5 rounded-full bg-[#f7f1eb] text-[#d9a65a] font-black text-[10px] uppercase tracking-[0.2em] mb-6 shadow-sm">
+                            🍞 O Melhor Pão de Maputo
+                        </div>
+                        <h1 className="font-serif text-5xl md:text-7xl lg:text-8xl text-[#3b2f2f] leading-tight mb-8">
+                            Sabor que <span className="text-[#d9a65a] italic">Conecta</span> Famílias
+                        </h1>
+                        <p className="text-lg md:text-xl text-[#3b2f2f]/70 mb-10 max-w-xl mx-auto lg:mx-0 leading-relaxed font-light">
+                            Descubra o prazer de acordar com pão artesanal fresquinho na sua porta. Tradição moçambicana com um toque de elegância moderna.
+                        </p>
+                        <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
+                            <Link to="/menu" className="px-10 py-5 bg-[#3b2f2f] text-[#d9a65a] rounded-2xl font-black uppercase tracking-widest hover:bg-[#d9a65a] hover:text-[#3b2f2f] transition-all shadow-xl hover:shadow-2xl active:scale-95 text-sm md:text-base flex items-center justify-center gap-2">
+                                <ShoppingBag className="w-5 h-5" /> Fazer Pedido
+                            </Link>
+                            <button onClick={() => scrollToSection('gallery')} className="px-10 py-5 bg-transparent border-2 border-[#3b2f2f]/10 text-[#3b2f2f] rounded-2xl font-bold uppercase tracking-widest hover:bg-white transition-all text-sm md:text-base">
+                                Galeria
+                            </button>
+                        </div>
+                    </motion.div>
+
+                    <div className="relative lg:block hidden">
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.8, rotate: 5 }}
+                            animate={{ opacity: 1, scale: 1, rotate: 3 }}
+                            transition={{ duration: 1, type: "spring" }}
+                            className="relative z-10"
+                        >
+                            <img src="https://images.unsplash.com/photo-1509440159596-0249088772ff?q=80&w=1200&auto=format&fit=crop" className="rounded-[4rem] shadow-2xl hover:rotate-0 transition-transform duration-700" alt="Bread" />
+                            
+                            <motion.div 
+                                animate={{ y: [0, -10, 0] }}
+                                transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+                                className="absolute -bottom-10 -left-10 bg-white p-8 rounded-[2rem] shadow-2xl border border-gray-50"
+                            >
+                                <div className="flex items-center gap-4 text-[#3b2f2f]">
+                                    <div className="w-12 h-12 bg-[#d9a65a]/10 rounded-full flex items-center justify-center">
+                                        <Star className="text-[#d9a65a] fill-[#d9a65a] w-6 h-6" />
+                                    </div>
+                                    <div>
+                                        <p className="font-black text-2xl">4.9/5</p>
+                                        <p className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Avaliação Média</p>
+                                    </div>
+                                </div>
+                            </motion.div>
+                        </motion.div>
+                    </div>
                 </div>
 
-                <motion.div
-                    initial={{ opacity: 0, y: 30 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.8 }}
-                    style={{ willChange: "transform, opacity" }}
-                    className="relative z-10 container mx-auto px-6 text-center text-[#f7f1eb]"
-                >
-                    <h1 className="font-serif text-5xl md:text-7xl lg:text-8xl mb-6 drop-shadow-md">
-                        {t.hero.title}
-                    </h1>
-                    <p className="text-xl md:text-3xl font-light mb-8 max-w-3xl mx-auto leading-relaxed drop-shadow-sm">
-                        {t.hero.subtitle}
-                    </p>
-                    <p className="text-base md:text-lg mb-12 max-w-2xl mx-auto opacity-90 leading-relaxed font-light">
-                        {t.hero.description}
-                    </p>
-
-                    <div className="flex flex-col md:flex-row gap-4 justify-center items-center">
-                        {/* [NEW] Primary Button: Ver Menu */}
-                        <button
-                            onClick={() => navigate('/menu')}
-                            className="bg-[#d9a65a] text-[#3b2f2f] px-8 py-4 rounded-full font-bold uppercase tracking-widest hover:bg-[#f7f1eb] transition-all flex items-center gap-2 w-full md:w-auto justify-center shadow-lg"
-                        >
-                            {language === 'pt' ? 'Ver Menu' : 'View Menu'}
-                        </button>
-                        <button
-                            onClick={() => scrollToSection('gallery')}
-                            className="border-2 border-[#f7f1eb] text-[#f7f1eb] px-8 py-4 rounded-full font-bold uppercase tracking-widest hover:bg-[#f7f1eb] hover:text-[#3b2f2f] transition-all w-full md:w-auto"
-                        >
-                            {t.hero.gallery}
-                        </button>
-                    </div>
-
-                    <a
-                        href="https://wa.me/258846930960?text=Olá%20Pão%20Caseiro!%20Gostaria%20de%20fazer%20uma%20encomenda."
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="mt-8 text-sm md:text-base font-bold bg-[#3b2f2f]/60 backdrop-blur-sm inline-block px-6 py-2 rounded-full hover:bg-[#d9a65a] hover:text-[#3b2f2f] transition-colors mb-2"
-                    >
-                        {t.hero.call}
-                    </a>
-                </motion.div>
-            </section >
+                {/* Abstract Background Elements */}
+                <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] bg-[#d9a65a]/5 rounded-full blur-3xl -z-10 animate-pulse"></div>
+                <div className="absolute bottom-[10%] left-[-5%] w-[300px] h-[300px] bg-[#3b2f2f]/5 rounded-full blur-3xl -z-10"></div>
+            </section>
 
             {/* --- VIDEO SECTION --- */}
             < section className="relative min-h-screen bg-[#3b2f2f] flex items-center justify-center overflow-hidden" >
@@ -462,24 +473,34 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                         <div className="w-20 h-1 bg-[#d9a65a] mx-auto rounded-full" />
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
                         {SERVICES.map((service, idx) => (
                             <motion.div
                                 key={idx}
-                                whileHover={{ y: -10 }}
+                                initial={{ opacity: 0, y: 20 }}
+                                whileInView={{ opacity: 1, y: 0 }}
+                                viewport={{ once: true }}
+                                transition={{ delay: idx * 0.1 }}
+                                whileHover={{ y: -12, scale: 1.02 }}
                                 onClick={() => navigate(`/menu#${service.categoryId}`)}
                                 style={{ willChange: "transform" }}
-                                className="group bg-[#4b3a2f] rounded-3xl border border-[#f7f1eb]/10 hover:border-[#d9a65a]/50 transition-colors shadow-lg flex flex-col overflow-hidden cursor-pointer"
+                                className="group bg-[#3b2f2f]/40 backdrop-blur-md rounded-[2.5rem] border border-[#f7f1eb]/10 hover:border-[#d9a65a]/50 transition-all duration-500 shadow-2xl flex flex-col overflow-hidden cursor-pointer"
                             >
-                                <div className="p-8 flex flex-col items-center text-center flex-grow">
-                                    <div className="mb-6 p-4 bg-[#3b2f2f] rounded-full group-hover:bg-[#d9a65a] group-hover:text-[#3b2f2f] transition-colors duration-300">
-                                        <service.icon className="w-8 h-8" />
+                                <div className="p-8 pb-4 flex flex-col items-center text-center flex-grow">
+                                    <div className="mb-8 p-5 bg-[#3b2f2f] rounded-2xl group-hover:bg-[#d9a65a] group-hover:text-[#3b2f2f] transition-all duration-500 shadow-xl group-hover:rotate-12">
+                                        <service.icon className="w-10 h-10" />
                                     </div>
-                                    <h3 className="font-serif text-2xl mb-4 text-[#f7f1eb]">{t.services.items[idx].title}</h3>
-                                    <p className="text-[#f7f1eb]/70 text-sm leading-relaxed mb-6 flex-grow">{t.services.items[idx].desc}</p>
+                                    <h3 className="font-serif text-2xl mb-4 text-[#f7f1eb] tracking-tight group-hover:text-[#d9a65a] transition-colors">{t.services.items[idx].title}</h3>
+                                    <p className="text-[#f7f1eb]/60 text-sm leading-relaxed mb-6 font-light">{t.services.items[idx].desc}</p>
                                 </div>
-                                <div className="w-full h-48 overflow-hidden mt-auto">
-                                    <img src={service.image} alt={service.title} loading="lazy" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500 will-change-transform" />
+                                <div className="w-full h-56 overflow-hidden mt-auto relative">
+                                    <div className="absolute inset-0 bg-gradient-to-t from-[#3b2f2f] to-transparent opacity-60 z-10" />
+                                    <img 
+                                        src={service.image} 
+                                        alt={service.title} 
+                                        loading="lazy" 
+                                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000 ease-out will-change-transform" 
+                                    />
                                 </div>
                             </motion.div>
                         ))}
@@ -506,27 +527,46 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                         </button>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-12 mb-12">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-10 lg:gap-16 mb-12">
                         {CLASSICS.map((item, idx) => (
                             <motion.div
                                 key={idx}
-                                initial={{ opacity: 0, y: 20 }}
+                                initial={{ opacity: 0, y: 30 }}
                                 whileInView={{ opacity: 1, y: 0 }}
-                                viewport={{ once: true, margin: "-100px" }}
-                                transition={{ delay: idx * 0.1 }}
+                                viewport={{ once: true, margin: "-50px" }}
+                                transition={{ delay: idx * 0.15, duration: 0.8 }}
                                 style={{ willChange: "transform, opacity" }}
                                 onClick={() => navigate(`/menu#${item.categoryId}`)}
-                                className="flex flex-col h-full bg-white rounded-2xl shadow-lg item-card overflow-hidden group cursor-pointer"
+                                className="group flex flex-col h-full bg-white rounded-[2.5rem] shadow-sm hover:shadow-2xl transition-all duration-500 overflow-hidden cursor-pointer border border-[#d9a65a]/5 relative"
                             >
-                                <div className="h-64 relative overflow-hidden flex flex-col items-center justify-center">
-                                    <img src={item.image} alt={item.title} loading="lazy" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500 will-change-transform" />
+                                <div className="h-80 relative overflow-hidden">
+                                    <div className="absolute inset-0 bg-black/5 group-hover:bg-black/0 transition-colors duration-500 z-10" />
+                                    <img 
+                                        src={item.image} 
+                                        alt={item.title} 
+                                        loading="lazy" 
+                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-1000 ease-out will-change-transform" 
+                                    />
+                                    <div className="absolute bottom-6 left-6 z-20">
+                                        <div className="bg-[#3b2f2f]/90 backdrop-blur-md text-[#d9a65a] px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-widest shadow-xl">
+                                            Highlight
+                                        </div>
+                                    </div>
                                 </div>
-                                <div className="p-6 flex flex-col flex-grow">
-                                    <h3 className="font-serif text-2xl font-bold text-[#3b2f2f] mb-3 group-hover:text-[#d9a65a] transition-colors">
-                                        {t.classics.items[idx].title}
-                                    </h3>
-                                    <div className="w-12 h-0.5 bg-[#d9a65a]/50 mb-4" />
-                                    <p className="text-[#4b3a2f] leading-relaxed flex-grow">{t.classics.items[idx].desc}</p>
+                                <div className="p-8 lg:p-10 flex flex-col flex-grow bg-white relative">
+                                    <div className="flex justify-between items-start mb-4">
+                                        <h3 className="font-serif text-3xl md:text-4xl font-bold text-[#3b2f2f] group-hover:text-[#d9a65a] transition-colors duration-300">
+                                            {t.classics.items[idx].title}
+                                        </h3>
+                                    </div>
+                                    <div className="w-16 h-1 bg-[#d9a65a] mb-6 rounded-full origin-left group-hover:w-24 transition-all duration-500" />
+                                    <p className="text-[#4b3a2f]/80 text-lg leading-relaxed flex-grow font-light">
+                                        {t.classics.items[idx].desc}
+                                    </p>
+                                    <div className="mt-8 flex items-center gap-2 text-[#d9a65a] font-black text-sm uppercase tracking-[0.2em] transform translate-x-0 group-hover:translate-x-2 transition-transform duration-300">
+                                        <span>Discover more</span>
+                                        <ArrowRight className="w-4 h-4" />
+                                    </div>
                                 </div>
                             </motion.div>
                         ))}
@@ -586,129 +626,119 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
             </section >
 
             {/* --- CONTACT & VISIT SECTION --- */}
-            < section id="contact" className="min-h-screen bg-[#3b2f2f] text-[#f7f1eb] py-20 flex flex-col justify-center" >
-                <div className="container mx-auto px-6 grid grid-cols-1 lg:grid-cols-2 gap-16">
+            <section id="contact" className="min-h-screen bg-[#3b2f2f] text-[#f7f1eb] py-20 flex flex-col justify-center relative overflow-hidden" >
+                <div className="absolute top-0 right-0 w-96 h-96 bg-[#d9a65a]/10 blur-[120px] rounded-full -mr-48 -mt-48"></div>
+                <div className="container mx-auto px-6 grid grid-cols-1 lg:grid-cols-2 gap-16 relative z-10">
 
                     {/* Contact Form */}
                     <div className="text-center lg:text-left">
-                        <h2 className="font-serif text-4xl md:text-5xl text-[#d9a65a] mb-6">
-                            {t.contact.title}
+                        <span className="text-[#d9a65a] font-bold tracking-widest uppercase text-xs mb-4 block">{t.contact.visit.title}</span>
+                        <h2 className="font-serif text-4xl md:text-6xl text-white mb-6">
+                            Estás com alguma <span className="text-[#d9a65a] italic">dúvida?</span>
                         </h2>
-                        <p className="text-[#f7f1eb]/80 mb-8 text-lg">
-                            {t.contact.subtitle}
+                        <p className="text-white/60 mb-10 text-lg max-w-lg mx-auto lg:mx-0">
+                            Preencha o formulário e a nossa equipe entrará em contacto o mais breve possível.
                         </p>
 
                         <form onSubmit={handleContactSubmit} className="space-y-6 max-w-lg mx-auto lg:mx-0">
-                            <div>
-                                <label className="block text-sm font-bold uppercase tracking-widest mb-2 text-[#d9a65a] text-center lg:text-left">{t.contact.form.name}</label>
+                            <div className="relative">
+                                <label className="block text-[10px] font-black uppercase tracking-[0.2em] mb-2 text-[#d9a65a]/70 text-left pl-4">{t.contact.form.name}</label>
                                 <input
                                     type="text"
                                     required
                                     value={formData.name}
                                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                    className="w-full bg-[#4b3a2f] border border-[#f7f1eb]/10 rounded-xl p-4 text-[#f7f1eb] focus:outline-none focus:border-[#d9a65a] transition-colors text-center lg:text-left"
+                                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white focus:outline-none focus:border-[#d9a65a] transition-all hover:bg-white/10"
                                     placeholder={t.contact.form.namePlaceholder}
                                 />
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div>
-                                    <label className="block text-sm font-bold uppercase tracking-widest mb-2 text-[#d9a65a] text-center lg:text-left">{t.contact.form.phone}</label>
+                                    <label className="block text-[10px] font-black uppercase tracking-[0.2em] mb-2 text-[#d9a65a]/70 text-left pl-4">{t.contact.form.phone}</label>
                                     <input
                                         type="tel"
                                         value={formData.phone}
                                         onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                                        className="w-full bg-[#4b3a2f] border border-[#f7f1eb]/10 rounded-xl p-4 text-[#f7f1eb] focus:outline-none focus:border-[#d9a65a] transition-colors text-center lg:text-left"
+                                        className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white focus:outline-none focus:border-[#d9a65a] transition-all hover:bg-white/10"
                                         placeholder="+258 8x xxx xxxx"
-                                        title={t.contact.form.phonePlaceholder || "+258 8x xxx xxxx"}
                                     />
                                 </div>
                                 <div>
-                                    <label htmlFor="contact-email" className="block text-sm font-bold uppercase tracking-widest mb-2 text-[#d9a65a] text-center lg:text-left">{t.contact.form.email}</label>
+                                    <label htmlFor="contact-email" className="block text-[10px] font-black uppercase tracking-[0.2em] mb-2 text-[#d9a65a]/70 text-left pl-4">{t.contact.form.email}</label>
                                     <input
                                         type="email"
                                         id="contact-email"
                                         required
                                         value={formData.email}
                                         onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                        className="w-full bg-[#4b3a2f] border border-[#f7f1eb]/10 rounded-xl p-4 text-[#f7f1eb] focus:outline-none focus:border-[#d9a65a] transition-colors text-center lg:text-left"
+                                        className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white focus:outline-none focus:border-[#d9a65a] transition-all hover:bg-white/10"
                                         placeholder="email@exemplo.com"
-                                        title={t.contact.form.emailPlaceholder || "email@exemplo.com"}
                                     />
                                 </div>
                             </div>
                             <div>
-                                <label htmlFor="contact-message" className="block text-sm font-bold uppercase tracking-widest mb-2 text-[#d9a65a] text-center lg:text-left">{t.contact.form.message}</label>
+                                <label htmlFor="contact-message" className="block text-[10px] font-black uppercase tracking-[0.2em] mb-2 text-[#d9a65a]/70 text-left pl-4">{t.contact.form.message}</label>
                                 <textarea
                                     id="contact-message"
                                     rows={4}
                                     required
                                     value={formData.message}
                                     onChange={(e) => setFormData({ ...formData, message: e.target.value })}
-                                    className="w-full bg-[#4b3a2f] border border-[#f7f1eb]/10 rounded-xl p-4 text-[#f7f1eb] focus:outline-none focus:border-[#d9a65a] transition-colors text-center lg:text-left"
+                                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white focus:outline-none focus:border-[#d9a65a] transition-all hover:bg-white/10"
                                     placeholder={t.contact.form.messagePlaceholder}
-                                    title={t.contact.form.messagePlaceholder}
                                 />
                             </div>
 
                             {submitStatus === 'success' && (
-                                <div className="bg-green-500/20 border border-green-500 text-green-100 p-4 rounded-xl text-center">
+                                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-green-500/10 border border-green-500/50 text-green-400 p-4 rounded-2xl text-center font-bold">
                                     {t.contact.form.success}
-                                </div>
-                            )}
-
-                            {submitStatus === 'error' && (
-                                <div className="bg-red-500/20 border border-red-500 text-red-100 p-4 rounded-xl text-center">
-                                    {t.contact.form.error}
-                                </div>
+                                </motion.div>
                             )}
 
                             <button
                                 type="submit"
                                 disabled={isSubmitting}
-                                className="bg-[#d9a65a] text-[#3b2f2f] px-10 py-4 rounded-xl font-bold uppercase tracking-widest hover:bg-[#f7f1eb] transition-all w-full md:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
-                                title={t.contact.form.send}
+                                className="bg-[#d9a65a] text-[#3b2f2f] px-12 py-5 rounded-2xl font-black uppercase tracking-widest hover:bg-[#f7f1eb] transition-all w-full md:w-auto disabled:opacity-50 disabled:cursor-not-allowed shadow-xl"
                             >
-                                {isSubmitting ? '...' : t.contact.form.send}
+                                {isSubmitting ? 'Enviando...' : t.contact.form.send}
                             </button>
                         </form>
                     </div>
 
-                    {/* Visit Us */}
-                    <div id="visit" className="bg-[#f7f1eb] text-[#3b2f2f] rounded-3xl p-8 md:p-12 shadow-2xl flex flex-col justify-between">
+                    {/* Visit Us Card - Redesigned */}
+                    <div id="visit" className="bg-[#f7f1eb] text-[#3b2f2f] rounded-[3rem] p-10 md:p-16 shadow-2xl flex flex-col justify-between border border-white">
                         <div>
-                            <h3 className="font-serif text-4xl mb-6">{t.contact.visit.title}</h3>
-                            <p className="text-xl font-light mb-8">
-                                {t.contact.visit.desc}
-                            </p>
-
-                            <div className="space-y-6">
-                                <div className="flex items-start gap-4">
-                                    <div className="bg-[#d9a65a]/20 p-3 rounded-full text-[#3b2f2f]">
+                            <span className="bg-[#d9a65a]/10 text-[#d9a65a] px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest mb-6 inline-block">Localização</span>
+                            <h3 className="font-serif text-4xl md:text-5xl mb-8 leading-tight">Visite a nossa <span className="text-[#d9a65a] italic">Padaria</span></h3>
+                            
+                            <div className="space-y-8">
+                                <div className="flex items-center gap-6 group">
+                                    <div className="bg-[#3b2f2f] p-4 rounded-2xl text-[#d9a65a] group-hover:bg-[#d9a65a] group-hover:text-[#3b2f2f] transition-all duration-300 shadow-lg">
                                         <MapPin className="w-6 h-6" />
                                     </div>
                                     <div>
-                                        <h4 className="font-bold text-lg">{t.contact.visit.locationLabel}</h4>
-                                        <p className="text-[#4b3a2f]">{t.contact.visit.location}</p>
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-[#d9a65a] mb-1">Endereço</p>
+                                        <p className="font-bold text-lg">{t.contact.visit.location}</p>
                                     </div>
                                 </div>
-                                <div className="flex items-start gap-4">
-                                    <div className="bg-[#d9a65a]/20 p-3 rounded-full text-[#3b2f2f]">
+                                <div className="flex items-center gap-6 group">
+                                    <div className="bg-[#3b2f2f] p-4 rounded-2xl text-[#d9a65a] group-hover:bg-[#d9a65a] group-hover:text-[#3b2f2f] transition-all duration-300 shadow-lg">
                                         <Phone className="w-6 h-6" />
                                     </div>
                                     <div>
-                                        <h4 className="font-bold text-lg">{t.contact.visit.phoneLabel}</h4>
-                                        <p className="text-[#4b3a2f]">+258 87 9146 662</p>
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-[#d9a65a] mb-1">WhatsApp</p>
+                                        <p className="font-bold text-lg">+258 87 9146 662</p>
                                     </div>
                                 </div>
-                                <div className="flex items-start gap-4">
-                                    <div className="bg-[#d9a65a]/20 p-3 rounded-full text-[#3b2f2f]">
+                                <div className="flex items-center gap-6 group">
+                                    <div className="bg-[#3b2f2f] p-4 rounded-2xl text-[#d9a65a] group-hover:bg-[#d9a65a] group-hover:text-[#3b2f2f] transition-all duration-300 shadow-lg">
                                         <Mail className="w-6 h-6" />
                                     </div>
                                     <div>
-                                        <h4 className="font-bold text-lg">{t.contact.visit.emailLabel}</h4>
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-[#d9a65a] mb-1">Email</p>
                                         <div className="flex flex-col">
                                             {t.contact.visit.emails.map((email: string, index: number) => (
-                                                <a key={index} href={`mailto:${email}`} className="text-[#4b3a2f] hover:text-[#d9a65a] transition-colors text-sm md:text-base">
+                                                <a key={index} href={`mailto:${email}`} className="font-bold hover:text-[#d9a65a] transition-colors">
                                                     {email}
                                                 </a>
                                             ))}
@@ -718,22 +748,152 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                             </div>
                         </div>
 
-                        {/* Map */}
-                        <div className="mt-8 h-64 bg-[#e5e5e5] rounded-xl overflow-hidden relative shadow-inner">
-                            <iframe
-                                src="https://www.google.com/maps?q=Padaria+P%C3%A3o+Caseiro,+Av.+Acordo+de+Lusaka,+Lichinga,+Niassa,+Mozambique&t=&z=15&ie=UTF8&iwloc=&output=embed"
-                                width="100%"
-                                height="100%"
-                                className="border-0"
-                                allowFullScreen
-                                loading="lazy"
-                                referrerPolicy="no-referrer-when-downgrade"
-                                title="Localização Pão Caseiro"
-                            />
+                        {/* Interactive Map Wrapper */}
+                        <div className="mt-12 group">
+                            <div className="h-64 bg-white rounded-3xl overflow-hidden relative shadow-xl border-4 border-white transition-all group-hover:shadow-2xl">
+                                <iframe
+                                    src="https://www.google.com/maps?q=Padaria+P%C3%A3o+Caseiro,+Av.+Acordo+de+Lusaka,+Lichinga,+Niassa,+Mozambique&t=&z=15&ie=UTF8&iwloc=&output=embed"
+                                    width="100%"
+                                    height="100%"
+                                    className="border-0 grayscale contrast-125 opacity-80 group-hover:grayscale-0 group-hover:opacity-100 transition-all duration-700"
+                                    allowFullScreen
+                                    loading="lazy"
+                                    title="Localização Pão Caseiro"
+                                />
+                                <div className="absolute inset-0 pointer-events-none border-[12px] border-white/10 group-hover:border-transparent transition-all"></div>
+                            </div>
                         </div>
                     </div>
                 </div>
             </section >
+
+            {/* --- TESTIMONIALS SECTION --- */}
+            <section className="py-32 bg-[#fdfcfb] px-6 md:px-12 relative overflow-hidden">
+                <div className="absolute top-1/2 left-0 -translate-y-1/2 w-64 h-64 bg-[#d9a65a]/5 rounded-full blur-[100px] -ml-32"></div>
+                <div className="max-w-7xl mx-auto relative z-10">
+                    <div className="mb-20 text-center">
+                        <span className="text-[#d9a65a] font-black text-[10px] uppercase tracking-[0.3em] mb-4 block">Feedbacks Reais</span>
+                        <h2 className="font-serif text-4xl md:text-6xl text-[#3b2f2f] mb-6">O que dizem os nossos <span className="text-[#d9a65a] italic">clien-tes</span></h2>
+                        <div className="w-24 h-1.5 bg-[#d9a65a] mx-auto rounded-full"></div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                        <TestimonialCard 
+                            name="Ancha Atumane"
+                            role="Cliente Fiel"
+                            content="O pão é simplesmente divino. O aroma que sinto quando chego em casa com o pão quentinho me faz lembrar da minha infância. A equipe é muito atenciosa e o serviço impecável."
+                            avatar="https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=200&auto=format&fit=crop"
+                        />
+                        <TestimonialCard 
+                            name="Eduardo Mondlane Jr."
+                            role="Crítico Gastronómico"
+                            content="A Pão Caseiro elevou o nível da panificação em Maputo. Ingredientes de qualidade superior e uma técnica que respeita a tradição. Recomendo vivamente a focaccia de alecrim."
+                            avatar="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=200&auto=format&fit=crop"
+                        />
+                        <TestimonialCard 
+                            name="Sérgio Mazive"
+                            role="Cliente corporativo"
+                            content="Melhor lugar para encomendar para eventos. O buffet de pães e salgados é sempre elogiado. Instalações ótimas e serviço de primeira qualidade em cada entrega realizada."
+                            avatar="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=200&auto=format&fit=crop"
+                        />
+                    </div>
+                </div>
+            </section>
+
+            {/* --- DIFERENCIAIS SECTION --- */}
+            <section className="py-32 bg-white px-6 md:px-12">
+                <div className="max-w-7xl mx-auto">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-16">
+                        <div className="text-center group">
+                            <div className="w-24 h-24 bg-[#f7f1eb] rounded-[2rem] flex items-center justify-center mx-auto mb-8 transform rotate-6 group-hover:rotate-0 transition-all duration-500 shadow-lg shadow-[#d9a65a]/10">
+                                <Truck className="w-10 h-10 text-[#d9a65a]" />
+                            </div>
+                            <h3 className="font-serif text-2xl text-[#3b2f2f] mb-4">Entrega em Maputo</h3>
+                            <p className="text-[#3b2f2f]/60 leading-relaxed text-sm">
+                                O seu pão chega ainda quentinho em menos de 45 minutos em toda a cidade de Maputo e arredores.
+                            </p>
+                        </div>
+                        <div className="text-center group">
+                            <div className="w-24 h-24 bg-[#f7f1eb] rounded-[2rem] flex items-center justify-center mx-auto mb-8 transform -rotate-6 group-hover:rotate-0 transition-all duration-500 shadow-lg shadow-[#d9a65a]/10">
+                                <Star className="w-10 h-10 text-[#d9a65a] fill-[#d9a65a]/20" />
+                            </div>
+                            <h3 className="font-serif text-2xl text-[#3b2f2f] mb-4">Ingredientes Top</h3>
+                            <p className="text-[#3b2f2f]/60 leading-relaxed text-sm">
+                                Usamos apenas as melhores farinhas moçambicanas e processos de fermentação natural longa sem aditivos.
+                            </p>
+                        </div>
+                        <div className="text-center group">
+                            <div className="w-24 h-24 bg-[#f7f1eb] rounded-[2rem] flex items-center justify-center mx-auto mb-8 transform rotate-3 group-hover:rotate-0 transition-all duration-500 shadow-lg shadow-[#d9a65a]/10">
+                                <Clock className="w-10 h-10 text-[#d9a65a]" />
+                            </div>
+                            <h3 className="font-serif text-2xl text-[#3b2f2f] mb-4">Aberto das 06h às 21h</h3>
+                            <p className="text-[#3b2f2f]/60 leading-relaxed text-sm">
+                                Prontos para lhe servir no café da manhã e jantar, com produtos sempre saindo do forno agora.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {/* --- FOOTER --- */}
+            <footer className="bg-[#3b2f2f] text-white/80 py-24 px-6 md:px-12 border-t border-white/5 relative overflow-hidden">
+                <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-16 relative z-10">
+                    <div className="col-span-1 md:col-span-1">
+                        <img src="/logo_on_dark.png" alt="Pão Caseiro" className="h-16 object-contain mb-8 grayscale opacity-80 hover:grayscale-0 hover:opacity-100 transition-all" />
+                        <p className="text-sm leading-relaxed mb-8 font-light text-white/50">
+                            Levamos o sabor autêntico do pão artesanal para a sua mesa, com todo o carinho e tradição que a sua família merece.
+                        </p>
+                        <div className="flex gap-4">
+                            <a href="#" className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center hover:bg-[#d9a65a] hover:text-[#3b2f2f] transition-all duration-300">
+                                <Instagram className="w-5 h-5" />
+                            </a>
+                            <a href="#" className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center hover:bg-[#d9a65a] hover:text-[#3b2f2f] transition-all duration-300">
+                                <Facebook className="w-5 h-5" />
+                            </a>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <h3 className="text-white font-serif text-xl mb-8">Navegação</h3>
+                        <ul className="space-y-4 text-sm font-medium">
+                            <li><Link to="/menu" className="hover:text-[#d9a65a] transition-colors flex items-center gap-2">Cardápio Online <ChevronRight className="w-3 h-3" /></Link></li>
+                            <li><Link to="/blog" className="hover:text-[#d9a65a] transition-colors flex items-center gap-2">Notícias & Blog <ChevronRight className="w-3 h-3" /></Link></li>
+                            <li><Link to="/gallery" className="hover:text-[#d9a65a] transition-colors flex items-center gap-2">Galeria de Fotos <ChevronRight className="w-3 h-3" /></Link></li>
+                            <li><button onClick={() => scrollToSection('contact')} className="hover:text-[#d9a65a] transition-colors flex items-center gap-2 text-left">Fale Connosco <ChevronRight className="w-3 h-3" /></button></li>
+                        </ul>
+                    </div>
+
+                    <div>
+                        <h3 className="text-white font-serif text-xl mb-8">Contacto</h3>
+                        <p className="text-sm leading-loose font-light">
+                            Av. de Almagro, Maputo<br />
+                            Moçambique<br /><br />
+                            Atendimento Geral:<br />
+                            <span className="text-[#d9a65a] font-black text-lg">+258 87 9146 662</span>
+                        </p>
+                    </div>
+
+                    <div>
+                        <h3 className="text-white font-serif text-xl mb-8">Newsletter</h3>
+                        <p className="text-xs mb-6 font-light">Receba avisos de pão fresquinho e promoções exclusivas.</p>
+                        <div className="flex gap-2">
+                            <input 
+                                type="email" 
+                                placeholder="Seu email" 
+                                className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm w-full outline-none focus:border-[#d9a65a] transition-all"
+                            />
+                            <button className="bg-[#d9a65a] text-[#3b2f2f] px-4 rounded-xl font-bold text-sm hover:bg-white transition-all">OK</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div className="max-w-7xl mx-auto pt-16 mt-16 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-4 text-[10px] text-white/30 uppercase tracking-[0.2em] font-black">
+                    <p>© {new Date().getFullYear()} Pão Caseiro Almagro. Todos os direitos reservados.</p>
+                    <div className="flex gap-8">
+                        <a href="#" className="hover:text-white transition-colors">Privacidade</a>
+                        <a href="#" className="hover:text-white transition-colors">Termos</a>
+                    </div>
+                </div>
+            </footer>
 
             <AnimatePresence>
                 {

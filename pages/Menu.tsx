@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, ShoppingBag, Plus, Truck, Store, CreditCard, Info, AlertTriangle, Calendar } from 'lucide-react';
+import { ChevronDown, ShoppingBag, Plus, Truck, Store, CreditCard, Info, AlertTriangle, Calendar, Clock } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { Language, translations } from '../translations';
 import { ProductModal } from '../components/ProductModal';
@@ -653,78 +653,90 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
                             </button>
 
                             <div className={`transition-all duration-500 ease-in-out ${activeSections.includes(section.title) ? 'max-h-[8000px] opacity-100' : 'max-h-0 opacity-0'}`}>
-                                <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                <div className="p-4 md:p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                     {section.items.map((item: any, idx: number) => (
                                         <div
                                             key={idx}
                                             onClick={() => handleProductClick(item)}
-                                            className="group flex gap-4 p-4 rounded-xl border border-gray-100 hover:border-[#d9a65a]/30 shadow-sm hover:shadow-xl transition-all cursor-pointer bg-white items-stretch h-40"
+                                            className="group relative flex flex-col sm:flex-row gap-4 p-4 rounded-3xl border border-gray-100 hover:border-[#d9a65a]/30 shadow-sm hover:shadow-2xl transition-all cursor-pointer bg-white overflow-hidden"
                                         >
                                             <div
-                                                className="w-32 h-32 shrink-0 rounded-xl overflow-hidden relative self-center flex items-center justify-center p-2"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    handleProductClick(item);
-                                                }}
+                                                className="w-full sm:w-40 h-48 sm:h-32 shrink-0 rounded-2xl overflow-hidden relative flex items-center justify-center bg-gray-50/50 p-2"
                                             >
                                                 <img
                                                     src={item.image}
                                                     alt={(language === 'en') ? formatProductName(item.name_en || getEnglishProductName(item.name)) : formatProductName(item.name)}
-                                                    className="w-full h-full object-contain object-center group-hover:scale-105 transition-transform duration-500"
+                                                    className={`w-full h-full object-contain object-center group-hover:scale-110 transition-transform duration-700 ${!item.isAvailable ? 'grayscale opacity-50' : ''}`}
                                                 />
+                                                
+                                                {!item.isAvailable && (
+                                                    <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] flex items-center justify-center">
+                                                        <span className="text-[10px] font-black text-white uppercase tracking-widest border border-white/30 px-2 py-1 rounded-lg">
+                                                            {language === 'pt' ? 'Indisponível' : 'Unavailable'}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                                
+                                                {item.isAvailable && item.stock <= 5 && (
+                                                    <div className="absolute top-2 left-2 bg-red-500 text-white text-[8px] font-black uppercase px-2 py-1 rounded-md shadow-lg animate-pulse">
+                                                        {language === 'pt' ? 'Últimas unidades' : 'Low Stock'}
+                                                    </div>
+                                                )}
                                             </div>
-                                            <div className="flex-1 flex flex-col justify-between py-1 min-h-0">
-                                                <div>
-                                                    <h3 className="font-bold text-[#3b2f2f] text-base leading-tight mb-1 group-hover:text-[#d9a65a] transition-colors line-clamp-1">
-                                                        {(language === 'en') ? formatProductName(item.name_en || getEnglishProductName(item.name)) : formatProductName(item.name)}
-                                                    </h3>
-                                                    <p className="text-xs text-gray-500 line-clamp-2 leading-tight mb-2">
+
+                                            <div className="flex-1 flex flex-col justify-between py-1 min-w-0">
+                                                <div className="space-y-2">
+                                                    <div className="flex justify-between items-start gap-2">
+                                                        <h3 className="font-bold text-[#3b2f2f] text-lg sm:text-base leading-tight group-hover:text-[#d9a65a] transition-colors truncate">
+                                                            {(language === 'en') ? formatProductName(item.name_en || getEnglishProductName(item.name)) : formatProductName(item.name)}
+                                                        </h3>
+                                                        <span className="font-black text-lg text-[#d9a65a] shrink-0">
+                                                            {item.price === 0 && item.variations && item.variations.length > 0
+                                                                ? `+${Math.min(...item.variations.map((v: any) => v.price))} MT`
+                                                                : `${item.price} MT`}
+                                                        </span>
+                                                    </div>
+
+                                                    <p className="text-xs text-gray-500 line-clamp-2 leading-relaxed">
                                                         {language === 'en'
                                                             ? (item.description_en || getEnglishProductDesc(item.name) || item.desc)
                                                             : item.desc}
                                                     </p>
-                                                    {(item.prepTime || item.deliveryTime) && (
-                                                        <div className="flex gap-2 text-[10px] font-bold text-gray-400">
-                                                            {item.prepTime && <span className="bg-orange-50 text-orange-600 px-1.5 py-0.5 rounded flex items-center gap-1">⏱ {item.prepTime}</span>}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                                {item.isAvailable ? (
-                                                    <div className="flex items-center justify-center gap-2 mt-2 mb-1 w-full">
-                                                        <div className="h-px bg-green-200/50 flex-1"></div>
-                                                        <span className="text-[10px] font-bold text-green-600 uppercase tracking-wider">{item.stock} disponíveis</span>
-                                                        <div className="h-px bg-green-200/50 flex-1"></div>
-                                                    </div>
-                                                ) : (
-                                                    <div className="flex items-center justify-center gap-2 mt-2 mb-1 w-full">
-                                                        <div className="h-px bg-red-200/50 flex-1"></div>
-                                                        <span className="text-[10px] font-bold text-red-500 uppercase tracking-wider">Esgotado</span>
-                                                        <div className="h-px bg-red-200/50 flex-1"></div>
-                                                    </div>
-                                                )}
 
-                                                <div className="flex items-center justify-between gap-2 mt-1">
-                                                    <span className="font-bold text-lg text-[#d9a65a]">
-                                                        {item.price === 0 && item.variations && item.variations.length > 0
-                                                            ? `A partir de ${Math.min(...item.variations.map((v: any) => v.price))} MT`
-                                                            : `${item.price} MT`}
-                                                        {item.unit && item.unit !== 'un' && <span className="text-sm font-normal text-gray-400 ml-1">/ {item.unit}</span>}
-                                                    </span>
-                                                    {item.isAvailable && isAfterLaunch && (
-                                                        <button
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                addToOrder(item);
-                                                            }}
-                                                            title={language === 'pt' ? 'Adicionar ao pedido' : 'Add to order'}
-                                                            className="bg-[#d9a65a] text-white w-8 h-8 rounded-full flex items-center justify-center hover:bg-[#3b2f2f] transition-all shadow-lg"
-                                                        >
-                                                            <Plus size={18} />
-                                                        </button>
-                                                    )}
-                                                    {item.isAvailable && !isAfterLaunch && (
-                                                        <div className="bg-[#3b2f2f]/10 text-gray-500 px-3 py-1 rounded-full text-[10px] font-bold uppercase border border-gray-200">
-                                                            {language === 'pt' ? 'Brevemente' : 'Soon'}
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {item.prepTime && (
+                                                            <div className="flex items-center gap-1.5 px-2 py-1 bg-[#f7f1eb] rounded-lg text-[9px] font-black text-[#d9a65a] uppercase tracking-tighter">
+                                                                <Clock className="w-3 h-3" /> {item.prepTime}
+                                                            </div>
+                                                        )}
+                                                        {item.isAvailable && (
+                                                            <div className="flex items-center gap-1.5 px-2 py-1 bg-green-50 rounded-lg text-[9px] font-black text-green-600 uppercase tracking-tighter">
+                                                                <ShoppingBag className="w-3 h-3" /> {item.stock} {language === 'pt' ? 'Disponíveis' : 'In Stock'}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex items-center justify-end mt-4 sm:mt-0 pt-2 border-t border-gray-50 sm:border-none">
+                                                    {item.isAvailable ? (
+                                                        isAfterLaunch ? (
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    addToOrder(item);
+                                                                }}
+                                                                className="flex items-center gap-2 bg-[#3b2f2f] text-[#d9a65a] px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-[#d9a65a] hover:text-[#3b2f2f] transition-all shadow-lg active:scale-95 group-hover:shadow-[#d9a65a]/20"
+                                                            >
+                                                                <Plus className="w-4 h-4" /> {language === 'pt' ? 'Adicionar' : 'Add'}
+                                                            </button>
+                                                        ) : (
+                                                            <div className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-400 rounded-xl text-[10px] font-black uppercase tracking-widest border border-gray-200 cursor-help" title={language === 'pt' ? 'Encomendas abrem em breve' : 'Ordering opens soon'}>
+                                                                <Clock className="w-3 h-3" /> {language === 'pt' ? 'Em breve' : 'Soon'}
+                                                            </div>
+                                                        )
+                                                    ) : (
+                                                        <div className="text-[10px] font-black text-red-400 uppercase tracking-[0.2em] py-2">
+                                                            {language === 'pt' ? 'Esgotado' : 'Sold Out'}
                                                         </div>
                                                     )}
                                                 </div>
