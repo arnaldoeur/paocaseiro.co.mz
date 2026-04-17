@@ -129,14 +129,15 @@ export const Blog: React.FC<{ language: Language }> = ({ language }) => {
                     <div className="w-full md:w-1/2">
                         <div className="w-full aspect-video rounded-[2rem] overflow-hidden shadow-2xl relative bg-[#3b2f2f] group">
                             <video 
-                                src="https://bbvowyztvzselxphbqmt.supabase.co/storage/v1/object/sign/files/video_paocaseiro.mp4?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9mZDFkYzkzMC1jOTIxLTQ1ODEtOTQ0NS1jYzgzZTE4OTY3NWMiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJmaWxlcy92aWRlb19wYW9jYXNlaXJvLm1wNCIsImlhdCI6MTc3NTU3MzU4MywiZXhwIjoxODA3MTA5NTgzfQ.kHLjBn0Z0FbM9y9oaZ18DX9iVbMLffZ_vbf8j7obGr8" 
+                                src="/videos/video_paocaseiro.mp4" 
                                 className="w-full h-full object-cover"
                                 autoPlay 
                                 muted 
                                 loop 
                                 controls
                                 playsInline
-                                preload="auto"
+                                preload="metadata"
+                                poster="/images/about-process.jpeg"
                                 crossOrigin="anonymous"
                             ></video>
                             <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent pointer-events-none group-hover:opacity-0 transition-opacity"></div>

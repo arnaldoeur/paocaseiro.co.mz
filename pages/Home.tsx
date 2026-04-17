@@ -348,7 +348,7 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                 < div className={`absolute inset-0 transition-opacity duration-500 ${isPlayingWithSound ? 'opacity-100 z-20 bg-black' : 'opacity-60'}`} >
                     <video
                         ref={videoRef}
-                        src="https://bbvowyztvzselxphbqmt.supabase.co/storage/v1/object/sign/files/video_paocaseiro.mp4?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9mZDFkYzkzMC1jOTIxLTQ1ODEtOTQ0NS1jYzgzZTE4OTY3NWMiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJmaWxlcy92aWRlb19wYW9jYXNlaXJvLm1wNCIsImlhdCI6MTc3NTU3MzU4MywiZXhwIjoxODA3MTA5NTgzfQ.kHLjBn0Z0FbM9y9oaZ18DX9iVbMLffZ_vbf8j7obGr8"
+                        src="/videos/video_paocaseiro.mp4"
                         autoPlay
                         loop
                         muted
@@ -584,7 +584,7 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                         <p className="text-[#4b3a2f]">{t.gallery.subtitle}</p>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div className="flex flex-wrap justify-center gap-6">
                         {galleryItems.map((item, idx) => (
                             <motion.div
                                 key={idx}
@@ -593,7 +593,7 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                                 whileInView={{ opacity: 1, scale: 1 }}
                                 viewport={{ once: true }}
                                 onClick={() => setSelectedIndex(idx)}
-                                className="relative group rounded-3xl overflow-hidden shadow-lg border border-[#3b2f2f]/10 cursor-pointer aspect-square bg-[#e5e5e5]"
+                                className="relative group rounded-3xl overflow-hidden shadow-lg border border-[#3b2f2f]/10 cursor-pointer bg-[#e5e5e5] w-full md:w-[calc(50%-12px)] lg:w-[calc(33.333%-16px)] aspect-square"
                             >
                                 <img
                                     src={item.src}

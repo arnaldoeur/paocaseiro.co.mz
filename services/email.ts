@@ -8,7 +8,7 @@ import { NotificationService } from './NotificationService';
  */
 
 const DEFAULT_FROM = 'Pão Caseiro <sistema@paocaseiro.co.mz>';
-const FALLBACK_LOGO_URL = 'https://bqiegszufcqimlvucrpm.supabase.co/storage/v1/object/public/branding/LOGO_FUND0_(SEM_FUNDO).png';
+const FALLBACK_LOGO_URL = 'https://paocaseiro.co.mz/logo_on_dark.png';
 
 /**
  * Base template for all branded emails
