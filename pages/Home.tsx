@@ -124,6 +124,7 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
 
     const [isPlayingWithSound, setIsPlayingWithSound] = useState(false);
     const videoRef = React.useRef<HTMLVideoElement>(null);
+    const heroVideoRef = React.useRef<HTMLVideoElement>(null);
     const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
     const [galleryItems, setGalleryItems] = useState<{ src: string, caption: string }[]>(DEFAULT_GALLERY_ITEMS);
 
@@ -188,6 +189,13 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
             };
             
             startVideo();
+        }
+
+        const heroVideo = heroVideoRef.current;
+        if (heroVideo) {
+            heroVideo.muted = true;
+            heroVideo.defaultMuted = true;
+            heroVideo.play().catch(() => {});
         }
     }, []);
     const location = useLocation();
@@ -309,8 +317,19 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
             {/* --- HERO SECTION --- */}
             <section id="hero" className="relative min-h-screen flex items-center justify-center overflow-hidden pt-20">
                 <div className="absolute inset-0 z-0">
-                    {/* Hero Background Image instead of Video */}
-                    <div className="w-full h-full bg-cover bg-center hero-bg-section" />
+                    <video
+                        ref={heroVideoRef}
+                        src="https://files.zyphtech.com/video_paocaseiro.mp4"
+                        poster="/images/hero-bg-2.png"
+                        className="w-full h-full object-cover"
+                        autoPlay={true}
+                        muted={true}
+                        loop={true}
+                        playsInline={true}
+                        webkit-playsinline="true"
+                        preload="auto"
+                        onEnded={(e) => (e.target as HTMLVideoElement).play()}
+                    />
                     <div className="absolute inset-0 bg-black/50" />
                 </div>
 
@@ -388,6 +407,7 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                         playsInline={true}
                         webkit-playsinline="true"
                         preload="auto"
+                        onEnded={(e) => (e.target as HTMLVideoElement).play()}
                     />
                 </div>
 
