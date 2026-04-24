@@ -163,40 +163,41 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
         }
     };
 
-    // Ensure background video plays on mount
+    // Ensure all background videos play on mount or first interaction
     useEffect(() => {
-        const video = videoRef.current;
-        if (video) {
-            // Force attributes that browsers look for
-            video.muted = true;
-            video.defaultMuted = true;
-            
-            // Attempt to play
-            const startVideo = async () => {
-                try {
-                    await video.play();
-                } catch (e) {
-                    console.warn("Autoplay failed initially, trying again on interaction:", e);
-                    // One more attempt on first touch/click
-                    const forcePlay = () => {
-                        video.play().catch(() => {});
-                        window.removeEventListener('click', forcePlay);
-                        window.removeEventListener('touchstart', forcePlay);
-                    };
-                    window.addEventListener('click', forcePlay);
-                    window.addEventListener('touchstart', forcePlay);
-                }
-            };
-            
-            startVideo();
-        }
+        const playVideos = async () => {
+            if (videoRef.current) {
+                videoRef.current.muted = true;
+                videoRef.current.defaultMuted = true;
+                videoRef.current.play().catch(() => {});
+            }
+            if (heroVideoRef.current) {
+                heroVideoRef.current.muted = true;
+                heroVideoRef.current.defaultMuted = true;
+                heroVideoRef.current.play().catch(() => {});
+            }
+        };
 
-        const heroVideo = heroVideoRef.current;
-        if (heroVideo) {
-            heroVideo.muted = true;
-            heroVideo.defaultMuted = true;
-            heroVideo.play().catch(() => {});
-        }
+        // Try immediately
+        playVideos();
+
+        // Also try on first real interaction (browsers love this)
+        const forcePlay = () => {
+            playVideos();
+            window.removeEventListener('scroll', forcePlay);
+            window.removeEventListener('click', forcePlay);
+            window.removeEventListener('touchstart', forcePlay);
+        };
+
+        window.addEventListener('scroll', forcePlay, { passive: true });
+        window.addEventListener('click', forcePlay);
+        window.addEventListener('touchstart', forcePlay);
+
+        return () => {
+            window.removeEventListener('scroll', forcePlay);
+            window.removeEventListener('click', forcePlay);
+            window.removeEventListener('touchstart', forcePlay);
+        };
     }, []);
     const location = useLocation();
     const navigate = useNavigate();
@@ -328,6 +329,7 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                         playsInline={true}
                         webkit-playsinline="true"
                         preload="auto"
+                        crossOrigin="anonymous"
                         onEnded={(e) => (e.target as HTMLVideoElement).play()}
                     />
                     <div className="absolute inset-0 bg-black/50" />
@@ -404,6 +406,7 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                         playsInline={true}
                         webkit-playsinline="true"
                         preload="auto"
+                        crossOrigin="anonymous"
                         onEnded={(e) => (e.target as HTMLVideoElement).play()}
                     />
                     {/* Consistent overlay like hero */}
