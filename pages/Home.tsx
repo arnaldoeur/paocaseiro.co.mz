@@ -164,10 +164,30 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
 
     // Ensure background video plays on mount
     useEffect(() => {
-        if (videoRef.current) {
-            videoRef.current.play().catch(e => {
-                console.warn("Background video autoplay failed, usually due to browser policy:", e);
-            });
+        const video = videoRef.current;
+        if (video) {
+            // Force attributes that browsers look for
+            video.muted = true;
+            video.defaultMuted = true;
+            
+            // Attempt to play
+            const startVideo = async () => {
+                try {
+                    await video.play();
+                } catch (e) {
+                    console.warn("Autoplay failed initially, trying again on interaction:", e);
+                    // One more attempt on first touch/click
+                    const forcePlay = () => {
+                        video.play().catch(() => {});
+                        window.removeEventListener('click', forcePlay);
+                        window.removeEventListener('touchstart', forcePlay);
+                    };
+                    window.addEventListener('click', forcePlay);
+                    window.addEventListener('touchstart', forcePlay);
+                }
+            };
+            
+            startVideo();
         }
     }, []);
     const location = useLocation();
@@ -366,6 +386,8 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                         muted={true}
                         loop={true}
                         playsInline={true}
+                        webkit-playsinline="true"
+                        preload="auto"
                     />
                 </div>
 
