@@ -297,9 +297,9 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                             {t.hero.title}
                         </h1>
                     )}
-                    <p className="text-xl md:text-3xl font-light mb-8 max-w-3xl mx-auto leading-relaxed drop-shadow-sm">
+                    <h2 className="font-serif text-4xl md:text-6xl lg:text-7xl mb-8 drop-shadow-md italic">
                         {t.hero.subtitle}
-                    </p>
+                    </h2>
                     <p className="text-base md:text-lg mb-12 max-w-2xl mx-auto opacity-90 leading-relaxed font-light">
                         {t.hero.description}
                     </p>
