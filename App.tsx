@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from './services/supabase';
+import OneSignal from 'react-onesignal';
 import { Navbar } from './components/Navbar';
 import { Footer } from './components/Footer';
 import { Home } from './pages/Home';
@@ -274,10 +275,54 @@ const MaintenanceGuard: React.FC<{ children: React.ReactNode, language: Language
 };
 
 const App: React.FC = () => {
-  const [language, setLanguage] = useState<Language>('pt');
+  const [language, setLanguage] = useState<Language>(() => {
+    const saved = localStorage.getItem('app_language');
+    return (saved as Language) || 'pt';
+  });
+
+  useEffect(() => {
+    // FORCE CLEANUP OF OLD SERVICE WORKERS to fix "Failed to fetch" on POST requests
+    if ('serviceWorker' in navigator) {
+      const swCleared = localStorage.getItem('sw_cleared_v2');
+      if (!swCleared) {
+        navigator.serviceWorker.getRegistrations().then((registrations) => {
+          let hasUnregistered = false;
+          for (let registration of registrations) {
+            registration.unregister();
+            hasUnregistered = true;
+          }
+          localStorage.setItem('sw_cleared_v2', 'true');
+          if (hasUnregistered) {
+            console.log("Old Service Workers unregistered. Reloading for clean state...");
+            window.location.reload();
+          }
+        }).catch(err => {
+          console.warn("Service Worker cleanup failed: ", err);
+        });
+      }
+    }
+
+    const initOneSignal = async () => {
+      try {
+        await OneSignal.init({
+          appId: "43e27b65-50cf-40b7-8a95-e87f200e742c",
+          allowLocalhostAsSecureOrigin: true,
+          notifyButton: {
+            enable: true,
+          },
+        });
+        OneSignal.Slidedown.promptPush();
+      } catch (error) {
+        console.warn("OneSignal Init Error:", error);
+      }
+    };
+    initOneSignal();
+  }, []);
 
   const toggleLanguage = () => {
-    setLanguage((prev) => (prev === 'pt' ? 'en' : 'pt'));
+    const newLang = language === 'pt' ? 'en' : 'pt';
+    setLanguage(newLang);
+    localStorage.setItem('app_language', newLang);
   };
 
   return (
@@ -295,8 +340,8 @@ const App: React.FC = () => {
                 <Route path="/delivery" element={<Delivery />} />
                 <Route path="/kitchen" element={<Kitchen />} />
                 <Route path="/tv-display" element={<TVDisplay />} />
-                <Route path="/get-ticket" element={<GetTicket />} />
-                <Route path="/tv-senhas" element={<TVTickets />} />
+                <Route path="/get-ticket" element={<GetTicket language={language} />} />
+                <Route path="/tv-senhas" element={<TVTickets language={language} />} />
                 <Route path="/seed" element={<Seeder />} />
 
                 {/* Main Website Pages */}
@@ -311,8 +356,8 @@ const App: React.FC = () => {
                       <Route path="/blog/:slug" element={<BlogPost language={language} />} />
                       <Route path="/order-receipt/:orderId" element={<OrderReceipt />} />
                       <Route path="/dashboard" element={<ClientDashboard language={language} />} />
-                      <Route path="/privacidade" element={<Privacy />} />
-                      <Route path="/termos" element={<Terms />} />
+                      <Route path="/privacidade" element={<Privacy language={language} />} />
+                      <Route path="/termos" element={<Terms language={language} />} />
                       {/* Add other main routes here */}
                     </Routes>
                     <Footer language={language} />

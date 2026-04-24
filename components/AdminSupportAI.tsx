@@ -4,14 +4,15 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../services/supabase';
 
 // OpenRouter API Configuration
-const OPENROUTER_API_KEY = "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";
+const OPENROUTER_API_KEY = "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";
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-const AI_MODEL = "google/gemini-2.0-flash-lite:free";
+const AI_MODEL = "google/gemma-4-26b-a4b-it:free";
 
 interface Message {
     id?: string;
     role: 'user' | 'assistant' | 'system' | 'model';
     content: string;
+    reasoning_details?: any; // Added to support Gemma 4 reasoning
     created_at?: string;
 }
 
@@ -212,19 +213,21 @@ export const AdminSupportAI: React.FC<AdminSupportAIProps> = ({ userName, stats 
         const conversationHint = messages.length > 2 ? "\n(Note: This is a continuing conversation. No need for greetings or introductions.)" : "";
 
         try {
-            // Convert history to OpenAI/OpenRouter format
             const historyMessages = messages
-                .filter(m => m.role !== 'system')
-                .slice(-10)
+                .filter(m => m.role !== 'system' && m.content.trim() !== "")
+                .slice(-6)
                 .map(m => ({
                     role: m.role === 'assistant' ? 'assistant' : 'user',
-                    content: m.content
+                    content: m.content,
+                    reasoning_details: m.reasoning_details // Pass back for Gemma 4
                 }));
 
             const finalMessages = [
-                { role: 'system', content: `INSTRUCTIONS: ${systemContext}` },
                 ...historyMessages,
-                { role: 'user', content: `${text}${conversationHint}` }
+                { 
+                    role: 'user', 
+                    content: `INSTRUÇÕES: Zyph AI da Padaria Pão Caseiro. Resposta curta. Moçambique.\n\nPERGUNTA: ${text}` 
+                }
             ];
 
             const response = await fetch(OPENROUTER_URL, {
@@ -232,14 +235,16 @@ export const AdminSupportAI: React.FC<AdminSupportAIProps> = ({ userName, stats 
                 headers: { 
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
-                    'HTTP-Referer': window.location.origin,
+                    'HTTP-Referer': 'https://paocaseiro.co.mz',
                     'X-Title': 'Pão Caseiro Admin'
                 },
                 body: JSON.stringify({ 
                     model: AI_MODEL,
                     messages: finalMessages,
+                    stream: true,
                     temperature: 0.7,
-                    max_tokens: 1000
+                    max_tokens: 2000,
+                    reasoning: { enabled: true } // Enabled advanced reasoning as per template
                 })
             });
 
@@ -248,25 +253,63 @@ export const AdminSupportAI: React.FC<AdminSupportAIProps> = ({ userName, stats 
                 throw new Error(errorData.error?.message || 'Erro na API do OpenRouter');
             }
 
-            const data = await response.json();
+            // --- STREAMING LOGIC ---
+            const reader = response.body?.getReader();
+            const decoder = new TextDecoder();
+            let accumulatedContent = "";
             
-            if (data.choices && data.choices[0]?.message?.content) {
-                const content = data.choices[0].message.content;
-                const botMsg: Message = { role: 'assistant', content: content };
-                setMessages(prev => [...prev, botMsg]);
-                if (targetSessionId) saveMessageIndex(botMsg, targetSessionId);
-            } else {
-                throw new Error('Nenhuma resposta do AI');
+            const botMsgId = 'bot_' + Date.now();
+            setMessages(prev => [...prev, { role: 'assistant', content: "", id: botMsgId }]);
+            setIsLoading(false);
+
+            if (reader) {
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    const chunk = decoder.decode(value, { stream: true });
+                    const lines = chunk.split('\n');
+
+                    for (const line of lines) {
+                        const trimmedLine = line.trim();
+                        if (!trimmedLine || trimmedLine === 'data: [DONE]') continue;
+                        
+                        if (trimmedLine.startsWith('data: ')) {
+                            try {
+                                const jsonData = JSON.parse(trimmedLine.slice(6));
+                                const deltaContent = jsonData.choices[0]?.delta?.content;
+                                if (deltaContent) {
+                                    accumulatedContent += deltaContent;
+                                    setMessages(prev => prev.map(m => 
+                                        m.id === botMsgId ? { ...m, content: accumulatedContent } : m
+                                    ));
+                                }
+                            } catch (e) {
+                                console.error("Error parsing stream chunk", e);
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (targetSessionId) {
+                saveMessageIndex({ role: 'assistant', content: accumulatedContent }, targetSessionId);
             }
 
         } catch (error: any) {
             console.error('AI Error:', error);
             const isOffline = !navigator.onLine;
+            let errorMessage = `Falha na conexão com Zyph AI. Por favor, tente novamente em instantes.`;
+            
+            if (error.message) {
+                errorMessage = `Erro Técnico: ${error.message}`;
+            }
+
             const errorMsg: Message = { 
                 role: 'assistant', 
                 content: isOffline 
                     ? `Sem conexão à internet. Verifique sua rede e tente novamente.` 
-                    : `Falha na conexão com Zyph AI. Por favor, tente novamente em instantes.` 
+                    : errorMessage
             };
             setMessages(prev => [...prev, errorMsg]);
         } finally {

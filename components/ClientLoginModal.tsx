@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Phone, KeyRound, Loader, AlertTriangle, CheckCircle, UserPlus, ShieldAlert, Scale, ScrollText, Lock, User } from 'lucide-react';
+import { X, Phone, KeyRound, Loader, AlertTriangle, CheckCircle, UserPlus, ShieldAlert, Scale, ScrollText, Lock, User, Mail, MapPin } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { useNavigate } from 'react-router-dom';
 import { sendSMS } from '../services/sms';
@@ -225,11 +225,18 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                 throw new Error('Palavra-passe incorreta.');
             }
 
-            // Save login state
             const phoneToSave = customerData.contact_no && !customerData.contact_no.includes('@') ? customerData.contact_no : (!identifier.includes('@') ? identifier : '');
             if (phoneToSave) localStorage.setItem('pc_auth_phone', phoneToSave);
             localStorage.setItem('pc_user_data', JSON.stringify(customerData));
             window.dispatchEvent(new Event('pc_user_update'));
+
+            try {
+                if ((window as any).OneSignal) {
+                    await (window as any).OneSignal.login(customerData.id);
+                }
+            } catch (e) {
+                console.warn('OneSignal login failed:', e);
+            }
 
             await logAudit({ action: 'CUSTOMER_LOGIN', entity_type: 'customer', entity_id: customerData.id, details: { method: 'password' }, customer_phone: customerData.contact_no });
 
@@ -325,6 +332,14 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                 localStorage.setItem('pc_user_data', JSON.stringify(existingCustomer));
                 window.dispatchEvent(new Event('pc_user_update'));
                 
+                try {
+                    if ((window as any).OneSignal) {
+                        await (window as any).OneSignal.login(existingCustomer.id);
+                    }
+                } catch (e) {
+                    console.warn('OneSignal login failed:', e);
+                }
+
                 await logAudit({ action: 'CUSTOMER_LOGIN', entity_type: 'customer', entity_id: existingCustomer.id, details: { method: 'otp' }, customer_phone: existingCustomer.contact_no });
 
                 onClose();
@@ -352,6 +367,7 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                 .from('customers')
                 .upsert({
                     contact_no: formattedIdentifier,
+                    phone: formattedIdentifier,
                     name: name,
                     email: email || null,
                     date_of_birth: dob || null,
@@ -379,6 +395,15 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
             if (customerData) {
                 localStorage.setItem('pc_user_data', JSON.stringify(customerData));
                 window.dispatchEvent(new Event('pc_user_update'));
+                
+                try {
+                    if ((window as any).OneSignal) {
+                        await (window as any).OneSignal.login(customerData.id);
+                    }
+                } catch (e) {
+                    console.warn('OneSignal login failed:', e);
+                }
+
                 await logAudit({ action: 'CUSTOMER_REGISTER', entity_type: 'customer', entity_id: customerData.id, details: { }, customer_phone: customerData.contact_no });
 
                 // NEW: Log and notify admin about new registration
@@ -403,8 +428,10 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
             // Check if error is related to missing password column
             if (err.message?.includes('password') && err.message?.includes('column')) {
                 setError('Erro técnico: A base de dados ainda não está configurada para suportar senhas. Por favor, adicione a coluna "password" à tabela "customers".');
+            } else if (err.code === '23505') {
+                setError('Este número de telefone já está registado. Tente fazer login ou use outro número.');
             } else {
-                setError('Erro ao criar conta.');
+                setError(`Erro ao criar conta: ${err.message || 'Verifique a sua ligação e tente novamente.'}`);
             }
 
             await logAudit({ 

@@ -86,6 +86,7 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
     // Order Metadata for Receipt
     const [completedOrder, setCompletedOrder] = useState<any>(null);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
+    const [isInitiating, setIsInitiating] = useState(false);
 
     // Global listener to open cart from modals
     useEffect(() => {
@@ -530,15 +531,7 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
         setStep('processing');
         setError('');
 
-        const isTestOrder = cart.some(item => item.name.toLowerCase().includes('teste'));
-        if (isTestOrder) {
-            const testTxId = 'TEST-BYPASS-' + timestamp;
-            setCurrentTxId(testTxId);
-            setTimeout(() => {
-                finishOrder(shortId, refId, testTxId);
-            }, 1500);
-            return;
-        }
+        // Test bypass removed for production phase
 
         try {
             // PaySuite bloqueia Iframes (X-Frame-Options), por isso usamos um Popup Window
@@ -554,41 +547,42 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                 `width=${width},height=${height},top=${top},left=${left},scrollbars=yes,resizable=yes,status=no,location=no,toolbar=no`
             );
             
-            if (paymentWindow) {
-                paymentWindow.document.write('<div style="display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;color:#3b2f2f;background:#f7f1eb;">A redirecionar para o pagamento seguro... Por favor, aguarde.</div>');
+            if (!paymentWindow || paymentWindow.closed || typeof paymentWindow.closed === 'undefined') {
+                setError(language === 'pt' ? 'O seu navegador bloqueou o portal de pagamento. Por favor, permita popups.' : 'Popup blocked. Please allow popups for this site.');
+                return;
             }
 
+            paymentWindow.document.write(`
+                <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;background:#fffbf5;color:#3b2f2f;padding:20px;text-align:center;">
+                    <div style="border: 4px solid #f3f3f3; border-top: 4px solid #d9a65a; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin-bottom: 20px;"></div>
+                    <h2 style="margin:0; font-size: 1.5rem;">Pão Caseiro</h2>
+                    <p style="margin:10px 0 0 0; opacity: 0.8;">${language === 'en' ? 'Connecting to secure payment server...' : 'A ligar ao servidor de pagamento seguro...'}</p>
+                    <p style="margin:20px 0 0 0; font-size: 0.8rem; opacity: 0.5;">${language === 'en' ? 'Please do not close this window.' : 'Por favor não feche esta janela.'}</p>
+                    <style>
+                        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+                    </style>
+                </div>
+            `);
+
+            setIsInitiating(true);
             const result = await initiatePayment({
                 amount: amountToPay,
-                msisdn: '000000000', // Previne que a PaySuite oculte opções por causa do prefixo do telefone
+                msisdn: details.phone || '000000000', 
                 reference: refId,
                 customerName: details.name,
                 customerEmail: details.email
             });
+            setIsInitiating(false);
 
             if (result.success && result.checkout_url) {
-                if (paymentWindow) {
-                    paymentWindow.location.href = result.checkout_url;
-                } else {
-                    // Fallback to current window redirection if popup blocker is absolute
-                    window.location.href = result.checkout_url;
-                    return;
-                }
-
+                paymentWindow.location.href = result.checkout_url;
                 setCurrentTxId(result.transaction_id);
-                setStep('processing'); // Mostramos a tela de processamento com o Loader enquanto fazemos o polling
+                setStep('processing'); 
             } else {
-                if (paymentWindow) paymentWindow.close();
+                paymentWindow.close();
                 setStep('payment');
                 const errMsg = result.message || 'Falha no pagamento. Tente novamente.';
                 setError(errMsg);
-                await logAudit({
-                    action: 'PAYMENT_FAILED',
-                    entity_type: 'order',
-                    entity_id: currentOrderId || 'unknown',
-                    details: { reason: errMsg, amount: amountToPay, customer: details.contact_no },
-                    customer_phone: details.phone
-                });
             }
         } catch (e: any) {
             setStep('payment');
@@ -617,10 +611,15 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                     return;
                 }
 
-                if (attempts > 30) { // 2m30s timeout (30 * 5s)
+                if (attempts > 24) { // 2m timeout (24 * 5s)
                     clearInterval(interval);
-                    // Don't auto-revert to payment step if we're still processing, 
-                    // let the user decide via manual button or just wait.
+                    setStep('payment');
+                    setCurrentTxId(undefined);
+                    setError(
+                        language === 'pt' 
+                            ? 'O tempo de espera para o pagamento expirou. Por favor, tente novamente.'
+                            : 'Payment timeout. Please try again.'
+                    );
                     return;
                 }
 
@@ -630,10 +629,10 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                         clearInterval(interval);
                         finishOrder();
                         setShowSuccessModal(true);
-                    } else if (status.status === 'FAILED' || status.status === 'CANCELLED') {
+                    } else if (status.status === 'FAILED' || status.status === 'CANCELLED' || status.status === 'REJECTED') {
                         clearInterval(interval);
-                        setError('Pagamento falhou ou foi cancelado na PaySuite.');
-                        setPaymentUrl(null);
+                        setError(language === 'pt' ? 'Pagamento falhou ou foi cancelado.' : 'Payment failed or was cancelled.');
+                        setCurrentTxId(undefined);
                         setStep('payment');
                     }
                 } catch (e) {
@@ -1284,11 +1283,21 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                         <div className="pt-2">
                             <button
                                 onClick={handlePayment}
+                                disabled={isInitiating}
                                 title="Pagar Agora"
-                                className="w-full bg-[#3b2f2f] text-[#d9a65a] py-4 rounded-xl font-bold uppercase tracking-widest hover:bg-[#d9a65a] hover:text-[#3b2f2f] transition-all shadow-lg flex items-center justify-center gap-2"
+                                className={`w-full bg-[#3b2f2f] text-[#d9a65a] py-4 rounded-xl font-bold uppercase tracking-widest transition-all shadow-lg flex items-center justify-center gap-2 ${isInitiating ? 'opacity-70 cursor-not-allowed' : 'hover:bg-[#d9a65a] hover:text-[#3b2f2f]'}`}
                             >
-                                <span>{language === 'en' ? 'Pay Now' : 'Pagar Agora'}</span>
-                                <Lock className="w-5 h-5" />
+                                {isInitiating ? (
+                                    <>
+                                        <Loader className="w-5 h-5 animate-spin" />
+                                        <span>{language === 'en' ? 'Initializing...' : 'A iniciar...'}</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <span>{language === 'en' ? 'Pay Now' : 'Pagar Agora'}</span>
+                                        <Lock className="w-5 h-5" />
+                                    </>
+                                )}
                             </button>
                             
                             <button
@@ -1323,6 +1332,19 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                                 </ol>
                             </div>
                         </div>
+
+                        <button
+                            onClick={() => {
+                                setStep('payment');
+                                setCurrentTxId(undefined);
+                                setPaymentUrl(null);
+                            }}
+                            title="Cancelar"
+                            className="bg-gray-100 text-gray-500 py-3 px-8 rounded-xl font-bold hover:bg-gray-200 transition-all flex items-center gap-2 border border-gray-300"
+                        >
+                            <X className="w-4 h-4" />
+                            {language === 'pt' ? 'Cancelar e Tentar Novamente' : 'Cancel and Try Again'}
+                        </button>
                     </div>
                 );
 

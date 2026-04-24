@@ -102,17 +102,19 @@ export const verifyPayment = async (txId: string): Promise<{ success: boolean; s
         }
 
         console.log('PAYSUITE VERIFY RAW:', result);
+        
+        // Use the normalized data from the Edge Function
+        const data = result.data || result;
+        const statusString = (data.status || '').toString().toUpperCase();
 
-        // Normalize state strings
-        const rawStatus = result.data?.status || result.status || '';
-        const statusString = rawStatus.toString().toUpperCase();
-
-        const successStates = ['SUCCESSFUL', 'PAID', 'COMPLETED', 'APPROVED', 'SUCCESS'];
-        const isSuccess = successStates.includes(statusString) || result.success === true;
+        // Terminal success states for the transaction itself
+        // Added 'SUCCESS' and 'OK' as fallback terminal states if they come from PaySuite's normalized status
+        const successStates = ['SUCCESSFUL', 'PAID', 'COMPLETED', 'APPROVED', 'SUCCESS', 'OK'];
+        const isSuccess = successStates.includes(statusString);
 
         if (isSuccess) {
             return { success: true, status: 'successful' };
-        } else if (statusString === 'FAILED' || statusString === 'CANCELLED') {
+        } else if (statusString === 'FAILED' || statusString === 'CANCELLED' || statusString === 'REJECTED') {
             return { success: false, status: 'failed' };
         }
 

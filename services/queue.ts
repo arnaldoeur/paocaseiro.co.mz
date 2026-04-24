@@ -13,18 +13,25 @@ export interface QueueTicket {
 }
 
 export const queueService = {
+    // Get today's date string in Maputo (UTC+2)
+    getMZTodayStr() {
+        return new Intl.DateTimeFormat('en-CA', { 
+            timeZone: 'Africa/Maputo' 
+        }).format(new Date());
+    },
+
     // Get all tickets from today
     async getTicketsToday(): Promise<QueueTicket[]> {
+        // Use a simple date comparison that works with Supabase/Postgres
+        // We fetch from the start of the current day in Maputo
         const now = new Date();
-        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        const startOfTodayISO = startOfToday.toISOString();
-        
-        console.log(`DEBUG: Fetching tickets since ${startOfTodayISO} (Local: ${startOfToday.toLocaleString()})`);
+        const mzTodayStart = new Date(now.toLocaleString("en-US", {timeZone: "Africa/Maputo"}));
+        mzTodayStart.setHours(0, 0, 0, 0);
         
         const { data, error } = await supabase
             .from('queue_tickets')
             .select('*')
-            .gte('created_at', startOfTodayISO)
+            .gte('created_at', mzTodayStart.toISOString())
             .order('created_at', { ascending: true });
         
         if (error) throw error;
@@ -34,7 +41,7 @@ export const queueService = {
     // Generate a new ticket
     async generateTicket(isPriority: boolean = false, phone?: string, category: string = 'Geral') {
         console.log("DEBUG: generateTicket called. Priority:", isPriority, "Category:", category);
-        const { data, error } = await supabase.rpc('generate_queue_ticket', { 
+        const { data, error } = await supabase.rpc('generate_queue_ticket_v3', { 
             p_priority: isPriority,
             p_phone: phone,
             p_category: category
@@ -46,16 +53,18 @@ export const queueService = {
         }
 
         // Broadcast the new ticket for instant local updates
-        if (data && data[0]) {
+        const ticketRecord = Array.isArray(data) ? data[0] : data;
+        
+        if (ticketRecord) {
             supabase.channel('queue-realtime-enhanced').send({
                 type: 'broadcast',
                 event: 'ticket-created',
-                payload: { ticket: data[0] }
+                payload: { ticket: ticketRecord }
             });
         }
 
-        console.log("DEBUG: generate_queue_ticket Success:", data);
-        return data;
+        console.log("DEBUG: generate_queue_ticket Success:", ticketRecord);
+        return ticketRecord;
     },
 
     // Call a specific ticket
@@ -109,14 +118,23 @@ export const queueService = {
 
     // Call the next available ticket (Priority first, then FIFO)
     async callNext(counter: string) {
-        const today = new Date().toISOString().split('T')[0];
-        // 1. Try priority waiting
-        const { data: priorityTicket } = await supabase
+        // Optimized: Fetch ONLY the next waiting ticket directly from DB
+        const now = new Date();
+        const mzTodayStart = new Date(new Intl.DateTimeFormat('en-US', {
+            timeZone: 'Africa/Maputo',
+            year: 'numeric',
+            month: 'numeric',
+            day: 'numeric'
+        }).format(now));
+        mzTodayStart.setHours(0, 0, 0, 0);
+
+        // 1. Try priority first
+        const { data: priorityTicket, error: pError } = await supabase
             .from('queue_tickets')
             .select('*')
             .eq('status', 'waiting')
             .eq('is_priority', true)
-            .gte('created_at', today)
+            .gte('created_at', mzTodayStart.toISOString())
             .order('created_at', { ascending: true })
             .limit(1)
             .maybeSingle();
@@ -125,13 +143,13 @@ export const queueService = {
             return this.callTicket(priorityTicket.id, counter);
         }
 
-        // 2. Try normal waiting
-        const { data: normalTicket } = await supabase
+        // 2. Try normal
+        const { data: normalTicket, error: nError } = await supabase
             .from('queue_tickets')
             .select('*')
             .eq('status', 'waiting')
             .eq('is_priority', false)
-            .gte('created_at', today)
+            .gte('created_at', mzTodayStart.toISOString())
             .order('created_at', { ascending: true })
             .limit(1)
             .maybeSingle();
@@ -247,15 +265,19 @@ export const queueService = {
 
     // Reset today's queue (Safety tool for operators)
     async resetTodayQueue() {
-        const today = new Date().toISOString().split('T')[0];
-        console.log("DEBUG: Resetting queue for", today);
+        const mzToday = this.getMZTodayStr();
+        const tickets = await this.getTicketsToday();
         
-        // Mark all active tickets for today as 'cancelled' or a new state if needed
+        const activeIds = tickets
+            .filter(t => ['waiting', 'calling'].includes(t.status))
+            .map(t => t.id);
+
+        if (activeIds.length === 0) return [];
+
         const { data, error } = await supabase
             .from('queue_tickets')
             .update({ status: 'cancelled' })
-            .gte('created_at', today)
-            .in('status', ['waiting', 'calling']);
+            .in('id', activeIds);
 
         if (error) throw error;
         return data;
@@ -263,13 +285,7 @@ export const queueService = {
 
     // Get stats for today
     async getTodayStats() {
-        const today = new Date().toISOString().split('T')[0];
-        const { data: tickets, error } = await supabase
-            .from('queue_tickets')
-            .select('*')
-            .gte('created_at', today);
-
-        if (error) throw error;
+        const tickets = await this.getTicketsToday();
         
         const stats = {
             total: tickets?.length || 0,

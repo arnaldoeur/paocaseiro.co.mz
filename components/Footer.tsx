@@ -88,7 +88,7 @@ export const Footer: React.FC<FooterProps> = ({ language }) => {
                                     className="hover:text-[#d9a65a] hover:translate-x-2 transition-all duration-300 flex items-center justify-center md:justify-start gap-2 text-xs"
                                 >
                                     <span className="w-1 h-1 rounded-full bg-[#d9a65a]/50 shrink-0" />
-                                    Política de Privacidade
+                                    {t.footer.privacy}
                                 </button>
                             </li>
                             <li>
@@ -97,7 +97,7 @@ export const Footer: React.FC<FooterProps> = ({ language }) => {
                                     className="hover:text-[#d9a65a] hover:translate-x-2 transition-all duration-300 flex items-center justify-center md:justify-start gap-2 text-xs"
                                 >
                                     <span className="w-1 h-1 rounded-full bg-[#d9a65a]/50 shrink-0" />
-                                    Termos de Serviço
+                                    {t.footer.terms}
                                 </button>
                             </li>
                         </ul>
@@ -128,7 +128,7 @@ export const Footer: React.FC<FooterProps> = ({ language }) => {
                                     <Phone className="w-4 h-4" />
                                 </div>
                                 <div className="text-left">
-                                    <span className="block text-[#f7f1eb] font-bold text-sm">Telefone / Encomendas</span>
+                                    <span className="block text-[#f7f1eb] font-bold text-sm">{t.footer.phoneLabel}</span>
                                     <span className="text-xs opacity-80">+258 87 9146 662</span>
                                 </div>
                             </a>

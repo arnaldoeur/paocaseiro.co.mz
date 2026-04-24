@@ -13,30 +13,30 @@ export const useRealtimeTickets = () => {
   
   // Ref to track processed IDs and prevent duplicates or stale state updates
   const ticketsMapRef = useRef<Map<string, QueueTicket>>(new Map());
+  const [status, setStatus] = useState<'CONNECTING' | 'SUBSCRIBED' | 'CLOSED' | 'ERROR'>('CONNECTING');
 
   const isFromToday = useCallback((createdAt: string) => {
     if (!createdAt) return false;
     
-    // Get current date string in Mozambique (UTC+2) using Intl to avoid manual offset math
-    const mzTodayStr = new Intl.DateTimeFormat('en-CA', { 
-      timeZone: 'Africa/Maputo' 
-    }).format(new Date());
+    const now = new Date();
+    // Get start of day in Maputo (UTC+2)
+    const mzTodayStart = new Date(new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Africa/Maputo',
+        year: 'numeric',
+        month: 'numeric',
+        day: 'numeric'
+    }).format(now));
+    mzTodayStart.setHours(0, 0, 0, 0);
 
-    // Get ticket date string in Mozambique
     const ticketDate = new Date(createdAt);
-    const mzTicketDateStr = new Intl.DateTimeFormat('en-CA', { 
-      timeZone: 'Africa/Maputo' 
-    }).format(ticketDate);
-
-    return mzTicketDateStr === mzTodayStr;
+    return ticketDate >= mzTodayStart;
   }, []);
 
-  const fetchTickets = async () => {
+  const fetchTickets = useCallback(async () => {
     try {
       setLoading(true);
       const data = await queueService.getTicketsToday();
       
-      // Initialize the map with fresh data
       const newMap = new Map<string, QueueTicket>();
       data.forEach(t => newMap.set(t.id, t));
       ticketsMapRef.current = newMap;
@@ -47,13 +47,11 @@ export const useRealtimeTickets = () => {
       setError(null);
     } catch (err: any) {
       console.error('[useRealtimeTickets] Fetch Error:', err);
-      // Map common connection errors to more descriptive objects if needed
-      const enrichedError = err instanceof Error ? err : new Error(String(err));
-      setError(enrichedError);
+      setError(err instanceof Error ? err : new Error(String(err)));
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchTickets();
@@ -71,7 +69,6 @@ export const useRealtimeTickets = () => {
             const map = new Map(ticketsMapRef.current);
 
             if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-              // Only keep tickets from today (UTC+2)
               if (!isFromToday(newTicket.created_at)) {
                 if (map.has(newTicket.id)) map.delete(newTicket.id);
               } else {
@@ -81,10 +78,7 @@ export const useRealtimeTickets = () => {
               map.delete(oldTicket.id);
             }
 
-            // Sync back to ref
             ticketsMapRef.current = map;
-
-            // Return sorted array
             return (Array.from(map.values()) as QueueTicket[]).sort((a, b) => 
               new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
             );
@@ -93,13 +87,10 @@ export const useRealtimeTickets = () => {
       )
       .on('broadcast', { event: 'ticket-calling' }, (payload) => {
         const callingTicket = payload.payload.ticket as QueueTicket;
-        console.log('[useRealtimeTickets] Broadcast calling received:', callingTicket.ticket_number);
-        
         setTickets((prev) => {
             const map = new Map(ticketsMapRef.current);
             map.set(callingTicket.id, callingTicket);
             ticketsMapRef.current = map;
-            
             return (Array.from(map.values()) as QueueTicket[]).sort((a, b) => 
                 new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
             );
@@ -107,29 +98,37 @@ export const useRealtimeTickets = () => {
       })
       .on('broadcast', { event: 'ticket-created' }, (payload) => {
         const newTicket = payload.payload.ticket as QueueTicket;
-        console.log('[useRealtimeTickets] Broadcast created received:', newTicket.ticket_number);
-        
         setTickets((prev) => {
             const map = new Map(ticketsMapRef.current);
             map.set(newTicket.id, newTicket);
             ticketsMapRef.current = map;
-            
             return (Array.from(map.values()) as QueueTicket[]).sort((a, b) => 
                 new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
             );
         });
       })
-      .subscribe();
+      .subscribe((status) => {
+          console.log(`[useRealtimeTickets] Status: ${status}`);
+          if (status === 'SUBSCRIBED') setStatus('SUBSCRIBED');
+          if (status === 'CLOSED') setStatus('CLOSED');
+          if (status === 'CHANNEL_ERROR') setStatus('ERROR');
+          if (status === 'TIMED_OUT') {
+              setStatus('ERROR');
+              // Attempt manual re-fetch on timeout
+              fetchTickets();
+          }
+      });
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [isFromToday]);
+  }, [isFromToday, fetchTickets]);
 
   return { 
     tickets, 
     loading, 
     error, 
+    status,
     refresh: fetchTickets 
   };
 };

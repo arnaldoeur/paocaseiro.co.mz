@@ -6,7 +6,10 @@ import { queueService } from '../services/queue';
 import { printerService } from '../services/printer';
 import { NotificationService } from '../services/NotificationService';
 
-export const GetTicket: React.FC = () => {
+import { translations, Language } from '../translations';
+
+export const GetTicket: React.FC<{ language?: Language }> = ({ language = 'pt' }) => {
+    const t = translations[language] || translations['pt'];
     const [step, setStep] = useState<'category' | 'type' | 'phone' | 'otp' | 'ticket'>('category');
     const [selectedCategory, setSelectedCategory] = useState<string>('');
     const [ticket, setTicket] = useState<any>(null);
@@ -41,7 +44,11 @@ export const GetTicket: React.FC = () => {
         const channel = supabase
             .channel(`ticket-${ticket.id}`)
             .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'queue_tickets', filter: `id=eq.${ticket.id}` }, 
-            (payload) => setTicket(payload.new))
+            (payload) => {
+                if (payload.new) {
+                    setTicket((prev: any) => ({ ...prev, ...payload.new }));
+                }
+            })
             .subscribe();
         return () => { supabase.removeChannel(channel); };
     }, [ticket?.id]);
@@ -49,12 +56,16 @@ export const GetTicket: React.FC = () => {
     useEffect(() => {
         if (ticket?.status !== 'waiting') return;
         const checkAhead = async () => {
-             const today = new Date().toISOString().split('T')[0];
+             const now = new Date();
+             const mzTodayStart = new Date(now.toLocaleString("en-US", {timeZone: "Africa/Maputo"}));
+             mzTodayStart.setHours(0, 0, 0, 0);
+             const todayIso = mzTodayStart.toISOString();
+
              const { count } = await supabase
                 .from('queue_tickets')
                 .select('*', { count: 'exact', head: true })
                 .eq('status', 'waiting')
-                .gte('created_at', today)
+                .gte('created_at', todayIso)
                 .lt('created_at', ticket.created_at);
              if (count !== null) setPeopleAhead(count);
         };
@@ -86,8 +97,10 @@ export const GetTicket: React.FC = () => {
             // NEW: Log System Event for Admin Center
             try {
                 await NotificationService.logSystemEvent(
-                    'Nova Senha Gerada',
-                    `Senha #${data.ticket_number} (${data.category === 'priority' ? 'Prioritária' : 'Normal'}) gerada para ${phone || 'Visitante'}.`,
+                    language === 'en' ? 'New Ticket Generated' : 'Nova Senha Gerada',
+                    language === 'en' 
+                        ? `Ticket #${data.ticket_number} (${data.category === 'priority' ? 'Priority' : 'Normal'}) generated for ${phone || 'Visitor'}.`
+                        : `Senha #${data.ticket_number} (${data.category === 'priority' ? 'Prioritária' : 'Normal'}) gerada para ${phone || 'Visitante'}.`,
                     'TICKET',
                     'info'
                 );
@@ -144,7 +157,7 @@ export const GetTicket: React.FC = () => {
     };
 
     return (
-        <div className="min-h-screen bg-[#050505] text-white font-sans flex flex-col items-center justify-center p-8 relative overflow-hidden select-none">
+        <div className="h-screen bg-[#050505] text-white font-sans flex flex-col items-center justify-center p-4 relative overflow-hidden select-none">
             {/* Ambient Background Glows */}
             <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
                 <div className="absolute top-[-10%] right-[-10%] w-[70%] h-[70%] bg-[#d9a65a]/10 rounded-full blur-[120px]" />
@@ -157,7 +170,7 @@ export const GetTicket: React.FC = () => {
                     animate={{ opacity: 1, scale: 1 }} 
                     src={company?.logo_url || "/logo.png"} 
                     alt={company?.office_name || "Pão Caseiro"} 
-                    className="h-28 w-auto object-contain mb-12 filter drop-shadow-[0_0_30px_rgba(255,255,255,0.1)]" 
+                    className="h-20 w-auto object-contain mb-6 filter drop-shadow-[0_0_30px_rgba(255,255,255,0.1)]" 
                 />
 
                 <AnimatePresence mode="wait">
@@ -169,7 +182,7 @@ export const GetTicket: React.FC = () => {
                             exit={{ opacity: 0, scale: 1.1, filter: "blur(20px)" }} 
                             className="bg-white/[0.03] backdrop-blur-3xl p-10 rounded-[4rem] shadow-3xl w-full text-center border border-white/10"
                         >
-                            <h1 className="text-4xl font-black mb-10 tracking-tighter uppercase">Escolha o Serviço</h1>
+                            <h1 className="text-4xl font-black mb-10 tracking-tighter uppercase">{language === 'en' ? 'Choose Service' : 'Escolha o Serviço'}</h1>
                             <div className="grid grid-cols-2 gap-4">
                                 {[
                                     { id: 'Padaria', icon: Ticket, color: 'hover:bg-[#d9a65a]' },
@@ -198,29 +211,29 @@ export const GetTicket: React.FC = () => {
                             exit={{ opacity: 0, x: -50 }} 
                             className="bg-white/[0.03] backdrop-blur-3xl p-12 rounded-[4rem] shadow-3xl w-full text-center border border-white/10"
                         >
-                            <button onClick={() => setStep('category')} className="absolute top-8 left-8 text-white/20 hover:text-white flex items-center gap-2 text-[10px] font-black uppercase tracking-widest transition-colors">
-                                <X className="w-4 h-4" /> Voltar
+                             <button onClick={() => setStep('category')} className="absolute top-8 left-8 text-white/20 hover:text-white flex items-center gap-2 text-[10px] font-black uppercase tracking-widest transition-colors">
+                                <X className="w-4 h-4" /> {t.clientDashboard.queue.voltar}
                             </button>
                             
                             <div className="w-20 h-20 bg-[#d9a65a]/20 rounded-2xl flex items-center justify-center mx-auto mb-8 border border-[#d9a65a]/20">
                                 <Ticket className="w-10 h-10 text-[#d9a65a]" />
                             </div>
                             <h2 className="text-3xl font-black mb-2 uppercase tracking-tighter">{selectedCategory}</h2>
-                            <p className="text-white/40 mb-10 text-[10px] font-bold uppercase tracking-widest">Selecione o tipo de atendimento</p>
+                            <p className="text-white/40 mb-10 text-[10px] font-bold uppercase tracking-widest">{t.clientDashboard.queue.atendimento}</p>
                             
                             <div className="space-y-6">
                                 <button 
                                     onClick={() => handleGetTicket(false)} 
                                     className="w-full bg-[#d9a65a] hover:bg-white text-[#0f0d0d] py-8 rounded-[2.5rem] font-black uppercase tracking-widest text-xl shadow-2xl transition-all active:scale-[0.98]"
                                 >
-                                    Senha Normal
+                                    {t.clientDashboard.queue.normal}
                                 </button>
                                 <button 
                                     onClick={() => { setIsPriorityMode(true); setStep('phone'); }} 
                                     className="w-full bg-white/5 hover:bg-white/10 text-white/60 py-6 rounded-[2rem] font-black uppercase tracking-widest text-xs transition-all border border-white/5 flex items-center justify-center gap-3"
                                 >
                                     <UserCheck className="w-5 h-5 text-amber-500" />
-                                    Atendimento Prioritário
+                                    {t.clientDashboard.queue.priority}
                                 </button>
                             </div>
                         </motion.div>
@@ -231,8 +244,8 @@ export const GetTicket: React.FC = () => {
                             key="phone-input" 
                             className="bg-white/[0.03] backdrop-blur-3xl p-10 rounded-[4rem] border border-white/10 w-full text-center"
                         >
-                            <h3 className="text-3xl font-black text-white mb-2 uppercase tracking-tighter">Validar Prioridade</h3>
-                            <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest mb-10">Introduza o seu número de telefone</p>
+                            <h3 className="text-3xl font-black text-white mb-2 uppercase tracking-tighter">{t.clientDashboard.queue.validar}</h3>
+                            <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest mb-10">{t.clientDashboard.queue.introduza}</p>
                             
                             <input 
                                 type="tel" 
@@ -245,9 +258,9 @@ export const GetTicket: React.FC = () => {
                             {phoneError && <p className="text-red-500 text-[10px] font-black uppercase mb-6">{phoneError}</p>}
                             
                             <div className="flex gap-4">
-                                <button onClick={() => setStep('type')} className="flex-1 py-6 bg-white/5 font-black rounded-2xl uppercase tracking-widest text-[10px]">Cancelar</button>
+                                <button onClick={() => setStep('type')} className="flex-1 py-6 bg-white/5 font-black rounded-2xl uppercase tracking-widest text-[10px]">{t.clientDashboard.cancel}</button>
                                 <button onClick={startOtpFlow} disabled={loading} className="flex-[2] py-6 bg-[#d9a65a] text-black font-black rounded-2xl uppercase tracking-widest text-sm shadow-xl flex items-center justify-center gap-2">
-                                    {loading ? <div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" /> : 'Enviar SMS'}
+                                    {loading ? <div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" /> : t.clientDashboard.queue.enviar}
                                 </button>
                             </div>
                         </motion.div>
@@ -255,8 +268,8 @@ export const GetTicket: React.FC = () => {
 
                     {step === 'otp' && (
                         <motion.div key="otp-input" className="bg-white/[0.03] backdrop-blur-3xl p-10 rounded-[4rem] border border-white/10 w-full text-center">
-                            <h3 className="text-3xl font-black text-white mb-2 uppercase tracking-tighter">Verificar SMS</h3>
-                            <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest mb-10">Introduza o código de 4 dígitos enviado para {phoneValue}</p>
+                            <h3 className="text-3xl font-black text-white mb-2 uppercase tracking-tighter">{t.clientDashboard.queue.verificar}</h3>
+                            <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest mb-10">{language === 'en' ? `Enter the 4-digit code sent to ${phoneValue}` : `Introduza o código de 4 dígitos enviado para ${phoneValue}`}</p>
                             
                             <input 
                                 type="text" 
@@ -270,8 +283,8 @@ export const GetTicket: React.FC = () => {
                             {phoneError && <p className="text-red-500 text-[10px] font-black uppercase mb-6">{phoneError}</p>}
                             
                             <div className="flex gap-4">
-                                <button onClick={() => setStep('phone')} className="flex-1 py-6 bg-white/5 font-black rounded-2xl uppercase tracking-widest text-[10px]">Mudar Número</button>
-                                <button onClick={verifyOtp} disabled={loading} className="flex-[2] py-6 bg-green-500 text-black font-black rounded-2xl uppercase tracking-widest text-sm shadow-xl">Confirmar</button>
+                                <button onClick={() => setStep('phone')} className="flex-1 py-6 bg-white/5 font-black rounded-2xl uppercase tracking-widest text-[10px]">{t.clientDashboard.queue.mudar}</button>
+                                <button onClick={verifyOtp} disabled={loading} className="flex-[2] py-6 bg-green-500 text-black font-black rounded-2xl uppercase tracking-widest text-sm shadow-xl">{t.clientDashboard.queue.confirmar}</button>
                             </div>
                         </motion.div>
                     )}
@@ -283,16 +296,16 @@ export const GetTicket: React.FC = () => {
                             animate={{ opacity: 1, scale: 1 }} 
                             className="w-full flex flex-col items-center"
                         >
-                            <div className="bg-white/[0.03] backdrop-blur-3xl rounded-[4rem] shadow-4xl w-full overflow-hidden border border-white/10 relative group">
-                                <div className="p-10 text-center border-b border-dashed border-white/10 relative">
-                                    <p className="text-[10px] font-black tracking-[0.5em] text-[#d9a65a] uppercase mb-4 opacity-60">A SUA SENHA</p>
-                                    <h2 className="text-[10rem] font-mono font-black text-white tracking-tighter my-2 leading-none">
-                                        {ticket.is_priority && !ticket.ticket_number.startsWith('P') ? 'P' : ''}{ticket.ticket_number}
+                            <div className="bg-white/[0.03] backdrop-blur-3xl rounded-[3rem] shadow-4xl w-full overflow-hidden border border-white/10 relative group">
+                                <div className="p-6 text-center border-b border-dashed border-white/10 relative">
+                                    <p className="text-[10px] font-black tracking-[0.5em] text-[#d9a65a] uppercase mb-1 opacity-60">{t.clientDashboard.queue.suaSenha}</p>
+                                    <h2 className="text-[5rem] sm:text-[7rem] font-mono font-black text-white tracking-tighter my-2 leading-none whitespace-nowrap">
+                                        {ticket?.ticket_number || (typeof ticket === 'string' ? ticket : "---")}
                                     </h2>
-                                    <div className="flex justify-center items-center gap-3 mt-8">
+                                    <div className="flex justify-center items-center gap-3 mt-4">
                                         {ticket.status === 'waiting' && (
                                             <span className="inline-flex items-center gap-2 px-6 py-2 rounded-full bg-white/5 text-white/40 text-xs font-black uppercase tracking-widest border border-white/5">
-                                                <Clock className="w-4 h-4" /> Em Espera
+                                                <Clock className="w-4 h-4" /> {t.clientDashboard.queue.waiting}
                                             </span>
                                         )}
                                         {ticket.status === 'calling' && (
@@ -304,41 +317,41 @@ export const GetTicket: React.FC = () => {
                                 </div>
                                 
                                 {ticket.status === 'waiting' && (
-                                    <div className="p-10 bg-white/[0.02] flex flex-col gap-8">
+                                    <div className="p-6 bg-white/[0.02] flex flex-col gap-4">
                                         <div className="flex justify-around items-center">
                                             <div className="text-center">
-                                                <p className="text-[10px] font-black text-white/20 uppercase tracking-[0.3em] mb-2">Posição</p>
-                                                <p className="text-5xl font-black text-white">{peopleAhead + 1}º</p>
+                                                <p className="text-[10px] font-black text-white/20 uppercase tracking-[0.3em] mb-2">{language === 'en' ? 'Position' : 'Posição'}</p>
+                                                <p className="text-4xl font-black text-white">{peopleAhead + 1}{language === 'en' ? 'st' : 'º'}</p>
                                             </div>
-                                            <div className="w-px h-16 bg-white/5" />
+                                            <div className="w-px h-12 bg-white/5" />
                                             <div className="text-center">
-                                                <p className="text-[10px] font-black text-white/20 uppercase tracking-[0.3em] mb-2">Espera Est.</p>
-                                                <p className="text-5xl font-black text-[#d9a65a]">~{(peopleAhead + 1) * 2}m</p>
+                                                <p className="text-[10px] font-black text-white/20 uppercase tracking-[0.3em] mb-2">{language === 'en' ? 'Est. Wait' : 'Espera Est.'}</p>
+                                                <p className="text-4xl font-black text-[#d9a65a]">~{Math.max(2, (peopleAhead + 1) * 3)}m</p>
                                             </div>
                                         </div>
 
                                         {/* QR Code for sharing/digital ticket */}
-                                        <div className="flex flex-col items-center gap-4 py-4 border-t border-white/5">
-                                            <div className="p-3 bg-white rounded-2xl shadow-2xl">
+                                        <div className="flex flex-col items-center gap-3 py-2 border-t border-white/5">
+                                            <div className="p-2 bg-white rounded-xl shadow-2xl">
                                                 <img 
-                                                    src={`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(`${company?.office_name} - Senha: ${(ticket.is_priority && !ticket.ticket_number.startsWith('P')) ? 'P' : ''}${ticket.ticket_number}\nEstado: Em Espera`)}`}
+                                                    src={`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(`${company?.office_name} - Senha: ${ticket.ticket_number}\nEstado: Em Espera`)}`}
                                                     alt="Ticket QR Code"
-                                                    className="w-48 h-48"
+                                                    className="w-32 h-32"
                                                 />
                                             </div>
-                                            <p className="text-[8px] font-black text-white/30 uppercase tracking-[0.2em] max-w-[200px] text-center">
-                                                Digitalize para partilhar ou guardar a sua senha
+                                             <p className="text-[8px] font-black text-white/30 uppercase tracking-[0.2em] max-w-[200px] text-center">
+                                                {language === 'en' ? 'Scan to share or save your ticket' : 'Digitalize para partilhar ou guardar a sua senha'}
                                             </p>
                                         </div>
                                     </div>
                                 )}
                             </div>
                             
-                            <button 
+                                 <button 
                                 onClick={() => setStep('category')} 
-                                className="mt-12 text-[#d9a65a] font-black uppercase tracking-widest text-xs hover:text-white transition-colors"
+                                className="mt-6 text-[#d9a65a] font-black uppercase tracking-widest text-xs hover:text-white transition-colors"
                             >
-                                Retirar nova senha
+                                {t.clientDashboard.queue.novaSenha}
                             </button>
                         </motion.div>
                     )}
@@ -346,7 +359,7 @@ export const GetTicket: React.FC = () => {
             </div>
 
             {/* Branding/Dev info at bottom */}
-            <div className="absolute bottom-10 text-center w-full px-6 opacity-20">
+            <div className="absolute bottom-6 text-center w-full px-6 opacity-20">
                 <p className="text-[10px] uppercase font-black tracking-[0.4em] mb-1">Zyph Intelligence • Portal de Senhas</p>
                 <p className="text-[8px] uppercase tracking-widest">{company?.office_name}</p>
             </div>

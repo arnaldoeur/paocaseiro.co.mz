@@ -369,33 +369,6 @@ export const generateCustomerReceiptPDF = async (order: any, items: any[], compa
     pdf.text(`"${companyInfo.motto || 'O sabor que aquece o coração'}"`, pageWidth / 2, footerY, { align: 'center' });
     footerY += 6;
 
-    pdf.setFont('helvetica', 'bold');
-    pdf.setFontSize(7.5);
-    pdf.setTextColor(80, 80, 80);
-    pdf.text((companyInfo.legalName || companyInfo.name || 'PÃO CASEIRO, LDA').toUpperCase(), pageWidth / 2, footerY, { align: 'center' });
-    footerY += 5;
-
-    pdf.setFont('helvetica', 'normal');
-    pdf.setFontSize(6.5);
-    pdf.setTextColor(120, 120, 120);
-    const splitAddrR = pdf.splitTextToSize(companyInfo.address || 'Lichinga, Av. Acordo de Lusaka', pageWidth - 20);
-    pdf.text(splitAddrR, pageWidth / 2, footerY, { align: 'center' });
-    footerY += (splitAddrR.length * 3.5) + 1;
-
-    pdf.text(`Telf: ${companyInfo.phone || '+258 87 914 6662'} | ${companyInfo.email || 'geral@paocaseiro.co.mz'}`, pageWidth / 2, footerY, { align: 'center' });
-    footerY += 4;
-
-    if (companyInfo.nuit) {
-        pdf.setFont('helvetica', 'bold');
-        pdf.text(`NUIT: ${companyInfo.nuit}`, pageWidth / 2, footerY, { align: 'center' });
-        footerY += 4;
-        pdf.setFont('helvetica', 'normal');
-    }
-
-    if (companyInfo.website) {
-        pdf.text(companyInfo.website, pageWidth / 2, footerY, { align: 'center' });
-    }
-
     return pdf;
 };
 
@@ -681,37 +654,6 @@ export const generateFormalInvoicePDF = async (order: any, items: any[], company
     pdf.setTextColor(217, 166, 90);
     pdf.text(`"${companyInfo.motto || 'O sabor que aquece o coração'}"`, pageWidth / 2, footerYA4, { align: 'center' });
     footerYA4 += 8;
-
-    pdf.setFont('helvetica', 'bold');
-    pdf.setFontSize(10);
-    pdf.setTextColor(60, 60, 60);
-    pdf.text((companyInfo.legalName || companyInfo.name || 'PÃO CASEIRO, LDA').toUpperCase(), pageWidth / 2, footerYA4, { align: 'center' });
-    footerYA4 += 6;
-
-    pdf.setFont('helvetica', 'normal');
-    pdf.setFontSize(9);
-    pdf.setTextColor(100, 100, 100);
-    const splitAddrA4 = pdf.splitTextToSize(companyInfo.address || 'Lichinga, Av. Acordo de Lusaka', pageWidth - 40);
-    pdf.text(splitAddrA4, pageWidth / 2, footerYA4, { align: 'center' });
-    footerYA4 += (splitAddrA4.length * 4) + 1;
-
-    pdf.text(`Telf: ${companyInfo.phone || '+258 87 914 6662'} | Email: ${companyInfo.email || 'geral@paocaseiro.co.mz'}`, pageWidth / 2, footerYA4, { align: 'center' });
-    footerYA4 += 5;
-
-    if (companyInfo.nuit) {
-        pdf.setFont('helvetica', 'bold');
-        pdf.setFontSize(9.5);
-        pdf.setTextColor(80, 80, 80);
-        pdf.text(`NUIT: ${companyInfo.nuit}`, pageWidth / 2, footerYA4, { align: 'center' });
-        footerYA4 += 5;
-        pdf.setFont('helvetica', 'normal');
-    }
-
-    if (companyInfo.website) {
-        pdf.setFontSize(9);
-        pdf.setTextColor(150, 150, 150);
-        pdf.text(companyInfo.website, pageWidth / 2, footerYA4, { align: 'center' });
-    }
 
     return pdf;
 };

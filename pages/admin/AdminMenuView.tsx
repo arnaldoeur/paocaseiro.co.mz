@@ -33,8 +33,8 @@ const CREAM = [253, 246, 238] as const;
 const WHITE = [255, 255, 255] as const;
 const DARK = [40, 28, 24] as const;
 
-// ─── Helper: load image as base64 ───────────────────────────
-const toBase64 = (url: string): Promise<string> =>
+// ─── Helper: load image as base64 with Contain aspect-ratio ───
+const toBase64 = (url: string, targetW: number = 400, targetH: number = 400): Promise<string> =>
     new Promise(resolve => {
         if (!url) return resolve('');
         const img = new Image();
@@ -42,9 +42,44 @@ const toBase64 = (url: string): Promise<string> =>
         img.onload = () => {
             try {
                 const c = document.createElement('canvas');
-                c.width = img.naturalWidth || 400; c.height = img.naturalHeight || 400;
+                // Retina scale for premium print quality (convert mm to large pixel canvas, roughly 300 DPI multiplier is ~12)
+                c.width = targetW * 12;
+                c.height = targetH * 12;
+                
                 const ctx = c.getContext('2d');
-                if (ctx) { ctx.drawImage(img, 0, 0); resolve(c.toDataURL('image/jpeg', 0.9)); }
+                if (ctx) {
+                    // Fill background to match card (cream)
+                    ctx.fillStyle = '#FFFFFF';
+                    ctx.fillRect(0, 0, c.width, c.height);
+                    
+                    const imgRatio = img.naturalWidth / img.naturalHeight;
+                    const targetRatio = c.width / c.height;
+                    
+                    let drawW, drawH, drawX, drawY;
+                    
+                    // Object-fit: contain logic to prevent stretching
+                    if (imgRatio > targetRatio) {
+                        drawW = c.width;
+                        drawH = c.width / imgRatio;
+                        drawX = 0;
+                        drawY = (c.height - drawH) / 2;
+                    } else {
+                        drawH = c.height;
+                        drawW = c.height * imgRatio;
+                        drawX = (c.width - drawW) / 2;
+                        drawY = 0;
+                    }
+                    
+                    // Add 5% padding so edges don't stick to the box
+                    const pad = c.width * 0.05;
+                    drawX += pad;
+                    drawY += pad;
+                    drawW -= pad * 2;
+                    drawH -= pad * 2;
+                    
+                    ctx.drawImage(img, drawX, drawY, drawW, drawH);
+                    resolve(c.toDataURL('image/jpeg', 0.95)); 
+                }
                 else resolve('');
             } catch { resolve(''); }
         };
@@ -211,18 +246,18 @@ async function buildMenuPDF(
         ? { [categoryFilter]: groupedByCategory[categoryFilter] || [] }
         : groupedByCategory;
 
-    const COLS = 3;
-    const CELL_W = 58;
-    const CELL_H = 62;  // taller to fit description
-    const GAP_X = 5;
-    const GAP_Y = 4;
+    const COLS = 2;
+    const CELL_W = 88;
+    const CELL_H = 85;  // taller to fit description and larger image
+    const GAP_X = 10;
+    const GAP_Y = 8;
     const START_X = 12;
 
     // Layout constants
     const FIRST_PAGE_START_Y = 76;  // after category header
     const CONT_PAGE_START_Y  = 24;  // after compact header on continuation pages
-    const FIRST_PAGE_ROWS = 3;      // 9 items on first category page
-    const CONT_PAGE_ROWS  = 4;      // 12 items on continuation pages
+    const FIRST_PAGE_ROWS = 2;      // 4 items on first category page
+    const CONT_PAGE_ROWS  = 3;      // 6 items on continuation pages
 
     const drawPageFooter = () => {
         doc.setFillColor(...DARK);
@@ -344,29 +379,35 @@ async function buildMenuPDF(
                 yPos = CONT_PAGE_START_Y + row * (CELL_H + GAP_Y);
             }
 
-            // ── Product card ──
-            // Card background without bold border
-            doc.setFillColor(...WHITE);
-            doc.roundedRect(xPos, yPos, CELL_W, CELL_H, 3, 3, 'F');
+            // Card background structure with subtle luxury border
+            doc.setFillColor(255, 255, 255); // Absolute white background
+            doc.roundedRect(xPos, yPos, CELL_W, CELL_H, 4, 4, 'F');
+            
+            // Subtle card border
+            doc.setDrawColor(230, 230, 230);
+            doc.setLineWidth(0.3);
+            doc.roundedRect(xPos, yPos, CELL_W, CELL_H, 4, 4, 'S');
 
             // Clickable link for the product
             doc.link(xPos, yPos, CELL_W, CELL_H, { url: `${window.location.origin}/?product=${product.id}` });
 
-            const IMG_H = 30;
+            const IMG_H = 50;
 
             if (product.image_url) {
-                const imgData = await toBase64(product.image_url);
+                // Pass target width and height to enforce exact aspect ratio containment
+                const imgData = await toBase64(product.image_url, CELL_W, IMG_H);
                 if (imgData) {
-                    doc.setFillColor(252, 250, 246);
+                    doc.setFillColor(255, 255, 255);
                     doc.roundedRect(xPos, yPos, CELL_W, IMG_H, 3, 0, 'F');
                     try {
+                        // Image will now sit perfectly inside without stretching
                         doc.addImage(imgData, 'JPEG', xPos, yPos, CELL_W, IMG_H, undefined, 'FAST');
                     } catch (_) { /* skip if image fails */ }
                 } else {
                     doc.setFillColor(252, 250, 246);
                     doc.roundedRect(xPos, yPos, CELL_W, IMG_H, 3, 0, 'F');
                     doc.setTextColor(200, 175, 130);
-                    doc.setFontSize(6);
+                    doc.setFontSize(8);
                     doc.setFont('helvetica', 'normal');
                     doc.text('sem foto', xPos + CELL_W / 2, yPos + IMG_H / 2, { align: 'center' });
                 }
@@ -374,7 +415,7 @@ async function buildMenuPDF(
                 doc.setFillColor(252, 250, 246);
                 doc.roundedRect(xPos, yPos, CELL_W, IMG_H, 3, 0, 'F');
                 doc.setTextColor(200, 165, 100);
-                doc.setFontSize(6);
+                doc.setFontSize(8);
                 doc.setFont('helvetica', 'normal');
                 doc.text('Pao Caseiro', xPos + CELL_W / 2, yPos + IMG_H / 2, { align: 'center' });
             }
@@ -387,29 +428,31 @@ async function buildMenuPDF(
             // Product name
             const nameSafe = product.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
             doc.setTextColor(...DARK);
-            doc.setFontSize(7.5);
+            doc.setFontSize(9);
             doc.setFont('helvetica', 'bold');
             const nameLines = doc.splitTextToSize(nameSafe, CELL_W - 6);
-            doc.text(nameLines.slice(0, 2), xPos + CELL_W / 2, yPos + IMG_H + 5, { align: 'center' });
+            doc.text(nameLines.slice(0, 2), xPos + CELL_W / 2, yPos + IMG_H + 7, { align: 'center' });
 
             // Description (italic, grey, truncated to 2 lines)
             if (product.description) {
                 const descSafe = product.description.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
                 doc.setTextColor(110, 95, 85);
-                doc.setFontSize(5.5);
+                doc.setFontSize(7);
                 doc.setFont('helvetica', 'italic');
-                const descLines = doc.splitTextToSize(descSafe, CELL_W - 6);
-                doc.text(descLines.slice(0, 2), xPos + CELL_W / 2, yPos + IMG_H + 11.5, { align: 'center', lineHeightFactor: 1.2 });
+                const descLines = doc.splitTextToSize(descSafe, CELL_W - 8);
+                doc.text(descLines.slice(0, 2), xPos + CELL_W / 2, yPos + IMG_H + 13, { align: 'center', lineHeightFactor: 1.2 });
             }
 
-            // Price badge
             const priceStr = `${product.price.toFixed(2)} MT`;
-            doc.setFillColor(...DARK);
-            doc.roundedRect(xPos + 5, yPos + CELL_H - 10, CELL_W - 10, 8, 2, 2, 'F');
-            doc.setTextColor(...GOLD);
-            doc.setFontSize(7.5);
+            // Elegant Price tag styling (floating effect instead of dark box)
+            doc.setFillColor(...GOLD); // Gold color
+            const priceW = doc.getTextWidth(priceStr) + 12;
+            const priceX = xPos + (CELL_W - priceW) / 2;
+            doc.roundedRect(priceX, yPos + CELL_H - 11, priceW, 7, 3.5, 3.5, 'F');
+            doc.setTextColor(...DARK);
+            doc.setFontSize(8);
             doc.setFont('helvetica', 'bold');
-            doc.text(priceStr, xPos + CELL_W / 2, yPos + CELL_H - 5, { align: 'center' });
+            doc.text(priceStr, priceX + priceW / 2, yPos + CELL_H - 6, { align: 'center' });
         }
 
         drawPageFooter();

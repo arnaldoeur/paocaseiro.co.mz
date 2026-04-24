@@ -35,19 +35,14 @@ async function checkCurrentSchema() {
         console.log("CUSTOMERS columns:", Object.keys(data?.[0] || {}));
         console.log("Example customer data:", data?.[0]);
         
-        // Check audit logs for errors
-        const { data: audits, error: auditErr } = await supabase
-            .from('audit_logs')
-            .select('*')
-            .eq('action', 'CUSTOMER_REGISTER_FAILED')
-            .order('created_at', { ascending: false })
-            .limit(5);
-        
-        if (auditErr) {
-            console.error("Error fetching audit logs:", auditErr);
-        } else {
-            console.log("Recent registration failures:", JSON.stringify(audits, null, 2));
-        }
+        // Check team_members with specific UUID
+        const { data: userData, error: userError } = await supabase
+            .from('team_members')
+            .select('id')
+            .eq('id', '9f4b4a2d-2303-44db-9695-3cd8c5e4be00')
+            .single();
+            
+        console.log("Team Member query result:", userData, "Error:", userError);
     }
 }
 

@@ -151,17 +151,14 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
     const handlePlayWithSound = () => {
         setIsPlayingWithSound(true);
         if (videoRef.current) {
-            videoRef.current.muted = false;
-            videoRef.current.currentTime = 0;
-            videoRef.current.play();
+            videoRef.current.pause(); // Pause background for performance
         }
     };
 
     const handleCloseVideo = () => {
         setIsPlayingWithSound(false);
         if (videoRef.current) {
-            videoRef.current.muted = true;
-            videoRef.current.play();
+            videoRef.current.play(); // Resume background
         }
     };
     const location = useLocation();
@@ -344,15 +341,16 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
 
             {/* --- VIDEO SECTION --- */}
             <section className="relative min-h-screen bg-[#3b2f2f] flex items-center justify-center overflow-hidden">
-                {/* YouTube Background - zero Supabase egress */}
-                <div className="absolute inset-0 opacity-60 pointer-events-none">
-                    <iframe
-                        src="https://www.youtube-nocookie.com/embed/ApNnaPfh_o8?autoplay=1&mute=1&loop=1&playlist=ApNnaPfh_o8&controls=0&playsinline=1&rel=0&modestbranding=1&showinfo=0&iv_load_policy=3&disablekb=1"
-                        className="absolute top-1/2 left-1/2 w-[300%] h-[300%] -translate-x-1/2 -translate-y-1/2"
-                        allow="autoplay; encrypted-media"
-                        allowFullScreen
-                        title="Pão Caseiro vídeo"
-                        style={{ border: 'none' }}
+                {/* Video Background */}
+                <div className="absolute inset-0 opacity-60 pointer-events-none bg-black">
+                    <video
+                        ref={videoRef}
+                        src="https://files.zyphtech.com/video_paocaseiro.mp4"
+                        className="w-full h-full object-cover"
+                        autoPlay
+                        muted
+                        loop
+                        playsInline
                     />
                 </div>
 
@@ -363,17 +361,15 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                         {t.video.subtitle}
                     </p>
 
-                    <motion.a
-                        href="https://youtu.be/ApNnaPfh_o8"
-                        target="_blank"
-                        rel="noopener noreferrer"
+                    <motion.button
+                        onClick={handlePlayWithSound}
                         whileHover={{ scale: 1.1 }}
                         whileTap={{ scale: 0.95 }}
                         className="w-24 h-24 bg-[#f7f1eb] rounded-full flex items-center justify-center text-[#3b2f2f] shadow-[0_0_30px_rgba(217,166,90,0.5)] mx-auto group hover:bg-[#d9a65a] transition-colors relative z-10"
                         style={{ willChange: "transform" }}
                     >
                         <Play className="w-10 h-10 ml-1 fill-current" />
-                    </motion.a>
+                    </motion.button>
                     <p className="mt-4 uppercase tracking-widest text-xs font-bold">{t.video.play}</p>
                 </div>
             </section>
@@ -419,20 +415,20 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                             </p>
 
                             <div className="flex justify-center lg:justify-start">
-                                <ul className="space-y-6 flex flex-col items-start max-w-md">
+                                <ul className="space-y-6 flex flex-col items-center lg:items-start max-w-md mx-auto lg:mx-0">
                                     {t.about.points.map((item, i) => (
                                         <li
                                             key={i}
-                                            className="flex items-start gap-4 text-[#3b2f2f] font-medium text-left"
+                                            className="flex flex-col lg:flex-row items-center lg:items-start gap-2 lg:gap-4 text-[#3b2f2f] font-medium text-center lg:text-left"
                                         >
                                             <motion.div
                                                 initial={{ opacity: 0, x: 20 }}
                                                 whileInView={{ opacity: 1, x: 0 }}
                                                 viewport={{ once: true }}
                                                 transition={{ delay: i * 0.2 }}
-                                                className="flex items-center gap-4"
+                                                className="flex flex-col lg:flex-row items-center lg:items-start gap-2 lg:gap-4"
                                             >
-                                                <span className="w-2 h-2 rounded-full bg-[#d9a65a] shrink-0 mt-1.5" />
+                                                <span className="w-2 h-2 rounded-full bg-[#d9a65a] shrink-0 lg:mt-1.5" />
                                                 <span>{item}</span>
                                             </motion.div>
                                         </li>
@@ -577,7 +573,7 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                                 whileInView={{ opacity: 1, scale: 1 }}
                                 viewport={{ once: true }}
                                 onClick={() => setSelectedIndex(idx)}
-                                className="relative group rounded-3xl overflow-hidden shadow-lg border border-[#3b2f2f]/10 cursor-pointer bg-[#e5e5e5] w-full md:w-[calc(50%-12px)] lg:w-[calc(33.333%-16px)] aspect-square"
+                                className="relative group rounded-3xl overflow-hidden shadow-lg border border-[#3b2f2f]/10 cursor-pointer bg-[#e5e5e5] flex-grow basis-full md:basis-[calc(50%-1.5rem)] lg:basis-[calc(33.333%-2rem)] aspect-square"
                             >
                                 <img
                                     src={item.src}
@@ -617,12 +613,12 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
 
                     {/* Contact Form */}
                     <div className="text-center lg:text-left">
-                        <span className="text-[#d9a65a] font-bold tracking-widest uppercase text-xs mb-4 block">{t.contact.visit.title}</span>
+                        <span className="text-[#d9a65a] font-bold tracking-widest uppercase text-xs mb-4 block">{t.contact.visit.badge}</span>
                         <h2 className="font-serif text-4xl md:text-6xl text-white mb-6">
-                            Estás com alguma <span className="text-[#d9a65a] italic">dúvida?</span>
+                            {(t.contact.form.title || '').split(' ').slice(0, -1).join(' ')} <span className="text-[#d9a65a] italic">{(t.contact.form.title || '').split(' ').pop()}</span>
                         </h2>
                         <p className="text-white/60 mb-10 text-lg max-w-lg mx-auto lg:mx-0">
-                            Preencha o formulário e a nossa equipe entrará em contacto o mais breve possível.
+                            {t.contact.form.subtitle}
                         </p>
 
                         <form onSubmit={handleContactSubmit} className="space-y-6 max-w-lg mx-auto lg:mx-0">
@@ -645,7 +641,7 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                                         value={formData.phone}
                                         onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                                         className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white focus:outline-none focus:border-[#d9a65a] transition-all hover:bg-white/10"
-                                        placeholder="+258 8x xxx xxxx"
+                                        placeholder={t.contact.form.phonePlaceholder}
                                     />
                                 </div>
                                 <div>
@@ -657,7 +653,7 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                                         value={formData.email}
                                         onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                                         className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white focus:outline-none focus:border-[#d9a65a] transition-all hover:bg-white/10"
-                                        placeholder="email@exemplo.com"
+                                        placeholder={t.contact.form.emailPlaceholder}
                                     />
                                 </div>
                             </div>
@@ -685,7 +681,7 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                                 disabled={isSubmitting}
                                 className="bg-[#d9a65a] text-[#3b2f2f] px-12 py-5 rounded-2xl font-black uppercase tracking-widest hover:bg-[#f7f1eb] transition-all w-full md:w-auto disabled:opacity-50 disabled:cursor-not-allowed shadow-xl"
                             >
-                                {isSubmitting ? 'Enviando...' : t.contact.form.send}
+                                {isSubmitting ? t.contact.form.sending : t.contact.form.send}
                             </button>
                         </form>
                     </div>
@@ -693,8 +689,10 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                     {/* Visit Us Card - Redesigned */}
                     <div id="visit" className="bg-[#f7f1eb] text-[#3b2f2f] rounded-[3rem] p-10 md:p-16 shadow-2xl flex flex-col justify-between border border-white">
                         <div>
-                            <span className="bg-[#d9a65a]/10 text-[#d9a65a] px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest mb-6 inline-block">Localização</span>
-                            <h3 className="font-serif text-4xl md:text-5xl mb-8 leading-tight">Visite a nossa <span className="text-[#d9a65a] italic">Padaria</span></h3>
+                            <span className="bg-[#d9a65a]/10 text-[#d9a65a] px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest mb-6 inline-block">{t.contact.visit.badge}</span>
+                            <h3 className="font-serif text-4xl md:text-5xl mb-8 leading-tight">
+                                {(t.contact.visit.title || '').split(' ').slice(0, -1).join(' ')} <span className="text-[#d9a65a] italic">{(t.contact.visit.title || '').split(' ').pop()}</span>
+                            </h3>
                             
                             <div className="space-y-8">
                                 <div className="flex items-center gap-6 group">
@@ -702,7 +700,7 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                                         <MapPin className="w-6 h-6" />
                                     </div>
                                     <div>
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-[#d9a65a] mb-1">Endereço</p>
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-[#d9a65a] mb-1">{t.contact.visit.addressLabel}</p>
                                         <p className="font-bold text-lg">{t.contact.visit.location}</p>
                                     </div>
                                 </div>
@@ -810,6 +808,34 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                     )
                 }
             </AnimatePresence >
+
+            <AnimatePresence>
+                {isPlayingWithSound && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[110] bg-black/95 flex items-center justify-center p-4 backdrop-blur-md"
+                    >
+                        <button
+                            onClick={handleCloseVideo}
+                            className="absolute top-6 right-6 text-white/80 hover:text-[#d9a65a] transition-colors z-[112] bg-white/10 p-2 rounded-full backdrop-blur-md"
+                        >
+                            <X size={32} />
+                        </button>
+                        
+                        <div className="relative w-full max-w-5xl aspect-video rounded-2xl overflow-hidden shadow-2xl border border-white/10 bg-black">
+                            <video
+                                src="https://files.zyphtech.com/video_paocaseiro.mp4"
+                                className="w-full h-full"
+                                autoPlay
+                                controls
+                                playsInline
+                            />
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             <LandingLaunchPopup language={language} />
         </>

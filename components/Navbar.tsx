@@ -241,7 +241,7 @@ export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
             initial={{ opacity: 0, x: '100%' }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: '100%' }}
-            className="fixed inset-0 z-[60] bg-[#3b2f2f] text-[#f7f1eb] flex flex-col items-center justify-start gap-8 overflow-y-auto pt-20 pb-10"
+            className="fixed inset-0 z-[60] bg-[#3b2f2f] text-[#f7f1eb] flex flex-col items-center justify-start gap-4 overflow-y-auto pt-12 pb-10"
           >
             <button
               id="mobile-menu-close"
@@ -253,7 +253,7 @@ export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
               <X className="w-8 h-8" />
             </button>
 
-            <Logo className="h-24 mb-8" variant="dark" />
+            <Logo className="h-20 mb-4" variant="dark" />
 
             {NAV_ITEMS.map((item) => {
               const isActive = (item.id === 'hero' && location.pathname === '/') || 
@@ -263,7 +263,7 @@ export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
                 key={item.id}
                 id={`mobile-nav-${item.id}`}
                 onClick={() => handleNavigation(item.id)}
-                className={`text-3xl font-serif hover:text-[#d9a65a] transition-colors ${isActive ? 'text-[#d9a65a]' : ''}`}
+                className={`text-2xl font-serif hover:text-[#d9a65a] transition-colors ${isActive ? 'text-[#d9a65a]' : ''}`}
                 title={t.nav[item.labelKey]}
                 aria-label={t.nav[item.labelKey]}
               >
@@ -274,7 +274,7 @@ export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
             <button
               id="mobile-nav-menu"
               onClick={() => { navigate('/menu'); setMobileMenuOpen(false); }}
-              className={`text-3xl font-serif hover:text-[#d9a65a] transition-colors ${location.pathname === '/menu' ? 'text-[#d9a65a]' : ''}`}
+              className={`text-2xl font-serif hover:text-[#d9a65a] transition-colors ${location.pathname === '/menu' ? 'text-[#d9a65a]' : ''}`}
               title="Ver Menu"
               aria-label="Ver Menu"
             >
@@ -283,7 +283,7 @@ export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
 
             <button
               onClick={() => { toggleLanguage(); setMobileMenuOpen(false); }}
-              className="flex items-center gap-3 px-6 py-3 rounded-full border border-white/20 hover:border-[#d9a65a] hover:text-[#d9a65a] transition-all mt-4"
+              className="flex items-center gap-3 px-6 py-2.5 rounded-full border border-white/20 hover:border-[#d9a65a] hover:text-[#d9a65a] transition-all mt-2"
               title={language === 'pt' ? 'Mudar para Inglês' : 'Change to Portuguese'}
             >
               {language === 'pt' ? (
@@ -298,7 +298,7 @@ export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
             {(user || manualUserPhone) ? (
               <button
                 onClick={() => { navigate('/dashboard'); setMobileMenuOpen(false); }}
-                className="flex items-center gap-3 bg-[#f7f1eb]/10 px-8 py-4 rounded-full border border-white/20 hover:border-[#d9a65a] transition-all"
+                className="flex items-center gap-3 bg-[#f7f1eb]/10 px-8 py-3 rounded-full border border-white/20 hover:border-[#d9a65a] transition-all"
                 title={t.nav.myAccount}
               >
                 <div className="w-8 h-8 rounded-full bg-[#d9a65a] flex items-center justify-center text-[#3b2f2f]">
@@ -311,7 +311,7 @@ export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
             ) : (
               <button
                 onClick={() => { setIsLoginModalOpen(true); setMobileMenuOpen(false); }}
-                className="flex items-center gap-3 bg-[#d9a65a] text-[#3b2f2f] px-8 py-4 rounded-full font-bold hover:bg-white transition-all shadow-lg"
+                className="flex items-center gap-3 bg-[#d9a65a] text-[#3b2f2f] px-8 py-3 rounded-full font-bold hover:bg-white transition-all shadow-lg"
                 title={t.nav.login}
               >
                 <User className="w-6 h-6" />

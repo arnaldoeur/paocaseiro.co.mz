@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../services/supabase';
 import { Language, translations } from '../translations';
-import { Calendar, User, ChevronRight, BookOpen, Clock, MapPin } from 'lucide-react';
+import { Calendar, User, ChevronRight, BookOpen, Clock, MapPin, Play, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { sendNewsletterEmail } from '../services/email';
 
@@ -26,7 +26,23 @@ export const Blog: React.FC<{ language: Language }> = ({ language }) => {
     const [newsletterEmail, setNewsletterEmail] = useState('');
     const [subscribing, setSubscribing] = useState(false);
     const [subscribedMsg, setSubscribedMsg] = useState('');
+    const [isPlayingWithSound, setIsPlayingWithSound] = useState(false);
+    const videoRef = React.useRef<HTMLVideoElement>(null);
     const navigate = useNavigate();
+
+    const handlePlayWithSound = () => {
+        setIsPlayingWithSound(true);
+        if (videoRef.current) {
+            videoRef.current.pause();
+        }
+    };
+
+    const handleCloseVideo = () => {
+        setIsPlayingWithSound(false);
+        if (videoRef.current) {
+            videoRef.current.play();
+        }
+    };
 
     const handleSubscribe = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -128,14 +144,23 @@ export const Blog: React.FC<{ language: Language }> = ({ language }) => {
 
                     <div className="w-full md:w-1/2">
                         <div className="w-full aspect-video rounded-[2rem] overflow-hidden shadow-2xl relative bg-[#3b2f2f] group">
-                            <iframe
-                                src="https://www.youtube-nocookie.com/embed/ApNnaPfh_o8?rel=0&modestbranding=1&showinfo=0"
-                                className="w-full h-full"
-                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                                allowFullScreen
-                                title="Pão Caseiro - Bastidores"
-                                style={{ border: 'none' }}
-                            ></iframe>
+                            <video
+                                ref={videoRef}
+                                src="https://files.zyphtech.com/video_paocaseiro.mp4"
+                                className="w-full h-full object-cover"
+                                autoPlay
+                                muted
+                                loop
+                                playsInline
+                            />
+                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all">
+                                <button
+                                    onClick={handlePlayWithSound}
+                                    className="w-20 h-20 bg-[#d9a65a] text-[#3b2f2f] rounded-full flex items-center justify-center shadow-2xl transform scale-90 group-hover:scale-100 transition-all hover:bg-white"
+                                >
+                                    <Play size={32} className="fill-current ml-1" />
+                                </button>
+                            </div>
                             <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent pointer-events-none group-hover:opacity-0 transition-opacity"></div>
                             <div className="absolute bottom-6 left-6 pointer-events-none text-white font-bold tracking-widest uppercase text-xs flex items-center gap-2 group-hover:opacity-0 transition-opacity">
                                 <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div>
@@ -295,6 +320,34 @@ export const Blog: React.FC<{ language: Language }> = ({ language }) => {
                     </div>
                 </div>
             </div>
+
+            <AnimatePresence>
+                {isPlayingWithSound && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[110] bg-black/95 flex items-center justify-center p-4 backdrop-blur-md"
+                    >
+                        <button
+                            onClick={handleCloseVideo}
+                            className="absolute top-6 right-6 text-white/80 hover:text-[#d9a65a] transition-colors z-[112] bg-white/10 p-2 rounded-full backdrop-blur-md"
+                        >
+                            <X size={32} />
+                        </button>
+                        
+                        <div className="relative w-full max-w-5xl aspect-video rounded-2xl overflow-hidden shadow-2xl border border-white/10 bg-black">
+                            <video
+                                src="https://files.zyphtech.com/video_paocaseiro.mp4"
+                                className="w-full h-full"
+                                autoPlay
+                                controls
+                                playsInline
+                            />
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 };

@@ -62,6 +62,7 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       VitePWA({
+        selfDestroying: true,
         registerType: 'autoUpdate',
         includeAssets: ['favicon.ico', 'robots.txt', 'images/**/*.png', 'images/**/*.jpg'],
         manifest: {
@@ -91,6 +92,7 @@ export default defineConfig(({ mode }) => {
             {
               urlPattern: /^https:\/\/bbvowyztvzselxphbqmt\.supabase\.co\/.*/i,
               handler: 'NetworkFirst',
+              method: 'GET',
               options: {
                 cacheName: 'supabase-api-cache',
                 expiration: {

@@ -126,7 +126,7 @@ export const Gallery: React.FC<{ language: Language }> = ({ language }) => {
                     name: p.name,
                     price: parseFloat(p.price) || 0,
                     inStock: p.is_available,
-                    image: p.image_url,
+                    image: p.image,
                     type: 'product'
                 }));
                 allItems = [...allItems, ...dbProducts];
@@ -203,14 +203,14 @@ export const Gallery: React.FC<{ language: Language }> = ({ language }) => {
                         <Loader className="w-10 h-10 animate-spin text-[#d9a65a]" />
                     </div>
                 ) : filteredItems.length > 0 ? (
-                    <div className="columns-1 md:columns-2 lg:columns-3 gap-8 space-y-8 p-4">
+                    <div className="flex flex-wrap justify-center gap-8 p-4">
                         {filteredItems.map((item, idx) => (
                             <motion.div
                                 key={item.id}
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ delay: idx * 0.05 }}
-                                className="break-inside-avoid bg-white rounded-3xl overflow-hidden shadow-lg border border-[#3b2f2f]/5 hover:border-[#d9a65a]/30 group hover:shadow-2xl transition-all duration-300 relative"
+                                className="w-full md:w-[calc(50%-1rem)] lg:w-[calc(33.333%-2rem)] bg-white rounded-3xl overflow-hidden shadow-lg border border-[#3b2f2f]/5 hover:border-[#d9a65a]/30 group hover:shadow-2xl transition-all duration-300 relative"
                             >
                                 <div
                                     className="relative cursor-pointer overflow-hidden"

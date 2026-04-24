@@ -247,7 +247,7 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                 }
             }
         } catch (error: any) {
-            alert(language === 'en' ? 'Error requesting ticket: ' + error.message : 'Erro ao solicitar senha: ' + error.message);
+            alert(t.alerts.ticketError + error.message);
         } finally {
             setTicketLoading(false);
         }
@@ -448,7 +448,7 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
             });
         });
 
-        alert(language === 'en' ? 'Items added to cart!' : 'Itens adicionados ao carrinho!');
+        alert(t.alerts.itemsAdded);
     };
 
     const handleSupportOrder = (orderId: string, status: string, shortId?: string) => {
@@ -465,7 +465,7 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
     };
 
     const handleCancelOrder = async (order: any) => {
-        if (!window.confirm(language === 'en' ? 'Are you sure you want to cancel this order?' : 'Tem a certeza que deseja cancelar esta encomenda?')) return;
+        if (!window.confirm(t.alerts.confirmCancel)) return;
         
         setLoading(true);
         try {
@@ -485,10 +485,10 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
             });
 
             await fetchOrders(user?.phone);
-            alert(language === 'en' ? 'Order cancelled successfully.' : 'Encomenda cancelada com sucesso.');
+            alert(t.alerts.orderCancelled);
         } catch (err: any) {
             console.error('Error cancelling order:', err);
-            alert(language === 'en' ? 'Failed to cancel the order. It might already be in preparation.' : 'Erro ao cancelar a encomenda. Pode já estar em preparação.');
+            alert(t.alerts.cancelError);
         } finally {
             setLoading(false);
         }
@@ -621,16 +621,8 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
     };
 
     const formatStatus = (status: string, lang: string) => {
-        const map: any = {
-            'pending': { pt: 'Pendente', en: 'Pending' },
-            'confirmed': { pt: 'Confirmado', en: 'Confirmed' },
-            'kitchen': { pt: 'Na Cozinha', en: 'In Kitchen' },
-            'ready': { pt: 'Pronto para Entrega', en: 'Ready' },
-            'delivering': { pt: 'Em Rota de Entrega', en: 'Out for Delivery' },
-            'completed': { pt: 'Concluído', en: 'Completed' },
-            'cancelled': { pt: 'Cancelado', en: 'Cancelled' }
-        };
-        return map[status?.toLowerCase()]?.[lang] || status;
+        const s = status?.toLowerCase();
+        return t.status[s as keyof typeof t.status] || status;
     };
 
     const handleOrderSearch = async (e?: React.FormEvent) => {
@@ -651,11 +643,11 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
             setSearchedOrders(data || []);
             
             if (!data || data.length === 0) {
-                alert(language === 'en' ? 'No order found with this code.' : 'Nenhuma encomenda encontrada com este código.');
+                alert(t.alerts.noOrderFound);
             }
         } catch (err) {
             console.error('Search error:', err);
-            alert(language === 'en' ? 'Error searching for order.' : 'Erro ao procurar encomenda.');
+            alert(t.alerts.searchError);
         } finally {
             setIsSearchingOrder(false);
         }
@@ -680,14 +672,14 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                     <div className="w-16 h-16 bg-[#f7f1eb] rounded-2xl flex items-center justify-center mb-4">
                         <ShoppingBag className="w-8 h-8 text-[#d9a65a]" />
                     </div>
-                    <h3 className="font-serif text-lg text-[#3b2f2f] mb-1">{language === 'en' ? 'No Active Orders' : 'Sem Encomendas Ativas'}</h3>
-                    <p className="text-sm text-gray-500 mb-6">{language === 'en' ? 'Your active orders will appear here for tracking.' : 'As suas encomendas ativas aparecerão aqui para acompanhamento.'}</p>
+                    <h3 className="font-serif text-lg text-[#3b2f2f] mb-1">{t.tracking.noActive}</h3>
+                    <p className="text-sm text-gray-500 mb-6">{t.tracking.noActiveDesc}</p>
                     
                     <div className="w-full max-w-xs">
                         <form onSubmit={handleOrderSearch} className="relative">
                             <input 
                                 type="text"
-                                placeholder={language === 'en' ? 'Track by order code...' : 'Acompanhar por código...'}
+                                placeholder={t.tracking.trackByCode}
                                 value={searchOrderCode}
                                 onChange={(e) => setSearchOrderCode(e.target.value)}
                                 className="w-full pl-4 pr-12 py-3 bg-gray-50 border border-gray-100 rounded-xl text-sm focus:outline-none focus:border-[#d9a65a] transition-all"
@@ -712,8 +704,8 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
             return (
                 <div className="flex flex-col items-center justify-center py-20 px-6 bg-white rounded-[2.5rem] border-2 border-dashed border-gray-100 text-center">
                     <ShoppingBag className="w-16 h-16 text-gray-200 mb-4" />
-                    <h3 className="font-serif text-xl text-gray-400">{language === 'en' ? 'No active orders found' : 'Nenhuma encomenda ativa encontrada'}</h3>
-                    <p className="text-sm text-gray-400 mt-2">{language === 'en' ? 'Try searching by code above' : 'Tente pesquisar pelo código acima'}</p>
+                    <h3 className="font-serif text-xl text-gray-400">{t.tracking.noOrdersFound}</h3>
+                    <p className="text-sm text-gray-400 mt-2">{t.tracking.trySearching}</p>
                 </div>
             );
         }
@@ -731,10 +723,10 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
         return (
             <div className="space-y-6">
                 <div className="flex items-center justify-between px-2">
-                    <h3 className="font-serif text-xl md:text-2xl text-[#3b2f2f]">{language === 'en' ? 'Track Encomenda' : 'Acompanhar Encomenda'} <span className="text-[#d9a65a]/40 ml-2">#{featuredOrder?.short_id || featuredOrder?.id?.slice(-6).toUpperCase()}</span></h3>
+                    <h3 className="font-serif text-xl md:text-2xl text-[#3b2f2f]">{t.tracking.title} <span className="text-[#d9a65a]/40 ml-2">#{featuredOrder?.short_id || featuredOrder?.id?.slice(-6).toUpperCase()}</span></h3>
                     <div className="flex items-center gap-3">
                         <span className="text-xs font-black bg-[#d9a65a] text-[#3b2f2f] px-3 py-1 rounded-full uppercase tracking-widest shadow-sm">
-                            {allTrackedOrders.length} {allTrackedOrders.length === 1 ? (language === 'en' ? 'Active' : 'Ativa') : (language === 'en' ? 'Active' : 'Ativas')}
+                            {allTrackedOrders.length} {allTrackedOrders.length === 1 ? t.tracking.active : t.tracking.actives}
                         </span>
                     </div>
                 </div>
@@ -749,14 +741,14 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                     
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-6 relative z-10">
                         <div>
-                            <p className="text-[10px] font-black text-[#d9a65a] uppercase tracking-[0.3em] mb-2">{language === 'en' ? 'Current Status' : 'Estado Atual'}</p>
+                            <p className="text-[10px] font-black text-[#d9a65a] uppercase tracking-[0.3em] mb-2">{t.tracking.currentStatus}</p>
                             <h4 className="font-serif text-3xl md:text-4xl text-[#3b2f2f]">
                                 {formatStatus(featuredOrder?.status, language)}
                             </h4>
                         </div>
                         <div className="flex items-center gap-4">
                             <div className="text-right hidden md:block">
-                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{language === 'en' ? 'Est. Arrival' : 'Chegada Est.'}</p>
+                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{t.tracking.estArrival}</p>
                                 <p className="font-black text-[#3b2f2f] text-lg">30-45 min</p>
                             </div>
                             <button 
@@ -764,7 +756,7 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                                 className="flex items-center gap-3 py-4 px-6 bg-[#3b2f2f] text-[#d9a65a] rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-[#d9a65a] hover:text-[#3b2f2f] transition-all shadow-xl hover:-translate-y-1"
                             >
                                 <MessageSquare className="w-5 h-5" />
-                                {language === 'en' ? 'Live Support' : 'Suporte Direto'}
+                                {t.tracking.liveSupport}
                             </button>
                         </div>
                     </div>
@@ -820,8 +812,8 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                                 <ShoppingBag className="w-5 h-5 text-gray-400" />
                             </div>
                             <div>
-                                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">{language === 'en' ? 'Items' : 'Artigos'}</p>
-                                <p className="text-sm font-black text-[#3b2f2f]">{featuredOrder?.order_items?.length || 0} {language === 'en' ? 'Products' : 'Produtos'}</p>
+                                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">{t.tracking.items}</p>
+                                <p className="text-sm font-black text-[#3b2f2f]">{featuredOrder?.order_items?.length || 0} {t.tracking.products}</p>
                             </div>
                         </div>
                         <div className="flex items-center gap-3">
@@ -829,7 +821,7 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                                 <Clock className="w-5 h-5 text-gray-400" />
                             </div>
                             <div>
-                                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">{language === 'en' ? 'Ordered At' : 'Pedido há'}</p>
+                                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">{t.tracking.orderedAt}</p>
                                 <p className="text-sm font-black text-[#3b2f2f]">{featuredOrder?.created_at ? new Date(featuredOrder.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}</p>
                             </div>
                         </div>
@@ -840,11 +832,11 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pt-4">
                     {/* Search Component */}
                     <div className="md:col-span-1">
-                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-4 ml-2">{language === 'en' ? 'Track Another Order' : 'Rastrear Outro Pedido'}</p>
+                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-4 ml-2">{t.tracking.trackAnother}</p>
                         <form onSubmit={handleOrderSearch} className="relative group">
                             <input 
                                 type="text"
-                                placeholder={language === 'en' ? 'By code...' : 'Por código...'}
+                                placeholder={t.tracking.byCode}
                                 value={searchOrderCode}
                                 onChange={(e) => setSearchOrderCode(e.target.value)}
                                 className="w-full pl-5 pr-14 py-4 bg-white border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-8 focus:ring-[#d9a65a]/5 focus:border-[#d9a65a] transition-all shadow-sm group-hover:shadow-md"
@@ -864,8 +856,8 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                         {otherOrders.length > 0 && (
                             <>
                                 <div className="flex items-center justify-between mb-4 ml-2">
-                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{language === 'en' ? 'Pending Tracker List' : 'Lista Pendente'}</p>
-                                    <span className="text-[10px] font-bold text-[#d9a65a]">{otherOrders.length} {language === 'en' ? 'more' : 'mais'}</span>
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{t.tracking.pendingTracker}</p>
+                                    <span className="text-[10px] font-bold text-[#d9a65a]">{otherOrders.length} {t.tracking.more}</span>
                                 </div>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     {otherOrders.map((order) => (
@@ -896,7 +888,7 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                         {otherOrders.length === 0 && !isSearchingOrder && allTrackedOrders.length === 1 && (
                             <div className="h-full flex items-center justify-center p-8 bg-[#fdfaf7]/50 rounded-[2rem] border border-dashed border-[#d9a65a]/10">
                                 <p className="text-[10px] font-black text-[#d9a65a]/40 uppercase tracking-[0.3em] text-center">
-                                    {language === 'en' ? 'Tracking 1 Active Order' : 'Acompanhando 1 Pedido Ativo'}
+                                    {t.tracking.tracking1}
                                 </p>
                             </div>
                         )}
@@ -930,12 +922,10 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                         <MessageSquare className="w-8 h-8 text-[#d9a65a]" />
                     </div>
                     <h2 className="font-serif text-2xl text-[#3b2f2f] mb-4">
-                        {language === 'en' ? 'Confirm your Phone Number' : 'Confirme o seu Telemóvel'}
+                        {t.phonePrompt.title}
                     </h2>
                     <p className="text-gray-500 mb-6 text-sm">
-                        {language === 'en' 
-                            ? 'Please provide your WhatsApp number so we can notify you about your order status.' 
-                            : 'Por favor, introduza o seu número de WhatsApp para podermos notificar sobre o estado dos seus pedidos.'}
+                        {t.phonePrompt.desc}
                     </p>
                     <form onSubmit={handleGooglePhoneSubmit} className="space-y-4">
                         <input
@@ -951,7 +941,7 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                             disabled={isSubmittingPhone || googlePhone.length < 9}
                             className="w-full bg-[#3b2f2f] text-[#d9a65a] py-4 rounded-xl font-bold uppercase tracking-widest hover:bg-[#d9a65a] hover:text-[#3b2f2f] transition-all flex justify-center items-center disabled:opacity-70"
                         >
-                            {isSubmittingPhone ? <Loader className="w-6 h-6 animate-spin" /> : (language === 'en' ? 'Confirm Details' : 'Confirmar Dados')}
+                            {isSubmittingPhone ? <Loader className="w-6 h-6 animate-spin" /> : t.phonePrompt.confirm}
                         </button>
                     </form>
                 </motion.div>
@@ -978,7 +968,7 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                                 </div>
                             )}
                             <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
-                                <span className="text-white text-[10px] font-bold uppercase">{language === 'en' ? 'Change' : 'Mudar'}</span>
+                                <span className="text-white text-[10px] font-bold uppercase">{t.change}</span>
                             </div>
                         </div>
                         <div className="flex-1">
@@ -1174,26 +1164,26 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
 
                 {/* Queue Ticket Section */}
                 <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-[#d9a65a]/20">
-                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-                        <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 bg-[#d9a65a]/10 rounded-2xl flex items-center justify-center">
+                    <div className="flex flex-col md:flex-row justify-between items-center md:items-center gap-6 text-center md:text-left">
+                        <div className="flex flex-col md:flex-row items-center gap-4">
+                            <div className="w-12 h-12 bg-[#d9a65a]/10 rounded-2xl flex items-center justify-center shrink-0">
                                 <Ticket className="w-6 h-6 text-[#d9a65a]" />
                             </div>
                             <div>
-                                <h2 className="font-serif text-2xl text-[#3b2f2f]">{language === 'en' ? 'Service Queue' : 'Fila de Atendimento'}</h2>
-                                <p className="text-sm text-gray-500">{language === 'en' ? 'Get your ticket and wait comfortably' : 'Tire a sua senha e aguarde confortavelmente'}</p>
+                                <h2 className="font-serif text-2xl text-[#3b2f2f]">{e.queue.title}</h2>
+                                <p className="text-sm text-gray-500">{e.queue.subtitle}</p>
                             </div>
                         </div>
 
                         {!activeTicket ? (
-                            <div className="flex flex-col sm:flex-row gap-2">
+                            <div className="flex flex-col sm:flex-row gap-2 w-full justify-center md:justify-end">
                                 <button 
                                     onClick={() => handleRequestTicket(false)}
                                     disabled={ticketLoading}
                                     className="bg-[#3b2f2f] text-[#d9a65a] px-6 py-3 rounded-xl font-bold uppercase tracking-widest text-[10px] flex items-center gap-2 hover:bg-[#2a2121] transition-all shadow-lg active:scale-95 disabled:opacity-50"
                                 >
                                     <Ticket className="w-4 h-4" />
-                                    {language === 'en' ? 'Normal' : 'Normal'}
+                                    {e.queue.normal}
                                 </button>
                                 <button 
                                     onClick={() => handleRequestTicket(true)}
@@ -1201,14 +1191,14 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                                     className="bg-amber-500/10 text-amber-600 border border-amber-500/20 px-4 py-3 rounded-xl font-bold uppercase tracking-widest text-[10px] flex items-center gap-2 hover:bg-amber-500/20 transition-all active:scale-95 disabled:opacity-50"
                                 >
                                     <UserCheck className="w-4 h-4" />
-                                    {language === 'en' ? 'Priority' : 'Prioritária'}
+                                    {e.queue.priority}
                                 </button>
                             </div>
                         ) : (
                             <div className="w-full md:w-auto flex items-center gap-4 bg-[#f7f1eb] p-3 rounded-2xl border border-[#d9a65a]/30">
                                 <div className="text-center px-4 border-r border-[#d9a65a]/20">
                                     <div className="flex flex-col items-center">
-                                        <p className="text-[10px] font-bold text-[#d9a65a] uppercase tracking-tighter">{language === 'en' ? 'Your Ticket' : 'Sua Senha'}</p>
+                                        <p className="text-[10px] font-bold text-[#d9a65a] uppercase tracking-tighter">{e.queue.yourTicket}</p>
                                         <div className="flex items-center gap-1">
                                             <p className="text-2xl font-black font-mono text-[#3b2f2f]">{activeTicket.ticket_number}</p>
                                             {activeTicket.is_priority && (
@@ -1221,20 +1211,20 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                                     {activeTicket.status === 'waiting' && (
                                         <div className="flex flex-col">
                                             <span className="text-xs font-bold text-amber-600 flex items-center gap-1">
-                                                <Clock className="w-3 h-3" /> {language === 'en' ? 'Waiting' : 'Em Espera'}
+                                                <Clock className="w-3 h-3" /> {e.queue.waiting}
                                             </span>
                                             <span className="text-[10px] text-gray-500">
-                                                {peopleAhead} {language === 'en' ? 'people ahead' : 'pessoas à frente'}
+                                                {peopleAhead} {e.queue.peopleAhead}
                                             </span>
                                         </div>
                                     )}
                                     {activeTicket.status === 'calling' && (
                                         <div className="flex flex-col">
                                             <span className="text-xs font-bold text-green-600 animate-pulse flex items-center gap-1">
-                                                <Ticket className="w-3 h-3" /> {language === 'en' ? 'Your Turn!' : 'Sua Vez!'}
+                                                <Ticket className="w-3 h-3" /> {e.queue.yourTurn}
                                             </span>
                                             <span className="text-[10px] text-green-700 font-bold uppercase tracking-tighter">
-                                                {activeTicket.counter || (language === 'en' ? 'Main Counter' : 'Balcão Principal')}
+                                                {activeTicket.counter || e.queue.mainCounter}
                                             </span>
                                         </div>
                                     )}
@@ -1319,7 +1309,7 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                                                     className="flex-1 min-w-[140px] flex items-center justify-center gap-2 bg-red-50 text-red-500 py-3 rounded-xl font-bold hover:bg-red-100 transition-all text-xs uppercase tracking-widest border border-red-100"
                                                 >
                                                     <XCircle className="w-4 h-4" />
-                                                    {language === 'en' ? 'Cancel' : 'Cancelar'}
+                                                    {t.cancel}
                                                 </button>
                                             )}
                                         </div>
@@ -1337,9 +1327,9 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                             animate={{ opacity: 1, y: 0 }}
                             whileHover={{ scale: 1.02 }}
                             onClick={() => {
-                                const msg = language === 'en' 
-                                    ? encodeURIComponent("Hello Pão Caseiro Team! I need some assistance.") 
-                                    : encodeURIComponent("Olá Equipa Pão Caseiro! Gostaria de obter assistência.");
+                                const msg = encodeURIComponent(language === 'en' 
+                                    ? "Hello Pão Caseiro Team! I need some assistance." 
+                                    : "Olá Equipa Pão Caseiro! Gostaria de obter assistência.");
                                 window.open(`https://wa.me/258879146662?text=${msg}`, '_blank');
                             }}
                             className="bg-gradient-to-br from-[#25D366] to-[#128C7E] p-8 rounded-[2.5rem] text-white shadow-xl cursor-pointer relative overflow-hidden group"
@@ -1349,14 +1339,12 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                                 <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center mb-6 backdrop-blur-sm">
                                     <MessageSquare className="w-8 h-8 text-white" />
                                 </div>
-                                <h3 className="font-serif text-2xl mb-2">{language === 'en' ? 'WhatsApp Support' : 'Suporte WhatsApp'}</h3>
+                                <h3 className="font-serif text-2xl mb-2">{t.waSupport.title}</h3>
                                 <p className="text-white/80 text-sm mb-6 leading-relaxed">
-                                    {language === 'en' 
-                                        ? 'Chat directly with our team for immediate assistance.' 
-                                        : 'Fale directamente com a nossa equipa para assistência imediata.'}
+                                    {t.waSupport.desc}
                                 </p>
                                 <div className="flex items-center gap-2 font-black text-xs uppercase tracking-[0.2em]">
-                                    {language === 'en' ? 'Open Chat' : 'Abrir Chat'}
+                                    {t.waSupport.open}
                                     <ChevronRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
                                 </div>
                             </div>

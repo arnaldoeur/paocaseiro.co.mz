@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { 
     Ticket, 
     UserCheck, 
@@ -30,40 +30,36 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { getConnectionMode, setConnectionMode, refreshSupabaseClient, type ConnectionMode } from '../../services/supabase';
 
 export const QueueManager: React.FC = () => {
-    const { tickets, loading, error, refresh } = useRealtimeTickets();
-    const [counter, setCounter] = useState(
-        localStorage.getItem('queueCounter') || 'Caixa 1'
-    );
-    useEffect(() => {
-        localStorage.setItem('queueCounter', counter);
-    }, [counter]);
-    const [audioEnabled, setAudioEnabled] = useState(
-        localStorage.getItem('queueAudioEnabled') === 'true'
-    );
+    const { tickets, loading, error, status, refresh } = useRealtimeTickets();
+    const [counter] = useState('Balcão Único');
+    const [audioEnabled, setAudioEnabled] = useState(() => {
+        const saved = localStorage.getItem('queueAudioEnabled');
+        return saved === null ? true : saved === 'true'; // Default to true if not set
+    });
     const [isAutoMode, setIsAutoMode] = useState(false);
     const [actionLoading, setActionLoading] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<'panel' | 'history' | 'config'>('panel');
     const [stats, setStats] = useState<any>(null);
     const [connectionMode, setConnectionModeState] = useState<ConnectionMode>(getConnectionMode());
 
-    const fetchStats = useCallback(async () => {
-        try {
-            const data = await queueService.getTodayStats();
-            setStats(data);
-        } catch (err) {
-            console.error("Stats error:", err);
-        }
-    }, []);
+    // Local Stats Calculation (Meticulous & Instant)
+    const derivedStats = useMemo(() => {
+        return {
+            total: tickets.length,
+            completed: tickets.filter(t => t.status === 'completed').length,
+            cancelled: tickets.filter(t => t.status === 'cancelled').length,
+            skipped: tickets.filter(t => t.status === 'skipped').length,
+            waiting: tickets.filter(t => t.status === 'waiting').length,
+        };
+    }, [tickets]);
 
     useEffect(() => {
-        if (activeTab === 'history') {
-            fetchStats();
-        }
-    }, [activeTab, fetchStats, tickets]);
+        setStats(derivedStats);
+    }, [derivedStats]);
 
     // Filter tickets
     const waitingTickets = tickets.filter(t => t.status === 'waiting');
-    const currentlyCalling = tickets.find(t => t.status === 'calling' && t.counter === counter);
+    const currentlyCalling = tickets.find(t => t.status === 'calling');
     const otherCalling = tickets.filter(t => t.status === 'calling' && t.counter !== counter);
     const completedTickets = tickets.filter(t => t.status === 'completed' || t.status === 'skipped' || t.status === 'cancelled')
         .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
@@ -81,41 +77,57 @@ export const QueueManager: React.FC = () => {
         window.speechSynthesis.speak(utterance);
     }, [audioEnabled]);
 
+    const lastAnnouncedRef = useRef<string | null>(null);
+
     useEffect(() => {
-        if (currentlyCalling) {
-            speak(`Senha ${currentlyCalling.ticket_number}, dirija-se ao ${currentlyCalling.counter}`);
-            
-            // Integrated SMS Notification
-            if (currentlyCalling.customer_phone) {
-                NotificationService.notifyTicketCalling(
-                    currentlyCalling, 
-                    currentlyCalling.counter || counter, 
-                    currentlyCalling.customer_phone
-                ).catch(err => console.error("Queue SMS failed:", err));
+        if (currentlyCalling && audioEnabled) {
+            const announcementKey = `${currentlyCalling.id}-${currentlyCalling.status}`;
+            if (lastAnnouncedRef.current !== announcementKey) {
+                lastAnnouncedRef.current = announcementKey;
+                speak(`Senha ${currentlyCalling.ticket_number}, dirija-se ao atendimento`);
+                
+                // Integrated SMS Notification
+                if (currentlyCalling.customer_phone) {
+                    NotificationService.notifyTicketCalling(
+                        currentlyCalling, 
+                        'Balcão Único', 
+                        currentlyCalling.customer_phone
+                    ).catch(err => console.error("Queue SMS failed:", err));
+                }
             }
         }
-    }, [currentlyCalling?.id, currentlyCalling?.status, speak]);
+    }, [currentlyCalling?.id, currentlyCalling?.status, audioEnabled, speak]);
 
     // Auto Mode Logic: 30s cycle (Call -> Wait 30s -> Complete -> Wait 3s -> Call Next)
+    const isProcessingRef = useRef(false);
+
     useEffect(() => {
         let timer: any;
-        if (isAutoMode) {
+        if (isAutoMode && !isProcessingRef.current) {
             if (currentlyCalling) {
                 // If a ticket is currently being called, wait 30s then mark it as complete
                 timer = setTimeout(async () => {
+                    if (!isAutoMode) return;
                     try {
+                        isProcessingRef.current = true;
                         await queueService.completeTicket(currentlyCalling.id);
                     } catch (err) {
                         console.error("Auto-complete error:", err);
+                    } finally {
+                        isProcessingRef.current = false;
                     }
                 }, 30000); // 30 seconds wait
             } else if (waitingTickets.length > 0) {
                 // If no ticket is being called but others are waiting, wait 3s then call next
                 timer = setTimeout(async () => {
+                    if (!isAutoMode) return;
                     try {
+                        isProcessingRef.current = true;
                         await queueService.callNext(counter);
                     } catch (err) {
                         console.error("Auto-call error:", err);
+                    } finally {
+                        isProcessingRef.current = false;
                     }
                 }, 3000); // 3 second gap
             }
@@ -140,7 +152,7 @@ export const QueueManager: React.FC = () => {
         setAudioEnabled(newState);
         localStorage.setItem('queueAudioEnabled', String(newState));
         if (newState) {
-            speak("Áudio ativado para chamadas");
+            speak("Áudio ativado");
         }
     };
 
@@ -174,6 +186,21 @@ export const QueueManager: React.FC = () => {
             refresh();
         } catch (err) {
             alert("Erro ao reiniciar fila.");
+        } finally {
+            setActionLoading(null);
+        }
+    };
+
+    const handleClearCalling = async () => {
+        if (!confirm("Deseja limpar todas as senhas que estão a chamar agora? Isso parará o som e limpará a TV.")) return;
+        setActionLoading('clear-calling');
+        try {
+            const calling = tickets.filter(t => t.status === 'calling');
+            await Promise.all(calling.map(t => queueService.completeTicket(t.id)));
+            alert("Chamadas limpas com sucesso!");
+            refresh();
+        } catch (err) {
+            alert("Erro ao limpar chamadas.");
         } finally {
             setActionLoading(null);
         }
@@ -214,7 +241,20 @@ export const QueueManager: React.FC = () => {
                     </div>
                     <div>
                         <h2 className="text-sm font-black uppercase tracking-tighter text-[#3b2f2f]">Painel Operador</h2>
-                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest leading-none">Balcão: {counter}</p>
+                        <div className="flex items-center gap-2">
+                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest leading-none">Balcão Único</p>
+                            <div className="h-2 w-px bg-gray-200" />
+                            <div className="flex items-center gap-1.5">
+                                <div className={`w-1.5 h-1.5 rounded-full ${
+                                    status === 'SUBSCRIBED' ? 'bg-green-500 animate-pulse' : 
+                                    status === 'CONNECTING' ? 'bg-amber-500 animate-bounce' : 
+                                    'bg-red-500'
+                                }`} />
+                                <span className="text-[8px] font-black uppercase tracking-widest text-gray-400">
+                                    {status === 'SUBSCRIBED' ? 'Ligado' : status === 'CONNECTING' ? 'A Ligar...' : 'Desligado'}
+                                </span>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -238,18 +278,22 @@ export const QueueManager: React.FC = () => {
                         <Volume2 className="w-5 h-5" />
                     </button>
                     <button 
+                        onClick={handleClearCalling}
+                        className="p-2.5 bg-red-50 text-red-500 rounded-xl hover:bg-red-100 transition-all border border-red-100"
+                        title="Limpar Chamadas Presas"
+                    >
+                        <XCircle className="w-5 h-5" />
+                    </button>
+                    <button 
                         onClick={() => refresh()}
                         className="p-2.5 bg-gray-100 text-gray-400 rounded-xl hover:bg-gray-200 active:scale-95 transition-all"
                     >
                         <RefreshCcw className="w-5 h-5" />
                     </button>
-                    <select 
-                        value={counter} 
-                        onChange={(e) => setCounter(e.target.value)}
-                        className="bg-white border border-gray-200 rounded-xl px-4 py-2 text-xs font-bold focus:outline-none focus:border-[#d9a65a]"
-                    >
-                        {[1,2,3,4,5].map(n => <option key={n} value={`Caixa ${n}`}>Caixa {n}</option>)}
-                    </select>
+                    <div className="flex items-center bg-gray-100 rounded-xl px-4 py-2">
+                        <UserCheck className="w-3.5 h-3.5 text-[#d9a65a] mr-2" />
+                        <span className="text-[10px] font-black uppercase tracking-widest text-[#3b2f2f]">Balcão Único</span>
+                    </div>
                     <button 
                         onClick={() => window.open('/tv-senhas', '_blank')}
                         className="p-2.5 bg-gray-100 text-gray-400 rounded-xl hover:bg-gray-200 transition-all"
@@ -379,7 +423,7 @@ export const QueueManager: React.FC = () => {
                     <div className="bg-white border border-gray-100 rounded-[2rem] p-8 shadow-lg">
                         <div className="flex items-center justify-between mb-8">
                             <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-gray-400">PRÓXIMAS SENHAS</h3>
-                            <span className="text-[10px] font-black text-[#d9a65a] px-3 py-1 bg-[#d9a65a]/10 rounded-full">{waitingTickets.length} em espera</span>
+                            <span className="text-[10px] font-black text-[#d9a65a] font-bold px-3 py-1 bg-[#d9a65a]/10 rounded-full">{waitingTickets.length} em espera</span>
                         </div>
                         
                         <div className="grid grid-cols-3 gap-6">
@@ -416,7 +460,7 @@ export const QueueManager: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* QR de Acesso Clientes - NOVO POSICIONAMENTO */}
+                    {/* QR de Acesso Clientes */}
                     <div className="bg-white border border-gray-100 rounded-[3rem] p-10 shadow-xl relative overflow-hidden group transition-all">
                         <div className="absolute top-0 right-0 w-64 h-64 bg-[#d9a65a]/5 rounded-full blur-[80px] -mr-32 -mt-32 group-hover:bg-[#d9a65a]/10 transition-all opacity-50" />
                         
@@ -469,40 +513,8 @@ export const QueueManager: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Coluna Direita - Stats e Outras Chamadas */}
+                {/* Coluna Direita - Stats e Gerador */}
                 <div className="col-span-12 lg:col-span-4 space-y-8">
-                    {/* Outros Atendimentos */}
-                    <div className="bg-white border border-gray-100 rounded-[2rem] p-8 shadow-lg">
-                        <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-gray-400 mb-8">Outros Balcões</h3>
-                        <div className="space-y-4">
-                            {otherCalling.map((t) => (
-                                <div key={t.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-100">
-                                    <div>
-                                        <p className="text-xl font-black tracking-tighter text-[#3b2f2f]">{t.ticket_number}</p>
-                                        <p className="text-[8px] font-black uppercase text-gray-400">{t.counter}</p>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <button 
-                                            onClick={() => setShareTicket(t)}
-                                            className="p-2 text-gray-400 hover:text-[#d9a65a] transition-all"
-                                        >
-                                            <Smartphone size={16} />
-                                        </button>
-                                        <div className="px-3 py-1 rounded-full bg-[#d9a65a]/10 border border-[#d9a65a]/20">
-                                            <div className="w-1.5 h-1.5 rounded-full bg-[#d9a65a] animate-pulse" />
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
-                            {otherCalling.length === 0 && (
-                                <div className="py-20 flex flex-col items-center justify-center opacity-30">
-                                    <Smartphone className="w-12 h-12 mb-4 text-gray-300" />
-                                    <p className="text-[8px] font-black uppercase text-center tracking-[0.3em] text-gray-400">Balcões livres</p>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
                     {/* Gerador Manual */}
                     <div className="bg-[#3b2f2f] border border-[#d9a65a]/20 rounded-[2rem] p-8 shadow-2xl relative overflow-hidden">
                         <div className="absolute top-0 right-0 w-32 h-32 bg-[#d9a65a]/5 rounded-full blur-3xl -mr-16 -mt-16" />
@@ -596,7 +608,6 @@ export const QueueManager: React.FC = () => {
                                             <th className="px-8 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400">Senha</th>
                                             <th className="px-8 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400">Tempo Criação</th>
                                             <th className="px-8 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400">Estado</th>
-                                            <th className="px-8 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400">Balcão</th>
                                             <th className="px-8 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400">Ações</th>
                                         </tr>
                                     </thead>
@@ -619,9 +630,6 @@ export const QueueManager: React.FC = () => {
                                                     }`}>
                                                         {t.status}
                                                     </span>
-                                                </td>
-                                                <td className="px-8 py-6 text-xs font-bold text-gray-400">
-                                                    {t.counter || '-'}
                                                 </td>
                                                 <td className="px-8 py-6">
                                                     <button 
@@ -771,18 +779,6 @@ export const QueueManager: React.FC = () => {
                     </div>
                 )}
             </AnimatePresence>
-
-            {error && (
-                <div className="fixed bottom-6 right-6 left-6 p-4 bg-red-50 border border-red-200 rounded-2xl shadow-2xl flex items-center justify-between z-[100]">
-                    <div className="flex items-center gap-3">
-                        <AlertTriangle className="text-red-500 w-5 h-5 flex-shrink-0" />
-                        <p className="text-[10px] font-black uppercase text-red-600 leading-normal">{getFriendlyError(error)}</p>
-                    </div>
-                    <button onClick={() => refresh()} className="p-2 px-4 bg-red-600 text-white rounded-xl text-[10px] font-black hover:bg-red-700 transition-colors">
-                        TENTAR NOVAMENTE
-                    </button>
-                </div>
-            )}
         </div>
     );
 };

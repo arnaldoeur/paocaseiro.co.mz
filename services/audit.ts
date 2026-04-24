@@ -15,9 +15,12 @@ export const logAudit = async (entry: AuditLogEntry) => {
     try {
         // Obter user_id se não for fornecido e houver sessão ativa
         if (!entry.user_id) {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (session?.user) {
-                entry.user_id = session.user.id;
+            const adminId = localStorage.getItem('admin_id');
+            const customerId = localStorage.getItem('pc_auth_id');
+            if (adminId) {
+                entry.user_id = adminId;
+            } else if (customerId) {
+                entry.user_id = customerId;
             }
         }
 

@@ -636,14 +636,14 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
     };
 
     const updateManualItem = (idx: number, field: string, val: any) => {
-        const newItems = [...manualItems];
-        // @ts-ignore
+        const newItems = [...manualItems] as any[];
         newItems[idx][field] = val;
 
         if (field === 'name') {
             const product = products.find(p => p.name === val);
             if (product) {
                 newItems[idx].price = product.price;
+                newItems[idx].id = product.id; // Crucial for stock deduction
             }
         }
 

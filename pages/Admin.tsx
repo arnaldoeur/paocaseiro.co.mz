@@ -21,7 +21,7 @@ const mapPinIcon = new L.DivIcon({
 });
 
 const QuillBase = ReactQuill as any;
-import { Eye, EyeOff, Sparkles, MessageSquare, Trash2, Upload, Send, CheckCircle, Package, TrendingUp, User, LogOut, ShoppingBag, Clock, Menu, X, ChevronRight, Search, Plus, Calendar, MapPin, Truck, Smartphone, Users, MessageCircle, Mail, Download, ChevronLeft, Loader, ShoppingCart, Lock, Unlock, XCircle, CreditCard, Banknote, Printer, FileText, Key, Edit3, Usb, Wifi, Share2, RefreshCw, UserPlus, Bell, Award, BarChart3, ShieldCheck, MailPlus, Box, Store, Zap, LineChart, AlertTriangle, Star, Save, Bot, RotateCw, Image as ImageIcon, Paperclip, ExternalLink, Tv, Settings, Sliders, LayoutDashboard, Globe } from 'lucide-react';
+import { Eye, EyeOff, Sparkles, MessageSquare, Trash2, Upload, Send, CheckCircle, Package, TrendingUp, User, LogOut, ShoppingBag, Clock, Menu, X, ChevronRight, Search, Plus, Calendar, MapPin, Truck, Smartphone, Users, MessageCircle, Mail, Download, ChevronLeft, Loader, ShoppingCart, Lock, Unlock, XCircle, CreditCard, Banknote, Printer, FileText, Key, Edit3, Usb, Wifi, Share2, RefreshCw, UserPlus, Bell, Award, BarChart3, ShieldCheck, ShieldAlert, Phone, MailPlus, Box, Store, Zap, LineChart, AlertTriangle, Star, Save, Bot, RotateCw, Image as ImageIcon, Paperclip, ExternalLink, Tv, Settings, Sliders, LayoutDashboard, Globe } from 'lucide-react';
 import { AdminSupportAI } from '../components/AdminSupportAI';
 import { logAudit } from '../services/audit';
 import { Kitchen } from './Kitchen';
@@ -683,8 +683,23 @@ export const Admin: React.FC = () => {
             .single();
 
         if (userError || !userData) {
-            console.error('Invalid admin user ID:', effectiveUserId);
-            return alert('Erro: Utilizador administrativo não encontrado na base de dados. Por favor, faça logout e entre novamente.');
+            console.error('Invalid admin user ID:', effectiveUserId, userError);
+            
+            // Bypass logout if it's purely a network error (offline mode)
+            if (userError && userError.message && (userError.message.includes('Failed to fetch') || userError.message.includes('Network'))) {
+                console.warn("Modo offline detectado. A permissão será validada localmente.");
+            } else {
+                // Force logout if the user is completely invalid (not in DB)
+                localStorage.removeItem('admin_auth');
+                localStorage.removeItem('admin_id');
+                localStorage.removeItem('admin_user');
+                localStorage.removeItem('admin_role');
+                setIsAuthenticated(false);
+                setUserId('');
+                alert('A sua sessão expirou ou o utilizador já não existe na base de dados. Por favor, faça login novamente.');
+                window.location.reload();
+                return;
+            }
         }
 
         const { data, error } = await supabase.from('cash_sessions').insert([{
@@ -1142,9 +1157,9 @@ export const Admin: React.FC = () => {
             setSelectedDriver(null);
             setDriverForm({ name: '', phone: '', vehicle: '', base_location: '', email: '', alternative_phone: '', avatar_url: '' });
             loadDrivers();
-        } catch (err) {
+        } catch (err: any) {
             console.error('Error saving driver:', err);
-            alert('Erro ao salvar motorista.');
+            alert('Erro ao salvar motorista: ' + (err.message || 'Desconhecido'));
         }
     };
 
@@ -1577,7 +1592,7 @@ export const Admin: React.FC = () => {
         // Local fallback credentials (mirrors team_members table in Supabase)
         // Used when network blocks Supabase access
         const localCredentials = [
-            { id: '9f4b4a2d-2303-44db-9695-3cd8c5e4be00', username: 'nazir', name: 'Nazir', role: 'admin', password: 'admin123' },
+            { id: '9f4b4a2d-2303-44db-9695-3cd8c5e4be00', username: 'nazir', name: 'Nazir', role: 'admin', password: 'pao123' },
         ];
 
         try {
@@ -1818,24 +1833,45 @@ export const Admin: React.FC = () => {
                 // Update
                 const { error } = await supabase.from('team_members').update(memberData).eq('id', currentMember.id);
                 if (error) throw error;
-                await logAudit({ action: 'UPDATE_TEAM_MEMBER', entity_type: 'team_member', entity_id: currentMember.id, details: { name: memberData.name } });
+                
+                try {
+                    await logAudit({ action: 'UPDATE_TEAM_MEMBER', entity_type: 'team_member', entity_id: currentMember.id, details: { name: memberData.name } });
+                } catch (auditErr) {
+                    console.warn('Audit log failed (non-critical):', auditErr);
+                }
+                
                 alert('Membro atualizado com sucesso!');
             } else {
                 // Insert
                 memberData.created_at = new Date().toISOString();
                 const { data, error } = await supabase.from('team_members').insert([memberData]).select().single();
-                if (error) throw error;
                 
-                await logAudit({ action: 'CREATE_TEAM_MEMBER', entity_type: 'team_member', entity_id: data.id, details: { name: memberData.name } });
+                if (error) {
+                    console.error('Database error creating team member:', error);
+                    throw error;
+                }
+                
+                // Background tasks (Non-blocking)
+                if (data) {
+                    // Audit
+                    logAudit({ 
+                        action: 'CREATE_TEAM_MEMBER', 
+                        entity_type: 'team_member', 
+                        entity_id: data.id, 
+                        details: { name: memberData.name, role: memberData.role } 
+                    }).catch(err => console.warn('Audit failed:', err));
 
-                // Send Welcome Email
-                if (memberData.email) {
-                    await sendTeamWelcomeEmail(
-                        memberData.email, 
-                        memberData.name, 
-                        memberData.username, 
-                        passwordValue || 'Contacte o Administrador'
-                    );
+                    // Welcome Email
+                    if (memberData.email) {
+                        sendTeamWelcomeEmail(
+                            memberData.email, 
+                            memberData.name, 
+                            memberData.username, 
+                            passwordValue || 'Contacte o Administrador'
+                        ).catch(emailErr => {
+                            console.error('Welcome email failed to send (non-critical):', emailErr);
+                        });
+                    }
                 }
                 
                 alert('Novo membro criado com sucesso!');
@@ -1846,8 +1882,11 @@ export const Admin: React.FC = () => {
             setMemberAvatar(null);
             loadTeam();
         } catch (error: any) {
-            console.error('Error saving team member:', error);
-            alert('Erro ao salvar membro da equipe: ' + error.message);
+            console.error('Critical error saving team member:', error);
+            const errorMessage = error.message === 'Failed to fetch' 
+                ? 'Erro de Rede: Não foi possível ligar ao servidor. Verifique a sua internet ou se o projeto está ativo.' 
+                : error.message;
+            alert('Erro ao salvar membro da equipe: ' + errorMessage);
         } finally {
             setIsSubmitting(false);
         }
@@ -6337,33 +6376,32 @@ export const Admin: React.FC = () => {
                                                             try {
                                                                 setIsSubmitting(true);
                                                                 const settingsToSave = [
-                                                                    { key: 'company_name', value: companyInfo.name },
-                                                                    { key: 'company_legal_name', value: companyInfo.legalName },
-                                                                    { key: 'company_email', value: companyInfo.email },
-                                                                    { key: 'company_phone', value: companyInfo.phone },
-                                                                    { key: 'company_website', value: companyInfo.website },
-                                                                    { key: 'company_reg_no', value: companyInfo.regNo },
-                                                                    { key: 'company_nuit', value: companyInfo.nuit },
-                                                                    { key: 'company_industry', value: companyInfo.industry },
-                                                                    { key: 'company_country', value: companyInfo.country },
-                                                                    { key: 'company_province', value: companyInfo.province },
-                                                                    { key: 'company_city', value: companyInfo.city },
-                                                                    { key: 'company_address', value: companyInfo.address },
-                                                                    { key: 'company_postal_code', value: companyInfo.postalCode },
-                                                                    { key: 'company_slogan', value: companyInfo.slogan },
-                                                                    { key: 'company_motto', value: companyInfo.motto },
-                                                                    { key: 'company_currency', value: companyInfo.currency },
-                                                                    { key: 'company_language', value: companyInfo.language },
-                                                                    { key: 'company_customer_prefix', value: companyInfo.prefix },
-                                                                    { key: 'company_staff_prefix', value: companyInfo.staffPrefix },
-                                                                    { key: 'company_product_prefix', value: companyInfo.productPrefix },
-                                                                    { key: 'company_doc_prefix', value: companyInfo.docPrefix },
-                                                                    // Sync with branding for compatibility
-                                                                    { key: 'branding_name', value: companyInfo.name },
-                                                                    { key: 'branding_logo', value: companyInfo.logo },
-                                                                    { key: 'branding_address', value: companyInfo.address },
-                                                                    { key: 'branding_phone', value: companyInfo.phone },
-                                                                    { key: 'branding_email_user', value: companyInfo.email }
+                                                                    { key: 'company_name', value: String(companyInfo.name || '') },
+                                                                    { key: 'company_legal_name', value: String(companyInfo.legalName || '') },
+                                                                    { key: 'company_email', value: String(companyInfo.email || '') },
+                                                                    { key: 'company_phone', value: String(companyInfo.phone || '') },
+                                                                    { key: 'company_website', value: String(companyInfo.website || '') },
+                                                                    { key: 'company_reg_no', value: String(companyInfo.regNo || '') },
+                                                                    { key: 'company_nuit', value: String(companyInfo.nuit || '') },
+                                                                    { key: 'company_industry', value: String(companyInfo.industry || '') },
+                                                                    { key: 'company_country', value: String(companyInfo.country || '') },
+                                                                    { key: 'company_province', value: String(companyInfo.province || '') },
+                                                                    { key: 'company_city', value: String(companyInfo.city || '') },
+                                                                    { key: 'company_address', value: String(companyInfo.address || '') },
+                                                                    { key: 'company_postal_code', value: String(companyInfo.postalCode || '') },
+                                                                    { key: 'company_slogan', value: String(companyInfo.slogan || '') },
+                                                                    { key: 'company_motto', value: String(companyInfo.motto || '') },
+                                                                    { key: 'company_currency', value: String(companyInfo.currency || '') },
+                                                                    { key: 'company_language', value: String(companyInfo.language || '') },
+                                                                    { key: 'company_customer_prefix', value: String(companyInfo.prefix || '') },
+                                                                    { key: 'company_staff_prefix', value: String(companyInfo.staffPrefix || '') },
+                                                                    { key: 'company_product_prefix', value: String(companyInfo.productPrefix || '') },
+                                                                    { key: 'company_doc_prefix', value: String(companyInfo.docPrefix || '') },
+                                                                    { key: 'branding_name', value: String(companyInfo.name || '') },
+                                                                    { key: 'branding_logo', value: String(companyInfo.logo || '') },
+                                                                    { key: 'branding_address', value: String(companyInfo.address || '') },
+                                                                    { key: 'branding_phone', value: String(companyInfo.phone || '') },
+                                                                    { key: 'branding_email_user', value: String(companyInfo.email || '') }
                                                                 ];
                                                                 
                                                                 localStorage.setItem('company_prefixes', JSON.stringify({

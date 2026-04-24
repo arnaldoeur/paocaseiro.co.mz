@@ -54,8 +54,25 @@ export class NotificationService {
      */
     static async notifyOrderStatus(order: any, type: string) {
         try {
-            // WhatsApp handles complex media (PDFs) for 'order_confirmed'
-            if (type === 'order_confirmed' || type === 'completed') {
+            // Push Notification Attempt for target customer
+            let statusPt = 'Atualização';
+            if (type === 'order_confirmed' || type === 'pending' || type === 'new') statusPt = 'Confirmado';
+            if (type === 'ready') statusPt = 'Pronto';
+            if (type === 'delivering') statusPt = 'Saiu para Entrega';
+            if (type === 'completed') statusPt = 'Concluído';
+            
+            const customerId = order.customer_id || order.user_id || (order.customer && order.customer.id);
+            if (customerId) {
+                this.sendPushNotification(
+                    `Pão Caseiro: Pedido da Encomenda`,
+                    `O seu pedido #${order.short_id || order.id?.slice(-6).toUpperCase() || ''} está agora: ${statusPt}`,
+                    [customerId],
+                    `/dashboard`
+                ).catch(() => {});
+            }
+
+            // WhatsApp handles complex media (PDFs) for 'order_confirmed' or 'pending'
+            if (type === 'order_confirmed' || type === 'pending' || type === 'new') {
                 const items = order.items || [];
                 await whatsapp.notifyCustomerNewOrderWhatsApp(order, items);
             } else {
@@ -244,6 +261,49 @@ export class NotificationService {
             return { success: true };
         } catch (error: any) {
             console.error(`[Notification] createNotification failed:`, error.message);
+            return { success: false, error: error.message };
+        }
+    }
+
+    /**
+     * Sends a Web Push Notification globally or to specific users using OneSignal REST API
+     */
+    static async sendPushNotification(title: string, message: string, externalUserIds?: string[], url?: string) {
+        const appId = "43e27b65-50cf-40b7-8a95-e87f200e742c";
+        const restKey = "os_v2_app_iprhwzkqz5alpcuv5b7sadtufs2spk6ohp3uiz5jobjcglqltgyc4wubf5l6hkljskfe3c3k6qhyj65obbfgshusghauecd4hgzq4oa";
+        
+        try {
+            const body: any = {
+                app_id: appId,
+                headings: { en: title, pt: title },
+                contents: { en: message, pt: message },
+                name: "System Notification",
+            };
+
+            if (url) {
+                body.url = url;
+            }
+
+            if (externalUserIds && externalUserIds.length > 0) {
+                body.include_aliases = { external_id: externalUserIds };
+                body.target_channel = "push";
+            } else {
+                body.included_segments = ["Subscribed Users"];
+            }
+
+            const response = await fetch("https://onesignal.com/api/v1/notifications", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Basic ${restKey}`
+                },
+                body: JSON.stringify(body)
+            });
+
+            const result = await response.json();
+            return { success: true, result };
+        } catch (error: any) {
+            console.error("[Notification] OneSignal Push Error:", error);
             return { success: false, error: error.message };
         }
     }

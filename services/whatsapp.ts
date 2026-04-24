@@ -215,10 +215,17 @@ export const notifyCustomerNewOrderWhatsApp = async (order: any, items: any[], c
     const url = `${baseUrl}/order-receipt/${order.short_id || order.orderId || order.id}`;
 
     const firstName = getFirstName(order);
-    const message = `*🍞 Pão Caseiro — Encomenda Confirmada!*\n\nOlá ${firstName}, muito obrigado por escolher o sabor do nosso coração! 🤎\n\n📦 *Pedido:* #${order.short_id || order.orderId || (order.id ? order.id.slice(-6).toUpperCase() : '')}\n💰 *Total:* ${total} MT\n\n📝 *Artigos:*\n${itemsText}\n\n🔗 *Ver Recibo Online:*\n${url}\n\n_Enviamos em anexo a sua Fatura-Recibo oficial._\n\n*O sabor que aquece o seu coração!*`;
 
-    // A very short non-intrusive caption to embed directly below the Receipt PDF.
-    const pdfCaption = `*🍞 Pão Caseiro* — Fatura/Recibo anexo. Obrigado pela preferência!`;
+    let paymentInstructions = '';
+    const isPaid = order.payment_status === 'paid' || order.payment_status === 'completed';
+    if (!isPaid) {
+        paymentInstructions = `\n\n💳 *Dados para Pagamento:*\nPor favor, faça o pagamento por M-Pesa para o número *84 693 0960* e envie o comprovativo.`;
+    }
+
+    const message = `*🍞 Pão Caseiro — Encomenda Confirmada!*\n\nOlá ${firstName}, muito obrigado por escolher o sabor do nosso coração! 🤎\n\n📦 *Pedido:* #${order.short_id || order.orderId || (order.id ? order.id.slice(-6).toUpperCase() : '')}\n💰 *Total:* ${total} MT\n\n📝 *Artigos:*\n${itemsText}${paymentInstructions}\n\n🔗 *Ver Recibo Online:*\n${url}\n\n*O sabor que aquece o seu coração!*`;
+
+    // Send the complete message as the PDF caption
+    const pdfCaption = message;
 
     try {
         const { generateFormalInvoicePDF } = await import('./pdfGenerator');
