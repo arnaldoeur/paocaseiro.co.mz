@@ -292,9 +292,11 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                     style={{ willChange: "transform, opacity" }}
                     className="relative z-10 container mx-auto px-6 text-center text-[#f7f1eb]"
                 >
-                    <h1 className="font-serif text-5xl md:text-7xl lg:text-8xl mb-6 drop-shadow-md">
-                        {t.hero.title}
-                    </h1>
+                    {t.hero.title && (
+                        <h1 className="font-serif text-5xl md:text-7xl lg:text-8xl mb-6 drop-shadow-md">
+                            {t.hero.title}
+                        </h1>
+                    )}
                     <p className="text-xl md:text-3xl font-light mb-8 max-w-3xl mx-auto leading-relaxed drop-shadow-sm">
                         {t.hero.subtitle}
                     </p>

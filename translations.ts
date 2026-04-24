@@ -18,7 +18,7 @@ export const translations = {
 
         },
         hero: {
-            title: 'O Pão Mais Caseiro de Maputo',
+            title: '',
             subtitle: 'O sabor que aquece o coração.',
             description: 'Mais do que pão, entregamos carinho em forma de sabor. Produzido diariamente com ingredientes seleccionados, o nosso pão traz o conforto e a tradição que a sua família merece. Experimente o verdadeiro gosto de casa.',
             order: 'Fazer Encomenda',
@@ -447,7 +447,7 @@ export const translations = {
             closeMenu: 'Close Menu',
         },
         hero: {
-            title: 'The Most Homemade Bread in Maputo',
+            title: '',
             subtitle: 'The taste that warms the heart.',
             description: 'More than bread, we deliver affection in the form of flavor. Produced daily with selected ingredients, our bread brings the comfort and tradition your family deserves. Experience the true taste of home.',
             order: 'Order Now',
