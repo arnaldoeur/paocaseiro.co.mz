@@ -64,9 +64,13 @@ serve(async (req) => {
        const data = result.data || result;
        
        // Improved status extraction
-       let status = data.payment_status || data.transaction_status || (result.data ? result.data.status : null) || result.status;
-       if (status && (status.toLowerCase() === 'success' || status.toLowerCase() === 'ok')) {
-           if (data.status && data.status !== status) status = data.status;
+       // We prioritize specific payment status fields over generic API response status
+       let status = data.payment_status || data.transaction_status || (result.data ? result.data.status : null);
+       
+       // If no transaction-specific status is found, we do NOT fallback to result.status (which is often just "OK")
+       // Unless result.status is a known payment status (unlikely for PaySuite API)
+       if (!status && result.status && !['OK', 'SUCCESS', 'SUCCESSFUL'].includes(result.status.toUpperCase())) {
+           status = result.status;
        }
 
        const responseBody = JSON.stringify({

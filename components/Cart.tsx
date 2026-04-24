@@ -276,7 +276,7 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
             const status = params.get('status');
             const orderId = params.get('orderId') || localStorage.getItem('last_order_id');
 
-            if (status === 'success' || status === 'approved' || !status) {
+            if (status === 'success' || status === 'approved') {
                 // Clean URL
                 window.history.replaceState({}, document.title, window.location.pathname);
                 

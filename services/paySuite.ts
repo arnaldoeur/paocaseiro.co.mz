@@ -109,7 +109,7 @@ export const verifyPayment = async (txId: string): Promise<{ success: boolean; s
 
         // Terminal success states for the transaction itself
         // Added 'SUCCESS' and 'OK' as fallback terminal states if they come from PaySuite's normalized status
-        const successStates = ['SUCCESSFUL', 'PAID', 'COMPLETED', 'APPROVED', 'SUCCESS', 'OK'];
+        const successStates = ['SUCCESSFUL', 'PAID', 'COMPLETED', 'APPROVED'];
         const isSuccess = successStates.includes(statusString);
 
         if (isSuccess) {
