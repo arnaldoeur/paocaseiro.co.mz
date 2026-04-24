@@ -158,9 +158,18 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
     const handleCloseVideo = () => {
         setIsPlayingWithSound(false);
         if (videoRef.current) {
-            videoRef.current.play(); // Resume background
+            videoRef.current.play().catch(e => console.error("Autoplay failed:", e)); // Resume background
         }
     };
+
+    // Ensure background video plays on mount
+    useEffect(() => {
+        if (videoRef.current) {
+            videoRef.current.play().catch(e => {
+                console.warn("Background video autoplay failed, usually due to browser policy:", e);
+            });
+        }
+    }, []);
     const location = useLocation();
     const navigate = useNavigate();
 
@@ -353,10 +362,10 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                         src="https://files.zyphtech.com/video_paocaseiro.mp4"
                         poster="/images/video-placeholder.jpg"
                         className="w-full h-full object-cover"
-                        autoPlay
-                        muted
-                        loop
-                        playsInline
+                        autoPlay={true}
+                        muted={true}
+                        loop={true}
+                        playsInline={true}
                     />
                 </div>
 
