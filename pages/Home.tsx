@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-    Play, Wheat, Coffee, Cake, Croissant,
+    Play, Wheat, Coffee, Cake,
     MapPin, ZoomIn, ChevronLeft, ChevronRight, X, Phone, Mail, ShoppingBag,
-    Star, MessageSquare, Truck, Clock, Instagram, Facebook, ArrowRight, ChevronDown
+    ArrowRight, ChevronDown
 } from 'lucide-react';
 import { LandingLaunchPopup } from '../components/LandingLaunchPopup';
 import { translations, Language } from '../translations';
@@ -122,9 +122,7 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
         );
     }
 
-    const [isPlayingWithSound, setIsPlayingWithSound] = useState(false);
     const videoRef = React.useRef<HTMLVideoElement>(null);
-    const heroVideoRef = React.useRef<HTMLVideoElement>(null);
     const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
     const [galleryItems, setGalleryItems] = useState<{ src: string, caption: string }[]>(DEFAULT_GALLERY_ITEMS);
 
@@ -150,53 +148,70 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
 
 
     const handlePlayWithSound = () => {
-        setIsPlayingWithSound(true);
         if (videoRef.current) {
-            videoRef.current.pause(); // Pause background for performance
+            videoRef.current.muted = false;
+            videoRef.current.controls = true;
+            videoRef.current.play().catch(e => console.error("Play failed:", e));
+            
+            // Try to enter fullscreen if possible
+            try {
+                if (videoRef.current.requestFullscreen) {
+                    videoRef.current.requestFullscreen();
+                } else if ((videoRef.current as any).webkitRequestFullscreen) {
+                    (videoRef.current as any).webkitRequestFullscreen();
+                } else if ((videoRef.current as any).webkitEnterFullscreen) {
+                    (videoRef.current as any).webkitEnterFullscreen(); // iOS
+                }
+            } catch (err) {
+                console.warn("Fullscreen request failed", err);
+            }
         }
     };
 
-    const handleCloseVideo = () => {
-        setIsPlayingWithSound(false);
-        if (videoRef.current) {
-            videoRef.current.play().catch(e => console.error("Autoplay failed:", e)); // Resume background
-        }
-    };
-
-    // Ensure all background videos play on mount or first interaction
+    // Robust background video management with IntersectionObserver
     useEffect(() => {
-        const playVideos = async () => {
-            if (videoRef.current) {
-                videoRef.current.muted = true;
-                videoRef.current.defaultMuted = true;
-                videoRef.current.play().catch(() => {});
+        const video = videoRef.current;
+        if (!video) return;
+
+        // Force muted state for autoplay compatibility
+        video.muted = true;
+        video.defaultMuted = true;
+        video.setAttribute('muted', '');
+
+        const observer = new IntersectionObserver(
+            ([entry]) => {
+                if (entry.isIntersecting) {
+                    video.play().catch(err => {
+                        console.warn("Autoplay was blocked, will wait for interaction", err);
+                    });
+                } else {
+                    video.pause();
+                }
+            },
+            { threshold: 0.1 }
+        );
+
+        observer.observe(video);
+
+        // Interaction listener for browsers that block autoplay until user clicks
+        const handleFirstInteraction = () => {
+            if (video && video.paused) {
+                video.play().catch(() => {});
             }
-            if (heroVideoRef.current) {
-                heroVideoRef.current.muted = true;
-                heroVideoRef.current.defaultMuted = true;
-                heroVideoRef.current.play().catch(() => {});
-            }
+            window.removeEventListener('scroll', handleFirstInteraction);
+            window.removeEventListener('click', handleFirstInteraction);
+            window.removeEventListener('touchstart', handleFirstInteraction);
         };
 
-        // Try immediately
-        playVideos();
-
-        // Also try on first real interaction (browsers love this)
-        const forcePlay = () => {
-            playVideos();
-            window.removeEventListener('scroll', forcePlay);
-            window.removeEventListener('click', forcePlay);
-            window.removeEventListener('touchstart', forcePlay);
-        };
-
-        window.addEventListener('scroll', forcePlay, { passive: true });
-        window.addEventListener('click', forcePlay);
-        window.addEventListener('touchstart', forcePlay);
+        window.addEventListener('scroll', handleFirstInteraction, { passive: true });
+        window.addEventListener('click', handleFirstInteraction);
+        window.addEventListener('touchstart', handleFirstInteraction);
 
         return () => {
-            window.removeEventListener('scroll', forcePlay);
-            window.removeEventListener('click', forcePlay);
-            window.removeEventListener('touchstart', forcePlay);
+            observer.disconnect();
+            window.removeEventListener('scroll', handleFirstInteraction);
+            window.removeEventListener('click', handleFirstInteraction);
+            window.removeEventListener('touchstart', handleFirstInteraction);
         };
     }, []);
     const location = useLocation();
@@ -281,6 +296,7 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
         <img
             src="/logo_on_dark.png"
             alt="Pão Caseiro Logo"
+            loading="lazy"
             className={`object-contain ${className}`}
         />
     );
@@ -318,21 +334,12 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
             {/* --- HERO SECTION --- */}
             <section id="hero" className="relative min-h-screen flex items-center justify-center overflow-hidden pt-20">
                 <div className="absolute inset-0 z-0">
-                    <video
-                        ref={heroVideoRef}
-                        src="https://files.zyphtech.com/video_paocaseiro.mp4"
-                        poster="/images/hero-bg-2.png"
+                    <img 
+                        src="/images/hero-bg-2.png" 
+                        alt="Hero Background" 
                         className="w-full h-full object-cover"
-                        autoPlay={true}
-                        muted={true}
-                        loop={true}
-                        playsInline={true}
-                        webkit-playsinline="true"
-                        preload="auto"
-                        crossOrigin="anonymous"
-                        onEnded={(e) => (e.target as HTMLVideoElement).play()}
                     />
-                    <div className="absolute inset-0 bg-black/50" />
+                    <div className="absolute inset-0 bg-black/60" />
                 </div>
 
                 <motion.div
@@ -347,7 +354,7 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                             {t.hero.title}
                         </h1>
                     )}
-                    <h2 className="font-serif text-4xl md:text-6xl lg:text-7xl mb-8 drop-shadow-md italic">
+                    <h2 className="font-serif text-2xl md:text-4xl lg:text-5xl mb-10 drop-shadow-2xl italic font-bold text-[#d9a65a]">
                         {t.hero.subtitle}
                     </h2>
                     <p className="text-base md:text-lg mb-12 max-w-2xl mx-auto opacity-90 leading-relaxed font-light">
@@ -366,7 +373,7 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                             onClick={() => navigate('/blog')}
                             className="border-2 border-[#f7f1eb] text-[#f7f1eb] px-8 py-4 rounded-full font-bold uppercase tracking-widest hover:bg-[#f7f1eb] hover:text-[#3b2f2f] transition-all w-full md:w-auto"
                         >
-                            {t.hero.gallery}
+                            {language === 'pt' ? 'Ver Blog' : 'View Blog'}
                         </button>
                     </div>
 
@@ -391,35 +398,30 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                 </motion.div>
             </section>
 
-            {/* --- VIDEO SECTION --- */}
             <section className="relative min-h-[500px] md:min-h-screen bg-[#3b2f2f] flex items-center justify-center overflow-hidden">
                 {/* Video Background */}
                 <div className="absolute inset-0 z-0">
                     <video
                         ref={videoRef}
-                        src="https://files.zyphtech.com/video_paocaseiro.mp4"
                         poster="/images/video-placeholder.jpg"
                         className="w-full h-full object-cover"
-                        autoPlay={true}
-                        muted={true}
-                        loop={true}
-                        playsInline={true}
+                        autoPlay
+                        muted
+                        loop
+                        playsInline
                         webkit-playsinline="true"
                         preload="auto"
-                        crossOrigin="anonymous"
-                        onEnded={(e) => (e.target as HTMLVideoElement).play()}
-                    />
-                    {/* Consistent overlay like hero */}
-                    <div 
-                        className="absolute inset-0 bg-black/60 bg-cover bg-center pointer-events-none"
-                        style={{ backgroundImage: "url('/images/video-placeholder.jpg')", backgroundBlendMode: 'overlay' }}
-                    />
+                        src="https://files.zyphtech.com/video_paocaseiro.mp4"
+                    >
+                    </video>
+                    {/* Consistent overlay like hero - REMOVED placeholder image that was hiding the video */}
+                    <div className="absolute inset-0 bg-black/50 pointer-events-none" />
                 </div>
 
                 {/* Overlay Content */}
                 <div className="relative z-10 container mx-auto px-6 text-center text-[#f7f1eb] animate-in fade-in duration-500">
                     <h2 className="font-serif text-4xl md:text-6xl mb-6">{t.video.title}</h2>
-                    <p className="text-lg md:text-xl font-light mb-12 max-w-2xl mx-auto text-[#f7f1eb]/80">
+                    <p className="text-base md:text-lg font-light mb-12 max-w-2xl mx-auto text-[#f7f1eb]/80 leading-relaxed">
                         {t.video.subtitle}
                     </p>
 
@@ -871,37 +873,6 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                 }
             </AnimatePresence >
 
-            <AnimatePresence>
-                {isPlayingWithSound && (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-[110] bg-black/95 flex items-center justify-center p-4 backdrop-blur-md"
-                    >
-                        <button
-                            onClick={handleCloseVideo}
-                            className="absolute top-6 right-6 text-white/80 hover:text-[#d9a65a] transition-colors z-[112] bg-white/10 p-2 rounded-full backdrop-blur-md"
-                        >
-                            <X size={32} />
-                        </button>
-                        
-                        <div className="relative w-full max-w-5xl aspect-video rounded-2xl overflow-hidden shadow-2xl border border-white/10 bg-black">
-                            <video
-                                src="https://files.zyphtech.com/video_paocaseiro.mp4"
-                                poster="/images/video-placeholder.jpg"
-                                className="w-full h-full"
-                                autoPlay={true}
-                                controls={true}
-                                playsInline={true}
-                                preload="auto"
-                                loop={true}
-                                onEnded={(e) => (e.target as HTMLVideoElement).play()}
-                            />
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
 
             <LandingLaunchPopup language={language} />
         </>

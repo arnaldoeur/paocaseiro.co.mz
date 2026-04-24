@@ -133,7 +133,7 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                     event: '*', 
                     schema: 'public', 
                     table: 'queue_tickets',
-                    filter: user.id ? `user_id=eq.${user.id}` : `phone_number=eq.${user.phone}`
+                    filter: user.id ? `user_id=eq.${user.id}` : `customer_phone=eq.${user.phone}`
                 },
                 (payload) => {
                     if (payload.eventType === 'DELETE') {
@@ -209,8 +209,8 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
         
         if (user?.id) {
             query = query.eq('user_id', user.id);
-        } else {
-            query = query.eq('phone_number', user?.phone);
+        } else if (user?.phone) {
+            query = query.eq('customer_phone', user.phone);
         }
 
         const { data } = await query;
@@ -222,10 +222,11 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
     const handleRequestTicket = async (priority: boolean = false) => {
         setTicketLoading(true);
         try {
-            const { data, error } = await supabase.rpc('generate_queue_ticket', {
+            const { data, error } = await supabase.rpc('generate_queue_ticket_v4', {
                 p_phone: user?.phone || null,
                 p_user_id: user?.id || null,
-                p_priority: priority
+                p_priority: priority,
+                p_category: 'Geral'
             });
 
             if (error) throw error;
@@ -1170,8 +1171,8 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                                 <Ticket className="w-6 h-6 text-[#d9a65a]" />
                             </div>
                             <div>
-                                <h2 className="font-serif text-2xl text-[#3b2f2f]">{e.queue.title}</h2>
-                                <p className="text-sm text-gray-500">{e.queue.subtitle}</p>
+                                <h2 className="font-serif text-2xl text-[#3b2f2f]">{t.queue.title}</h2>
+                                <p className="text-sm text-gray-500">{t.queue.subtitle}</p>
                             </div>
                         </div>
 
@@ -1183,7 +1184,7 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                                     className="bg-[#3b2f2f] text-[#d9a65a] px-6 py-3 rounded-xl font-bold uppercase tracking-widest text-[10px] flex items-center gap-2 hover:bg-[#2a2121] transition-all shadow-lg active:scale-95 disabled:opacity-50"
                                 >
                                     <Ticket className="w-4 h-4" />
-                                    {e.queue.normal}
+                                    {t.queue.normal}
                                 </button>
                                 <button 
                                     onClick={() => handleRequestTicket(true)}
@@ -1191,14 +1192,14 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                                     className="bg-amber-500/10 text-amber-600 border border-amber-500/20 px-4 py-3 rounded-xl font-bold uppercase tracking-widest text-[10px] flex items-center gap-2 hover:bg-amber-500/20 transition-all active:scale-95 disabled:opacity-50"
                                 >
                                     <UserCheck className="w-4 h-4" />
-                                    {e.queue.priority}
+                                    {t.queue.priority}
                                 </button>
                             </div>
                         ) : (
                             <div className="w-full md:w-auto flex items-center gap-4 bg-[#f7f1eb] p-3 rounded-2xl border border-[#d9a65a]/30">
                                 <div className="text-center px-4 border-r border-[#d9a65a]/20">
                                     <div className="flex flex-col items-center">
-                                        <p className="text-[10px] font-bold text-[#d9a65a] uppercase tracking-tighter">{e.queue.yourTicket}</p>
+                                        <p className="text-[10px] font-bold text-[#d9a65a] uppercase tracking-tighter">{t.queue.yourTicket}</p>
                                         <div className="flex items-center gap-1">
                                             <p className="text-2xl font-black font-mono text-[#3b2f2f]">{activeTicket.ticket_number}</p>
                                             {activeTicket.is_priority && (
@@ -1211,20 +1212,20 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                                     {activeTicket.status === 'waiting' && (
                                         <div className="flex flex-col">
                                             <span className="text-xs font-bold text-amber-600 flex items-center gap-1">
-                                                <Clock className="w-3 h-3" /> {e.queue.waiting}
+                                                <Clock className="w-3 h-3" /> {t.queue.waiting}
                                             </span>
                                             <span className="text-[10px] text-gray-500">
-                                                {peopleAhead} {e.queue.peopleAhead}
+                                                {peopleAhead} {t.queue.peopleAhead}
                                             </span>
                                         </div>
                                     )}
                                     {activeTicket.status === 'calling' && (
                                         <div className="flex flex-col">
                                             <span className="text-xs font-bold text-green-600 animate-pulse flex items-center gap-1">
-                                                <Ticket className="w-3 h-3" /> {e.queue.yourTurn}
+                                                <Ticket className="w-3 h-3" /> {t.queue.yourTurn}
                                             </span>
                                             <span className="text-[10px] text-green-700 font-bold uppercase tracking-tighter">
-                                                {activeTicket.counter || e.queue.mainCounter}
+                                                {activeTicket.counter || t.queue.mainCounter}
                                             </span>
                                         </div>
                                     )}

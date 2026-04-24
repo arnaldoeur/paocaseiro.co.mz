@@ -39,12 +39,13 @@ export const queueService = {
     },
 
     // Generate a new ticket
-    async generateTicket(isPriority: boolean = false, phone?: string, category: string = 'Geral') {
-        console.log("DEBUG: generateTicket called. Priority:", isPriority, "Category:", category);
-        const { data, error } = await supabase.rpc('generate_queue_ticket_v3', { 
+    async generateTicket(isPriority: boolean = false, phone?: string, category: string = 'Geral', userId?: string) {
+        console.log("DEBUG: generateTicket called. Priority:", isPriority, "Category:", category, "User ID:", userId);
+        const { data, error } = await supabase.rpc('generate_queue_ticket_v4', { 
             p_priority: isPriority,
             p_phone: phone,
-            p_category: category
+            p_category: category,
+            p_user_id: userId || null
         });
         
         if (error) {

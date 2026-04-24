@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../services/supabase';
 import { Language, translations } from '../translations';
-import { Calendar, User, ChevronRight, BookOpen, Clock, MapPin, Play, X } from 'lucide-react';
+import { Calendar, ChevronRight, BookOpen, MapPin, Play, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { sendNewsletterEmail } from '../services/email';
 
@@ -40,9 +40,55 @@ export const Blog: React.FC<{ language: Language }> = ({ language }) => {
     const handleCloseVideo = () => {
         setIsPlayingWithSound(false);
         if (videoRef.current) {
-            videoRef.current.play();
+            videoRef.current.play().catch(e => console.warn("Modal close play failed:", e));
         }
     };
+
+    // Robust background video management with IntersectionObserver
+    useEffect(() => {
+        const video = videoRef.current;
+        if (!video) return;
+
+        // Force muted state for autoplay compatibility
+        video.muted = true;
+        video.setAttribute('muted', '');
+
+        const observer = new IntersectionObserver(
+            ([entry]) => {
+                if (entry.isIntersecting) {
+                    video.play().catch(err => {
+                        console.warn("Autoplay was blocked in Blog, will wait for interaction", err);
+                    });
+                } else {
+                    video.pause();
+                }
+            },
+            { threshold: 0.1 }
+        );
+
+        observer.observe(video);
+
+        // Interaction listener for browsers that block autoplay until user clicks
+        const handleFirstInteraction = () => {
+            if (video && video.paused) {
+                video.play().catch(() => {});
+            }
+            window.removeEventListener('scroll', handleFirstInteraction);
+            window.removeEventListener('click', handleFirstInteraction);
+            window.removeEventListener('touchstart', handleFirstInteraction);
+        };
+
+        window.addEventListener('scroll', handleFirstInteraction, { passive: true });
+        window.addEventListener('click', handleFirstInteraction);
+        window.addEventListener('touchstart', handleFirstInteraction);
+
+        return () => {
+            observer.disconnect();
+            window.removeEventListener('scroll', handleFirstInteraction);
+            window.removeEventListener('click', handleFirstInteraction);
+            window.removeEventListener('touchstart', handleFirstInteraction);
+        };
+    }, []);
 
     const handleSubscribe = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -146,13 +192,16 @@ export const Blog: React.FC<{ language: Language }> = ({ language }) => {
                         <div className="w-full aspect-video rounded-[2rem] overflow-hidden shadow-2xl relative bg-[#3b2f2f] group">
                             <video
                                 ref={videoRef}
-                                src="https://files.zyphtech.com/video_paocaseiro.mp4"
                                 className="w-full h-full object-cover"
                                 autoPlay
                                 muted
                                 loop
                                 playsInline
-                            />
+                                webkit-playsinline="true"
+                                preload="auto"
+                                src="https://files.zyphtech.com/video_paocaseiro.mp4"
+                            >
+                            </video>
                             <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all">
                                 <button
                                     onClick={handlePlayWithSound}
@@ -338,12 +387,13 @@ export const Blog: React.FC<{ language: Language }> = ({ language }) => {
                         
                         <div className="relative w-full max-w-5xl aspect-video rounded-2xl overflow-hidden shadow-2xl border border-white/10 bg-black">
                             <video
-                                src="https://files.zyphtech.com/video_paocaseiro.mp4"
                                 className="w-full h-full"
                                 autoPlay
                                 controls
                                 playsInline
-                            />
+                            >
+                                <source src="https://files.zyphtech.com/video_paocaseiro.mp4" type="video/mp4" />
+                            </video>
                         </div>
                     </motion.div>
                 )}
