@@ -890,6 +890,8 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                                 controls={true}
                                 playsInline={true}
                                 preload="auto"
+                                loop={true}
+                                onEnded={(e) => (e.target as HTMLVideoElement).play()}
                             />
                         </div>
                     </motion.div>
