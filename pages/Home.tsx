@@ -864,10 +864,12 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                         <div className="relative w-full max-w-5xl aspect-video rounded-2xl overflow-hidden shadow-2xl border border-white/10 bg-black">
                             <video
                                 src="https://files.zyphtech.com/video_paocaseiro.mp4"
+                                poster="/images/video-placeholder.jpg"
                                 className="w-full h-full"
-                                autoPlay
-                                controls
-                                playsInline
+                                autoPlay={true}
+                                controls={true}
+                                playsInline={true}
+                                preload="auto"
                             />
                         </div>
                     </motion.div>
