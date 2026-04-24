@@ -232,19 +232,17 @@ export const AdminSupportAI: React.FC<AdminSupportAIProps> = ({ userName, stats 
 
             const response = await fetch(OPENROUTER_URL, {
                 method: 'POST',
+                mode: 'cors',
                 headers: { 
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
-                    'HTTP-Referer': 'https://paocaseiro.co.mz',
-                    'X-Title': 'Pão Caseiro Admin'
                 },
                 body: JSON.stringify({ 
                     model: AI_MODEL,
                     messages: finalMessages,
                     stream: true,
                     temperature: 0.7,
-                    max_tokens: 2000,
-                    reasoning: { enabled: true } // Enabled advanced reasoning as per template
+                    max_tokens: 1500
                 })
             });
 
