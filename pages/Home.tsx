@@ -342,12 +342,16 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
             </section>
 
             {/* --- VIDEO SECTION --- */}
-            <section className="relative min-h-screen bg-[#3b2f2f] flex items-center justify-center overflow-hidden">
+            <section className="relative min-h-[500px] md:min-h-screen bg-[#3b2f2f] flex items-center justify-center overflow-hidden">
                 {/* Video Background */}
-                <div className="absolute inset-0 opacity-60 pointer-events-none bg-black">
+                <div 
+                    className="absolute inset-0 opacity-60 pointer-events-none bg-black bg-cover bg-center"
+                    style={{ backgroundImage: "url('/images/video-placeholder.jpg')" }}
+                >
                     <video
                         ref={videoRef}
                         src="https://files.zyphtech.com/video_paocaseiro.mp4"
+                        poster="/images/video-placeholder.jpg"
                         className="w-full h-full object-cover"
                         autoPlay
                         muted
