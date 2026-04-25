@@ -5,30 +5,30 @@ import { supabase } from './services/supabase';
 import OneSignal from 'react-onesignal';
 import { Navbar } from './components/Navbar';
 import { Footer } from './components/Footer';
-import { Home } from './pages/Home';
-import { Menu } from './pages/Menu';
-import { Blog } from './pages/Blog';
-import { BlogPost } from './pages/BlogPost';
-import { Gallery } from './pages/Gallery';
-import { Admin } from './pages/Admin';
-import { MaintenanceMenu } from './pages/MaintenanceMenu';
 import { Cart } from './components/Cart';
 import { CartProvider } from './context/CartContext';
 import { Language } from './translations';
-import { ClientDashboard } from './pages/ClientDashboard';
 import ScrollToTop from './components/ScrollToTop';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
-import { ITSupport } from './pages/ITSupport';
-import { Delivery } from './pages/Delivery';
-import { Kitchen } from './pages/Kitchen';
-import { OrderReceipt } from './pages/OrderReceipt';
-import { Seeder } from './Seeder';
-import { Privacy } from './pages/Privacy';
-import { Terms } from './pages/Terms';
-import { TVDisplay } from './pages/TVDisplay';
-import { GetTicket } from './pages/GetTicket';
-import { TVTickets } from './pages/TVTickets';
+const Home = React.lazy(() => import('./pages/Home').then(module => ({ default: module.Home })));
+const Menu = React.lazy(() => import('./pages/Menu').then(module => ({ default: module.Menu })));
+const Blog = React.lazy(() => import('./pages/Blog').then(module => ({ default: module.Blog })));
+const BlogPost = React.lazy(() => import('./pages/BlogPost').then(module => ({ default: module.BlogPost })));
+const Gallery = React.lazy(() => import('./pages/Gallery').then(module => ({ default: module.Gallery })));
+const Admin = React.lazy(() => import('./pages/Admin').then(module => ({ default: module.Admin })));
+const MaintenanceMenu = React.lazy(() => import('./pages/MaintenanceMenu').then(module => ({ default: module.MaintenanceMenu })));
+const ClientDashboard = React.lazy(() => import('./pages/ClientDashboard').then(module => ({ default: module.ClientDashboard })));
+const ITSupport = React.lazy(() => import('./pages/ITSupport').then(module => ({ default: module.ITSupport })));
+const Delivery = React.lazy(() => import('./pages/Delivery').then(module => ({ default: module.Delivery })));
+const Kitchen = React.lazy(() => import('./pages/Kitchen').then(module => ({ default: module.Kitchen })));
+const OrderReceipt = React.lazy(() => import('./pages/OrderReceipt').then(module => ({ default: module.OrderReceipt })));
+const Seeder = React.lazy(() => import('./Seeder').then(module => ({ default: module.Seeder })));
+const Privacy = React.lazy(() => import('./pages/Privacy').then(module => ({ default: module.Privacy })));
+const Terms = React.lazy(() => import('./pages/Terms').then(module => ({ default: module.Terms })));
+const TVDisplay = React.lazy(() => import('./pages/TVDisplay').then(module => ({ default: module.TVDisplay })));
+const GetTicket = React.lazy(() => import('./pages/GetTicket').then(module => ({ default: module.GetTicket })));
+const TVTickets = React.lazy(() => import('./pages/TVTickets').then(module => ({ default: module.TVTickets })));
 
 import { useRole } from './hooks/useRole';
 
@@ -274,6 +274,13 @@ const MaintenanceGuard: React.FC<{ children: React.ReactNode, language: Language
   return <>{children}</>;
 };
 
+const LoadingFallback = () => (
+  <div className="min-h-screen bg-[#f7f1eb] flex flex-col items-center justify-center p-4">
+    <div className="w-12 h-12 border-4 border-t-transparent border-[#d9a65a] rounded-full animate-spin mb-4" />
+    <p className="text-[#3b2f2f]/60 font-medium text-xs tracking-widest uppercase">Carregando...</p>
+  </div>
+);
+
 const App: React.FC = () => {
   const [language, setLanguage] = useState<Language>(() => {
     const saved = localStorage.getItem('app_language');
@@ -312,38 +319,40 @@ const App: React.FC = () => {
         <div className="min-h-screen bg-[#f7f1eb] text-[#3b2f2f] font-sans">
           <MaintenanceGuard language={language}>
             <ErrorBoundary>
-              <Routes>
-                {/* Standalone Pages (No Navbar/Footer) */}
-                <Route path="/admin" element={<Admin />} />
-                <Route path="/it" element={<ITSupport />} />
-                <Route path="/delivery" element={<Delivery />} />
-                <Route path="/kitchen" element={<Kitchen />} />
-                <Route path="/tv-display" element={<TVDisplay />} />
-                <Route path="/get-ticket" element={<GetTicket language={language} />} />
-                <Route path="/tv-senhas" element={<TVTickets language={language} />} />
-                <Route path="/seed" element={<Seeder />} />
+              <React.Suspense fallback={<LoadingFallback />}>
+                <Routes>
+                  {/* Standalone Pages (No Navbar/Footer) */}
+                  <Route path="/admin" element={<Admin />} />
+                  <Route path="/it" element={<ITSupport />} />
+                  <Route path="/delivery" element={<Delivery />} />
+                  <Route path="/kitchen" element={<Kitchen />} />
+                  <Route path="/tv-display" element={<TVDisplay />} />
+                  <Route path="/get-ticket" element={<GetTicket language={language} />} />
+                  <Route path="/tv-senhas" element={<TVTickets language={language} />} />
+                  <Route path="/seed" element={<Seeder />} />
 
-                {/* Main Website Pages */}
-                <Route path="/*" element={
-                  <>
-                    <Navbar language={language} toggleLanguage={toggleLanguage} />
-                    <Routes>
-                      <Route path="/" element={<Home language={language} />} />
-                      <Route path="/menu" element={<Menu language={language} />} />
-                      <Route path="/gallery" element={<Gallery language={language} />} />
-                      <Route path="/blog" element={<Blog language={language} />} />
-                      <Route path="/blog/:slug" element={<BlogPost language={language} />} />
-                      <Route path="/order-receipt/:orderId" element={<OrderReceipt />} />
-                      <Route path="/dashboard" element={<ClientDashboard language={language} />} />
-                      <Route path="/privacidade" element={<Privacy language={language} />} />
-                      <Route path="/termos" element={<Terms language={language} />} />
-                      {/* Add other main routes here */}
-                    </Routes>
-                    <Footer language={language} />
-                    <Cart language={language} />
-                  </>
-                } />
-              </Routes>
+                  {/* Main Website Pages */}
+                  <Route path="/*" element={
+                    <>
+                      <Navbar language={language} toggleLanguage={toggleLanguage} />
+                      <Routes>
+                        <Route path="/" element={<Home language={language} />} />
+                        <Route path="/menu" element={<Menu language={language} />} />
+                        <Route path="/gallery" element={<Gallery language={language} />} />
+                        <Route path="/blog" element={<Blog language={language} />} />
+                        <Route path="/blog/:slug" element={<BlogPost language={language} />} />
+                        <Route path="/order-receipt/:orderId" element={<OrderReceipt />} />
+                        <Route path="/dashboard" element={<ClientDashboard language={language} />} />
+                        <Route path="/privacidade" element={<Privacy language={language} />} />
+                        <Route path="/termos" element={<Terms language={language} />} />
+                        {/* Add other main routes here */}
+                      </Routes>
+                      <Footer language={language} />
+                      <Cart language={language} />
+                    </>
+                  } />
+                </Routes>
+              </React.Suspense>
             </ErrorBoundary>
           </MaintenanceGuard>
         </div>
