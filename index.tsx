@@ -3,10 +3,9 @@ import ReactDOM from 'react-dom/client';
 
 import App from './App';
 import './index.css';
-import { registerSW } from 'virtual:pwa-register';
 
-// Register Service Worker for PWA
-registerSW({ immediate: true });
+// Service Worker registration removed to prevent infinite reload loop with selfDestroying config
+
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
