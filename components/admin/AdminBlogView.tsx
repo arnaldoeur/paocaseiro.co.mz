@@ -121,7 +121,7 @@ export function AdminBlogView() {
                                     "Content-Type": "application/json"
                                 },
                                 body: JSON.stringify({
-                                    model: "nvidia/nemotron-3-super-120b-a12b:free",
+                                    model: "openrouter/free",
                                     messages: [
                                         { role: "system", content: "You are a strict, objective comment moderator for a bakery blog. Read the user's comment. Reply ONLY with the word 'APPROVE' if it's safe, relevant, or neutral. Reply ONLY with 'REJECT' if it contains spam, hate, severe profanity, or malicious links. Do NOT output anything else." },
                                         { role: "user", content: `Comment to moderate: "${comment.content}"` }

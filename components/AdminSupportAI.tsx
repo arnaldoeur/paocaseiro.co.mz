@@ -4,9 +4,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../services/supabase';
 
 // OpenRouter API Configuration
-const OPENROUTER_API_KEY = "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";
+const OPENROUTER_API_KEY = (import.meta as any).env.VITE_OPENROUTER_API_KEY || "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";
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-const AI_MODEL = "google/gemma-4-26b-a4b-it:free";
+const AI_MODEL = "openrouter/free";
 
 interface Message {
     id?: string;
@@ -297,17 +297,17 @@ export const AdminSupportAI: React.FC<AdminSupportAIProps> = ({ userName, stats 
         } catch (error: any) {
             console.error('AI Error:', error);
             const isOffline = !navigator.onLine;
-            let errorMessage = `Falha na conexão com Zyph AI. Por favor, tente novamente em instantes.`;
+            let errorMessage = `A chave de acesso da Zyph AI expirou ou é inválida. Por favor, atualize a chave VITE_OPENROUTER_API_KEY no ficheiro .env ou contacte o suporte técnico da Zyph Tech.`;
             
-            if (error.message) {
-                errorMessage = `Erro Técnico: ${error.message}`;
+            if (isOffline) {
+                errorMessage = `Sem conexão à internet. Verifique sua rede e tente novamente.`;
+            } else if (error.message && !error.message.includes('fetch')) {
+                errorMessage = `Erro na API: ${error.message}`;
             }
 
             const errorMsg: Message = { 
                 role: 'assistant', 
-                content: isOffline 
-                    ? `Sem conexão à internet. Verifique sua rede e tente novamente.` 
-                    : errorMessage
+                content: errorMessage
             };
             setMessages(prev => [...prev, errorMsg]);
         } finally {

@@ -16,7 +16,7 @@ serve(async (req) => {
     const { messages, systemContext } = await req.json();
 
     const openRouterPayload = {
-      model: 'nvidia/nemotron-3-super-120b-a12b:free', // Keeping the model the same as before
+      model: 'openrouter/free',
       messages: [
         { role: 'system', content: systemContext },
         ...messages

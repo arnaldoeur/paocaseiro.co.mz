@@ -2154,7 +2154,7 @@ export const Admin: React.FC = () => {
                     "Content-Type": "application/json"
                 },
                 body: JSON.stringify({
-                    model: "openai/gpt-3.5-turbo",
+                    model: "openrouter/free",
                     messages: [
                         { role: "system", content: "You are an expert business analytics AI for a bakery." },
                         { role: "user", content: prompt }

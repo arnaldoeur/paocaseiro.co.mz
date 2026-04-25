@@ -79,6 +79,12 @@ export const useRealtimeOrders = (onNewOrder?: (order: Order) => void) => {
     }
   }, []);
 
+  const onNewOrderRef = useRef(onNewOrder);
+  
+  useEffect(() => {
+    onNewOrderRef.current = onNewOrder;
+  }, [onNewOrder]);
+
   useEffect(() => {
     fetchOrders();
 
@@ -107,8 +113,8 @@ export const useRealtimeOrders = (onNewOrder?: (order: Order) => void) => {
                 map.set(transformed.id!, transformed);
                 ordersMapRef.current = map;
                 
-                if (isNew && onNewOrder) {
-                    onNewOrder(transformed);
+                if (isNew && onNewOrderRef.current) {
+                    onNewOrderRef.current(transformed);
                 }
 
                 return Array.from(map.values()).sort((a: Order, b: Order) => 
@@ -134,7 +140,7 @@ export const useRealtimeOrders = (onNewOrder?: (order: Order) => void) => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [fetchOrders, onNewOrder]);
+  }, [fetchOrders]);
 
   return { 
     orders, 
