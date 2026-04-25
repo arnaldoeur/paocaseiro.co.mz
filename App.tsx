@@ -281,27 +281,6 @@ const App: React.FC = () => {
   });
 
   useEffect(() => {
-    // FORCE CLEANUP OF OLD SERVICE WORKERS to fix "Failed to fetch" on POST requests
-    if ('serviceWorker' in navigator) {
-      const swCleared = localStorage.getItem('sw_cleared_v2');
-      if (!swCleared) {
-        navigator.serviceWorker.getRegistrations().then((registrations) => {
-          let hasUnregistered = false;
-          for (let registration of registrations) {
-            registration.unregister();
-            hasUnregistered = true;
-          }
-          localStorage.setItem('sw_cleared_v2', 'true');
-          if (hasUnregistered) {
-            console.log("Old Service Workers unregistered. Reloading for clean state...");
-            window.location.reload();
-          }
-        }).catch(err => {
-          console.warn("Service Worker cleanup failed: ", err);
-        });
-      }
-    }
-
     const initOneSignal = async () => {
       try {
         await OneSignal.init({
