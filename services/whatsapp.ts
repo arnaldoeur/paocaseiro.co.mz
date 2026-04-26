@@ -41,26 +41,30 @@ export const sendWhatsAppMessage = async (to: string, text: string) => {
         console.log('WhatsApp success response:', data);
 
         // Async log success
-        supabase.from('sms_logs').insert([{
-            type: 'whatsapp',
-            recipient: formattedNumber,
-            content: text.substring(0, 200), // Log snippet
-            status: 'sent',
-            cost: 0
-        }]).catch(e => console.error('[WhatsApp Log Error]', e));
+        Promise.resolve(
+            supabase.from('sms_logs').insert([{
+                type: 'whatsapp',
+                recipient: formattedNumber,
+                content: text.substring(0, 200), // Log snippet
+                status: 'sent',
+                cost: 0
+            }])
+        ).catch(e => console.error('[WhatsApp Log Error]', e));
 
         return { success: true, data };
     } catch (error: any) {
         console.error('WhatsApp Service Error:', error);
         
         // Async log error
-        supabase.from('sms_logs').insert([{
-            type: 'whatsapp_error',
-            recipient: formattedNumber,
-            content: error.message,
-            status: 'error',
-            cost: 0
-        }]).catch(e => console.error('[WhatsApp Log Error]', e));
+        Promise.resolve(
+            supabase.from('sms_logs').insert([{
+                type: 'whatsapp_error',
+                recipient: formattedNumber,
+                content: error.message,
+                status: 'error',
+                cost: 0
+            }])
+        ).catch(e => console.error('[WhatsApp Log Error]', e));
 
         // Log to Notification Center
         NotificationService.logSystemEvent(
@@ -96,13 +100,15 @@ export const sendWhatsAppMedia = async (to: string, mediatype: string, fileName:
         if (error) throw error;
 
         // Log to Supabase
-        supabase.from('sms_logs').insert([{
-            type: 'whatsapp_media',
-            recipient: formattedNumber,
-            content: `Media: ${fileName}`,
-            status: 'sent',
-            cost: 0
-        }]).catch(e => console.error('[WhatsApp Media Log Error]', e));
+        Promise.resolve(
+            supabase.from('sms_logs').insert([{
+                type: 'whatsapp_media',
+                recipient: formattedNumber,
+                content: `Media: ${fileName}`,
+                status: 'sent',
+                cost: 0
+            }])
+        ).catch(e => console.error('[WhatsApp Media Log Error]', e));
 
         return { success: true, data };
     } catch (error: any) {

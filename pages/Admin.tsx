@@ -2347,7 +2347,7 @@ export const Admin: React.FC = () => {
             const role = (rawRole || '').toLowerCase();
             console.log(`Checking extended data for role: ${role}`);
 
-            if (role === 'admin' || role === 'it') {
+            if (role === 'admin' || role === 'it' || role === 'staff' || role === 'vendas') {
                 await Promise.all([
                     loadTeam().then(() => console.log("Team loaded")),
                     loadCustomers().then(() => console.log("Customers loaded")),
