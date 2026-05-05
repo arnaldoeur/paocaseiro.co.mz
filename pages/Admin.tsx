@@ -172,8 +172,8 @@ export const Admin: React.FC = () => {
     const [showPassword, setShowPassword] = useState(false);
     const [soundEnabled, setSoundEnabled] = useState(() => localStorage.getItem('admin_sound') !== 'false');
     const [whatsappMenuMode, setWhatsappMenuMode] = useState(false);
-    const [isUpdatingMaintenance, setIsUpdatingMaintenance] = useState(false);
-    const [emailStatus, setEmailStatus] = useState<{ mode: 'production' | 'sandbox' | 'error' | 'unknown', last_checked?: string }>({ mode: 'unknown' });
+    const [menuLoginMaintenanceMode, setMenuLoginMaintenanceMode] = useState(false);
+    const [isUpdatingMaintenance, setIsUpdatingMaintenance] = useState(false);    const [emailStatus, setEmailStatus] = useState<{ mode: 'production' | 'sandbox' | 'error' | 'unknown', last_checked?: string }>({ mode: 'unknown' });
 
     // Sidebar/View State
     const [activeView, setActiveView] = useState<'dashboard' | 'orders' | 'kitchen' | 'stock' | 'pos' | 'delivery' | 'settings' | 'customers' | 'team' | 'logistics' | 'support' | 'support_ai' | 'billing' | 'documents' | 'messages' | 'blog' | 'newsletter' | 'queue' | 'notificacoes'>('dashboard');
@@ -2060,10 +2060,12 @@ export const Admin: React.FC = () => {
                 }));
 
                 // Fetch System Settings (Maintenance Mode)
-                const { data: sysData, error: sysError } = await supabase.from('system_settings').select('key, value').in('key', ['whatsapp_menu_mode']);
+                const { data: sysData, error: sysError } = await supabase.from('system_settings').select('key, value').in('key', ['whatsapp_menu_mode', 'menu_login_maintenance']);
                 if (!sysError && sysData) {
                     const waMode = sysData.find(d => d.key === 'whatsapp_menu_mode');
                     setWhatsappMenuMode(waMode?.value?.active === true);
+                    const mlMode = sysData.find(d => d.key === 'menu_login_maintenance');
+                    setMenuLoginMaintenanceMode(mlMode?.value?.active === true);
                 }
             }
         } catch (e) {
@@ -2173,6 +2175,32 @@ export const Admin: React.FC = () => {
             setAiReportContent("Erro de rede ao conectar à IA Analítica.");
         } finally {
             setIsGeneratingAI(false);
+        }
+    };
+
+    const handleUpdateMenuLoginMaintenanceMode = async (enabled: boolean) => {
+        setIsUpdatingMaintenance(true);
+        try {
+            const { data: existing } = await supabase.from('system_settings').select('id').eq('key', 'menu_login_maintenance').maybeSingle();
+            if (!existing) {
+                await supabase.from('system_settings').insert({ key: 'menu_login_maintenance', value: { active: enabled } });
+            } else {
+                await supabase.from('system_settings').update({ value: { active: enabled }, updated_at: new Date().toISOString() }).eq('key', 'menu_login_maintenance');
+            }
+            setMenuLoginMaintenanceMode(enabled);
+            
+            await logAudit({
+                action: 'UPDATE_MENU_LOGIN_MAINTENANCE',
+                entity_type: 'system',
+                details: { enabled }
+            });
+
+            alert(`Modo Manutenção (Menu e Login) ${enabled ? 'ACTIVADO' : 'DESACTIVADO'} com sucesso!`);
+        } catch (err: any) {
+            console.error('Error updating maintenance mode:', err);
+            alert('Falha ao atualizar modo de manutenção: ' + err.message);
+        } finally {
+            setIsUpdatingMaintenance(false);
         }
     };
 
@@ -2347,7 +2375,7 @@ export const Admin: React.FC = () => {
             const role = (rawRole || '').toLowerCase();
             console.log(`Checking extended data for role: ${role}`);
 
-            if (role === 'admin' || role === 'it' || role === 'staff' || role === 'vendas') {
+            if (role === 'admin' || role === 'it' || role === 'staff' || role === 'vendas' || role === 'kitchen') {
                 await Promise.all([
                     loadTeam().then(() => console.log("Team loaded")),
                     loadCustomers().then(() => console.log("Customers loaded")),
@@ -6694,6 +6722,34 @@ export const Admin: React.FC = () => {
                                                             </div>
                                                         )}
                                                     </div>
+
+                                                    <div className={`p-6 rounded-2xl border transition-all ${menuLoginMaintenanceMode ? 'bg-orange-50 border-orange-100' : 'bg-gray-50 border-gray-100'}`}>
+                                                        <div className="flex items-center justify-between mb-4">
+                                                            <div className="flex items-center gap-3">
+                                                                <Lock size={20} className={menuLoginMaintenanceMode ? 'text-orange-600' : 'text-gray-400'} />
+                                                                <span className="font-bold text-[#3b2f2f]">Manutenção (Menu e Login)</span>
+                                                            </div>
+                                                            <label className="relative inline-flex items-center cursor-pointer">
+                                                                <input 
+                                                                    type="checkbox" 
+                                                                    className="sr-only peer"
+                                                                    checked={menuLoginMaintenanceMode}
+                                                                    onChange={(e) => handleUpdateMenuLoginMaintenanceMode(e.target.checked)}
+                                                                    disabled={isUpdatingMaintenance}
+                                                                />
+                                                                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-600"></div>
+                                                            </label>
+                                                        </div>
+                                                        <p className="text-xs text-gray-500 leading-relaxed">
+                                                            Desativa temporariamente o acesso ao Menu e ao Login dos clientes, exibindo uma mensagem de manutenção nestas áreas.
+                                                        </p>
+                                                        {menuLoginMaintenanceMode && (
+                                                            <div className="mt-4 flex items-center gap-2 bg-orange-100 text-orange-700 p-3 rounded-xl text-[10px] font-bold uppercase tracking-wider animate-pulse">
+                                                                <ShieldAlert size={14} /> Menu e Login Desativados
+                                                            </div>
+                                                        )}
+                                                    </div>
+
 
                                                     <div className="bg-amber-50 border border-amber-100 p-4 rounded-xl">
                                                         <div className="flex gap-3">

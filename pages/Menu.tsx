@@ -129,6 +129,7 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
 
     // State for loading
     const [loading, setLoading] = useState(true);
+    const [maintenanceMode, setMaintenanceMode] = useState(false);
 
     // Import getProducts
     // NOTE: Make sure to import getProducts at the top of the file in the next step or assume user adds it
@@ -374,16 +375,10 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
         const finalItemName = variation ? `${language === 'en' && item.name_en ? item.name_en : item.name} (${variation.name})` : item.name;
         const finalPrice = variation ? variation.price : item.price;
 
-        addToCart({
-            name: finalItemName,
-            price: finalPrice,
-            image: item.image,
-            quantity: quantity,
-            name_en: item.name_en
-        });
+        const text = encodeURIComponent(`Olá Pão Caseiro! Gostaria de encomendar: ${quantity}x ${finalItemName} (${finalPrice * quantity} MT).`);
+        window.open(`https://wa.me/258879146662?text=${text}`, '_blank');
 
         handleCloseModal();
-        setIsUpsellModalOpen(true);
     };
 
     // Fix for "Plus" button logic
@@ -392,15 +387,9 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
         if ((item.variations && item.variations.length > 0) || (item.complements && item.complements.length > 0)) {
             handleProductClick(item);
         } else {
-            // Add single item directly
-            addToCart({
-                name: item.name,
-                price: item.price,
-                image: item.image,
-                quantity: 1,
-                name_en: item.name_en
-            });
-            setIsUpsellModalOpen(true);
+            // Add single item directly via WhatsApp
+            const text = encodeURIComponent(`Olá Pão Caseiro! Gostaria de encomendar: 1x ${item.name} (${item.price} MT).`);
+            window.open(`https://wa.me/258879146662?text=${text}`, '_blank');
         }
     };
 
@@ -441,13 +430,23 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 className="w-full py-3 px-6 rounded-full text-[#3b2f2f] font-sans focus:outline-none focus:ring-2 focus:ring-[#d9a65a] shadow-lg bg-[#f7f1eb]"
+                                disabled={maintenanceMode}
                             />
                             <div className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400">
                                 <ShoppingBag className="w-5 h-5 opacity-50" />
                             </div>
                         </div>
 
-                        {!isAfterLaunch ? (
+                        {maintenanceMode ? (
+                            <div className="bg-orange-100 border border-orange-300 text-orange-800 py-3 px-6 rounded-2xl flex items-center justify-center gap-3 animate-pulse">
+                                <AlertTriangle size={20} />
+                                <span className="font-bold text-sm">
+                                    {language === 'pt' 
+                                        ? 'SISTEMA EM MANUTENÇÃO: O cardápio está temporariamente indisponível.' 
+                                        : 'SYSTEM UNDER MAINTENANCE: The menu is temporarily unavailable.'}
+                                </span>
+                            </div>
+                        ) : !isAfterLaunch ? (
                              <div className="bg-[#d9a65a]/20 backdrop-blur-sm border border-[#d9a65a]/30 text-[#d9a65a] py-3 px-6 rounded-2xl flex items-center justify-center gap-3 animate-pulse">
                                 <Info size={20} />
                                 <span className="font-bold text-sm">
@@ -469,7 +468,21 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
                 </div>
             </header>
 
-            {/* Sticky Category Nav */}
+            {maintenanceMode ? (
+                <div className="flex flex-col items-center justify-center py-32 px-6 text-center">
+                    <AlertTriangle className="w-20 h-20 text-orange-400 mb-6" />
+                    <h2 className="text-3xl font-serif font-bold text-[#3b2f2f] mb-4">
+                        {language === 'pt' ? 'Menu em Manutenção' : 'Menu under Maintenance'}
+                    </h2>
+                    <p className="text-gray-600 max-w-lg mb-8">
+                        {language === 'pt' 
+                            ? 'Estamos a realizar algumas melhorias no nosso sistema. O menu e as encomendas online estarão de volta em breve. Agradecemos a compreensão.' 
+                            : 'We are performing some improvements to our system. The menu and online orders will be back shortly. We appreciate your understanding.'}
+                    </p>
+                </div>
+            ) : (
+                <>
+                    {/* Sticky Category Nav */}
             <div 
                 className={`sticky top-20 z-[45] bg-[#f7f1eb]/95 backdrop-blur-md shadow-md border-b border-[#d9a65a]/20 transition-all duration-300 ${
                     isSticky ? 'opacity-100 translate-y-0 h-16' : 'opacity-0 -translate-y-full h-0 pointer-events-none'
@@ -727,7 +740,7 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
                                                                 }}
                                                                 className="flex items-center gap-2 bg-[#3b2f2f] text-[#d9a65a] px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-[#d9a65a] hover:text-[#3b2f2f] transition-all shadow-lg active:scale-95 group-hover:shadow-[#d9a65a]/20"
                                                             >
-                                                                <Plus className="w-4 h-4" /> {language === 'pt' ? 'Adicionar' : 'Add'}
+                                                                <ShoppingBag className="w-4 h-4" /> WhatsApp
                                                             </button>
                                                         ) : (
                                                             <div className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-400 rounded-xl text-[10px] font-black uppercase tracking-widest border border-gray-200 cursor-help" title={language === 'pt' ? 'Encomendas abrem em breve' : 'Ordering opens soon'}>
@@ -779,6 +792,8 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
                 language={language}
                 menuSections={menuSections}
             />
+                </>
+            )}
         </div >
     );
 };

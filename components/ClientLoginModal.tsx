@@ -388,7 +388,8 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
 
             const customerData = customers?.[0];
 
-            await NotificationService.sendCustomNotification(formattedIdentifier, `Olá ${name.split(' ')[0]}, o seu registo na Pão Caseiro foi concluído com sucesso!`);
+            // Envia em background para não bloquear o utilizador
+            NotificationService.sendCustomNotification(formattedIdentifier, `Olá ${name.split(' ')[0]}, o seu registo na Pão Caseiro foi concluído com sucesso!`).catch(e => console.error('Failed to send welcome notification:', e));
 
             const phoneToSave = customerData?.contact_no && !customerData?.contact_no?.includes('@') ? customerData.contact_no : (!identifier.includes('@') ? identifier : whatsapp || '');
             if (phoneToSave) localStorage.setItem('pc_auth_phone', phoneToSave);

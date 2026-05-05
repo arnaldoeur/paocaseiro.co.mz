@@ -58,6 +58,7 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                 if (!customerRecord && email) {
                     const newCustomer = {
                         contact_no: email, // Use email as contact_no for Google users without phone
+                        phone: email, // Add phone field to satisfy NOT NULL constraint
                         name: su.user_metadata?.full_name || email.split('@')[0],
                         email: email,
                         avatar_url: su.user_metadata?.avatar_url,
@@ -66,12 +67,14 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
 
                     const { data: inserted, error } = await supabase
                         .from('customers')
-                        .insert([newCustomer])
+                        .upsert([newCustomer], { onConflict: 'contact_no' })
                         .select()
                         .single();
 
                     if (!error && inserted) {
                         customerRecord = inserted;
+                    } else if (error) {
+                        console.error("Error creating customer record for Google user:", error);
                     }
                 } else if (customerRecord && su.user_metadata?.avatar_url && !customerRecord.avatar_url) {
                     // Auto-update avatar if missing
@@ -335,7 +338,7 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
             }
 
             const { error } = await supabase.from('customers').update({ 
-                contact_no: formattedPhone, whatsapp: formattedPhone 
+                contact_no: formattedPhone, whatsapp: formattedPhone, phone: formattedPhone 
             }).eq('email', user?.email);
 
             if (error) throw error;

@@ -116,7 +116,9 @@ export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
 
     // External Trigger for Login Modal
     React.useEffect(() => {
-      const handleOpenLogin = () => setIsLoginModalOpen(true);
+      const handleOpenLogin = () => {
+        alert("Login temporariamente indisponível. Brevemente disponível.");
+      };
       window.addEventListener('open_pc_login', handleOpenLogin);
       return () => window.removeEventListener('open_pc_login', handleOpenLogin);
     }, []);
@@ -174,7 +176,9 @@ export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
               );
             })}
             <button
-              onClick={() => navigate('/menu')}
+              onClick={() => {
+                navigate('/menu');
+              }}
               title="Menu"
               className={`hover:text-[#d9a65a] transition-colors relative group ${location.pathname === '/menu' ? 'text-[#d9a65a]' : ''}`}
               aria-label="Menu"
@@ -197,14 +201,16 @@ export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
                 <span className="hidden xl:inline">{t.nav.myAccount}</span>
               </button>
             ) : (
+              // Not logged in -> Show Login button
               <button
-                onClick={() => setIsLoginModalOpen(true)}
+                onClick={() => {
+                  alert("Login temporariamente indisponível. Brevemente disponível.");
+                }}
                 title={t.nav.login}
-                className="flex items-center gap-2 text-[#3b2f2f] px-4 py-2 rounded-full font-bold hover:bg-[#d9a65a] hover:text-[#3b2f2f] transition-all border border-[#3b2f2f]/10"
-                aria-label={t.nav.login}
+                className="flex items-center justify-center h-10 px-4 bg-white hover:bg-gray-50 text-gray-400 rounded-full transition-colors border border-gray-200 shadow-sm font-bold text-sm cursor-not-allowed"
               >
-                <User className="w-5 h-5 text-[#d9a65a]" />
-                <span>{t.nav.login}</span>
+                <User size={18} className="mr-2 opacity-50" />
+                {language === 'pt' ? 'Login (Em Breve)' : 'Login (Soon)'}
               </button>
             )}
 
@@ -272,13 +278,17 @@ export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
               );
             })}
             <button
-              id="mobile-nav-menu"
-              onClick={() => { navigate('/menu'); setMobileMenuOpen(false); }}
-              className={`text-2xl font-serif hover:text-[#d9a65a] transition-colors ${location.pathname === '/menu' ? 'text-[#d9a65a]' : ''}`}
-              title="Ver Menu"
-              aria-label="Ver Menu"
+              onClick={() => {
+                if (menuLoginMaintenance) {
+                  alert("Acesso ao menu temporariamente indisponível devido a manutenção.");
+                  return;
+                }
+                navigate('/menu');
+                setMobileMenuOpen(false);
+              }}
+              className="w-full text-center px-4 py-3 rounded-xl bg-[#3b2f2f] text-[#d9a65a] font-black uppercase tracking-widest text-sm"
             >
-              Ver Menu
+              {t.nav.menu} {menuLoginMaintenance && <span className="text-orange-500 ml-1">(Manutenção)</span>}
             </button>
 
             <button
