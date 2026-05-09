@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { supabase } from '../services/supabase';
+import { authService } from '../services/authService';
 import { Language, translations } from '../translations';
 import { useNavigate } from 'react-router-dom';
 import { ShoppingBag, LogOut, Clock, CheckCircle, XCircle, ChevronRight, MessageSquare, Loader, PenBox, User, RotateCcw, HelpCircle, Ticket, Smartphone, UserCheck } from 'lucide-react';
@@ -11,6 +11,7 @@ import { logAudit } from '../services/audit';
 import { getEnglishProductName } from '../services/stringUtils';
 import { notifyAdminSystemsAlert } from '../services/whatsapp';
 import { NotificationService } from '../services/NotificationService';
+import { hostingerService } from '../services/hostingerService';
 export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) => {
     const t = translations[language].clientDashboard;
     const [user, setUser] = useState<any>(null);
@@ -35,56 +36,33 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
     useEffect(() => {
         window.scrollTo(0, 0);
         const checkUser = async () => {
-            const { data: { session } } = await supabase.auth.getSession();
+            const { data: { session } } = await authService.getSession();
 
             if (session) {
                 const su = session.user;
                 const email = su.email;
                 const authIdentifier = su.phone || email || su.id;
 
-                let customerRecord = null;
+                // Sync with Hostinger
+                let customerRecord = await hostingerService.getCustomerByIdentifier(email || authIdentifier);
 
-                // 1. Try to find the user in customers table
-                let query = supabase.from('customers').select('*');
-                if (authIdentifier && email) {
-                    query = query.or(`contact_no.eq."${authIdentifier}",email.eq."${email}"`);
-                } else {
-                    query = query.eq('contact_no', authIdentifier);
-                }
-                const { data: existing } = await query.limit(1);
-                customerRecord = existing?.[0];
-
-                // 2. Auto-register if not found (Likely a new Google Sign-In)
                 if (!customerRecord && email) {
                     const newCustomer = {
-                        contact_no: email, // Use email as contact_no for Google users without phone
-                        phone: email, // Add phone field to satisfy NOT NULL constraint
-                        name: su.user_metadata?.full_name || email.split('@')[0],
+                        id: su.id,
+                        contact_no: email,
+                        phone: email,
+                        name: su.name || su.full_name || email.split('@')[0],
                         email: email,
-                        avatar_url: su.user_metadata?.avatar_url,
+                        avatar_url: su.avatar_url || su.picture,
                         updated_at: new Date().toISOString()
                     };
-
-                    const { data: inserted, error } = await supabase
-                        .from('customers')
-                        .upsert([newCustomer], { onConflict: 'contact_no' })
-                        .select()
-                        .single();
-
-                    if (!error && inserted) {
-                        customerRecord = inserted;
-                    } else if (error) {
-                        console.error("Error creating customer record for Google user:", error);
-                    }
-                } else if (customerRecord && su.user_metadata?.avatar_url && !customerRecord.avatar_url) {
-                    // Auto-update avatar if missing
-                    await supabase.from('customers').update({ avatar_url: su.user_metadata.avatar_url }).eq('id', customerRecord.id);
-                    customerRecord.avatar_url = su.user_metadata.avatar_url;
+                    await hostingerService.saveCustomer(newCustomer);
+                    customerRecord = await hostingerService.getCustomerByIdentifier(email);
                 }
 
                 const finalIdentifier = customerRecord?.contact_no || authIdentifier;
-
-                const isGoogle = su.app_metadata?.provider === 'google';
+                const isGoogle = !!su.email && !su.phone; 
+                
                 if (isGoogle && (!customerRecord?.contact_no || customerRecord.contact_no.includes('@'))) {
                     setNeedsPhonePrompt(true);
                 }
@@ -109,7 +87,6 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                     window.dispatchEvent(new Event('pc_user_update'));
                 }
             } else {
-                // Check for manual login
                 const manualPhone = localStorage.getItem('pc_auth_phone');
                 if (manualPhone) {
                     setUser({ phone: manualPhone, isManual: true });
@@ -127,70 +104,22 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
         if (!user?.phone && !user?.id) return;
 
         fetchActiveTicket();
+        
+        // Polling as fallback for real-time
+        const interval = setInterval(() => {
+            fetchActiveTicket();
+            if (user?.phone) fetchOrders(user.phone);
+        }, 15000); // 15 seconds
 
-        const channel = supabase
-            .channel('customer-ticket')
-            .on(
-                'postgres_changes',
-                { 
-                    event: '*', 
-                    schema: 'public', 
-                    table: 'queue_tickets',
-                    filter: user.id ? `user_id=eq.${user.id}` : `customer_phone=eq.${user.phone}`
-                },
-                (payload) => {
-                    if (payload.eventType === 'DELETE') {
-                        setActiveTicket(null);
-                    } else {
-                        const ticket = payload.new as any;
-                        if (ticket.status === 'completed' || ticket.status === 'skipped') {
-                            setActiveTicket(ticket);
-                        } else {
-                            setActiveTicket(ticket);
-                        }
-                    }
-                }
-            )
-            .subscribe();
-
-        return () => { supabase.removeChannel(channel); };
+        return () => clearInterval(interval);
     }, [user?.phone, user?.id]);
-
-    useEffect(() => {
-        if (!user?.phone) return;
-
-        const localNumber = user.phone.replace(/\D/g, '').slice(-9);
-
-        const channel = supabase
-            .channel('customer-orders')
-            .on(
-                'postgres_changes',
-                { 
-                    event: 'UPDATE', 
-                    schema: 'public', 
-                    table: 'orders',
-                    filter: `customer_phone=ilike.%${localNumber}%`
-                },
-                (payload) => {
-                    const updatedOrder = payload.new as any;
-                    setOrders(prev => prev.map(o => o.id === updatedOrder.id ? { ...o, ...updatedOrder } : o));
-                }
-            )
-            .subscribe();
-
-        return () => { supabase.removeChannel(channel); };
-    }, [user?.phone]);
 
     useEffect(() => {
         if (activeTicket?.status !== 'waiting') return;
 
         const checkAhead = async () => {
-            const { count } = await supabase
-                .from('queue_tickets')
-                .select('*', { count: 'exact', head: true })
-                .eq('status', 'waiting')
-                .lt('created_at', activeTicket.created_at);
-            if (count !== null) setPeopleAhead(count);
+            const data = await hostingerService.getQueueCount(activeTicket.created_at);
+            if (data && data.count !== undefined) setPeopleAhead(Number(data.count));
         };
 
         checkAhead();
@@ -199,42 +128,29 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
     }, [activeTicket]);
 
     const fetchActiveTicket = async () => {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-
-        let query = supabase
-            .from('queue_tickets')
-            .select('*')
-            .gte('created_at', today.toISOString())
-            .in('status', ['waiting', 'calling'])
-            .order('created_at', { ascending: false })
-            .limit(1);
-        
-        if (user?.id) {
-            query = query.eq('user_id', user.id);
-        } else if (user?.phone) {
-            query = query.eq('customer_phone', user.phone);
-        }
-
-        const { data } = await query;
-        if (data && data.length > 0) {
-            setActiveTicket(data[0]);
+        if (!user?.phone && !user?.email) return;
+        const identifier = user.phone || user.email;
+        const data = await hostingerService.getActiveTicket(identifier);
+        if (data) {
+            setActiveTicket(data);
+        } else {
+            setActiveTicket(null);
         }
     };
 
     const handleRequestTicket = async (priority: boolean = false) => {
         setTicketLoading(true);
         try {
-            const { data, error } = await supabase.rpc('generate_queue_ticket_v4', {
-                p_phone: user?.phone || null,
-                p_user_id: user?.id || null,
-                p_priority: priority,
-                p_category: 'Geral'
-            });
+            const result = await hostingerService.generateTicket(
+                priority,
+                user?.phone || undefined,
+                'Geral',
+                user?.id
+            );
 
-            if (error) throw error;
-            if (data && data.length > 0) {
-                const newTicket = data[0];
+            if (result.error) throw result.error;
+            if (result.data && result.data.length > 0) {
+                const newTicket = result.data[0];
                 setActiveTicket(newTicket);
 
                 // NEW: Log System Event for Admin Center
@@ -272,11 +188,7 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
     });
 
     const fetchCustomerData = async (phone: string) => {
-        const { data } = await supabase
-            .from('customers')
-            .select('*')
-            .eq('contact_no', phone)
-            .maybeSingle();
+        const data = await hostingerService.getCustomerByIdentifier(phone);
         if (data) {
             setCustomerData(data);
             setEditData({
@@ -296,20 +208,7 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
         if (!phone) { setLoading(false); return; }
 
         try {
-            // Standardize phone for searching
-            let searchPhone = phone.replace(/\D/g, ''); // Digits only
-
-            // If starts with 258, get the 9 digit local number
-            const localNumber = searchPhone.startsWith('258') ? searchPhone.substring(3) : searchPhone;
-            const suffix9 = localNumber.slice(-9);
-
-            const { data, error } = await supabase
-                .from('orders')
-                .select('*, order_items(*)')
-                .or(`customer_phone.ilike.%${suffix9}%,customer_phone_snapshot.ilike.%${suffix9}%`)
-                .order('created_at', { ascending: false });
-
-            if (error) throw error;
+            const data = await hostingerService.getOrders({ customer_phone: phone });
             setOrders(data || []);
         } catch (error) {
             console.error('Error fetching past orders:', error);
@@ -331,23 +230,24 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
                 throw new Error(language === 'en' ? 'Invalid phone number.' : 'Número de telemóvel inválido.');
             }
 
-            // Check if phone already registered
-            const { data: existing } = await supabase.from('customers').select('*').eq('contact_no', formattedPhone).limit(1);
-            if (existing && existing.length > 0) {
+            // Check if phone already registered via Hostinger
+            const existing = await hostingerService.getCustomerByIdentifier(formattedPhone);
+            if (existing) {
                 throw new Error(language === 'en' ? 'Number already registered! Please log out and sign in with this number.' : 'Número já registado! Por favor, saia e entre com este número (Palavra-passe ou OTP) em vez de usar o Google.');
             }
 
-            const { error } = await supabase.from('customers').update({ 
-                contact_no: formattedPhone, whatsapp: formattedPhone, phone: formattedPhone 
-            }).eq('email', user?.email);
-
-            if (error) throw error;
+            await hostingerService.saveCustomer({
+                ...customerData,
+                contact_no: formattedPhone,
+                phone: formattedPhone,
+                whatsapp: formattedPhone
+            });
 
             setUser({ ...user, phone: formattedPhone });
             setNeedsPhonePrompt(false);
             
             // Reload user data
-            const { data: updatedCustomer } = await supabase.from('customers').select('*').eq('contact_no', formattedPhone).single();
+            const updatedCustomer = await hostingerService.getCustomerByIdentifier(formattedPhone);
             if (updatedCustomer) {
                 setCustomerData(updatedCustomer);
                 localStorage.setItem('pc_auth_phone', formattedPhone);
@@ -380,7 +280,7 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
             customer_phone: phone
         });
 
-        await supabase.auth.signOut();
+        await authService.signOut();
         localStorage.removeItem('pc_auth_phone');
         localStorage.removeItem('pc_user_data');
         window.dispatchEvent(new Event('pc_user_update'));
@@ -390,12 +290,11 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
     const handleUpdateAvatar = async (avatarUrl: string) => {
         if (!user?.phone) return;
         try {
-            const { error } = await supabase
-                .from('customers')
-                .update({ avatar_url: avatarUrl })
-                .eq('contact_no', user.phone);
+            await hostingerService.saveCustomer({
+                ...customerData,
+                avatar_url: avatarUrl
+            });
 
-            if (error) throw error;
             const updatedData = { ...customerData, avatar_url: avatarUrl };
             setCustomerData(updatedData);
             localStorage.setItem('pc_user_data', JSON.stringify(updatedData));
@@ -411,22 +310,18 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
         if (!user?.phone) return;
         setLoading(true);
         try {
-            const { error } = await supabase
-                .from('customers')
-                .update({
-                    name: editData.name,
-                    email: editData.email || null,
-                    date_of_birth: editData.date_of_birth || null,
-                    address: editData.address || null,
-                    street: editData.street || null,
-                    reference_point: editData.reference_point || null,
-                    nuit: editData.nuit || null,
-                    whatsapp: editData.whatsapp || null,
-                    updated_at: new Date().toISOString()
-                })
-                .eq('contact_no', user.phone);
-
-            if (error) throw error;
+            await hostingerService.saveCustomer({
+                ...customerData,
+                name: editData.name,
+                email: editData.email || null,
+                date_of_birth: editData.date_of_birth || null,
+                address: editData.address || null,
+                street: editData.street || null,
+                reference_point: editData.reference_point || null,
+                nuit: editData.nuit || null,
+                whatsapp: editData.whatsapp || null,
+                updated_at: new Date().toISOString()
+            });
 
             const updatedData = { ...customerData, ...editData };
             setCustomerData(updatedData);
@@ -473,14 +368,8 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
         
         setLoading(true);
         try {
-            const { error } = await supabase
-                .from('orders')
-                .update({ status: 'cancelled', updated_at: new Date().toISOString() })
-                .eq('id', order.id)
-                .eq('status', 'pending');
+            await hostingerService.updateOrderStatus(order.id, 'cancelled');
                 
-            if (error) throw error;
-            
             await logAudit({
                 action: 'ORDER_CANCELLED_BY_CLIENT',
                 entity_type: 'order',
@@ -513,13 +402,12 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
 
         try {
             // 1. Save to Support Table (if exists, or reuse contact_messages but mark as support)
-            await supabase.from('contact_messages').insert([{
+            await hostingerService.saveContactMessage({
                 name: customerData?.name || user?.phone || 'Cliente Registado',
                 phone: user?.phone || '',
                 email: customerData?.email || 'N/A',
-                message: (language === 'en' ? `[CUSTOMER SUPPORT] ${supportMsg}` : `[SUPORTE CLIENTE] ${supportMsg}`),
-                status: 'unread'
-            }]);
+                message: (language === 'en' ? `[CUSTOMER SUPPORT] ${supportMsg}` : `[SUPORTE CLIENTE] ${supportMsg}`)
+            });
 
             // 2. Email Admin via internal Resend service
             const adminEmail = 'geral@paocaseiro.co.mz';
@@ -636,14 +524,9 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
 
         setIsSearchingOrder(true);
         try {
-            // Search by short ID (suffix) or full ID
-            const { data, error } = await supabase
-                .from('orders')
-                .select('*, order_items(*)')
-                .or(`id.ilike.%${code}%,short_id.ilike.%${code}%`)
-                .order('created_at', { ascending: false });
-
-            if (error) throw error;
+            const data = await hostingerService.getOrders({ 
+                search: code
+            });
             setSearchedOrders(data || []);
             
             if (!data || data.length === 0) {

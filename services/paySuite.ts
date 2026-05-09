@@ -1,5 +1,4 @@
-/// <reference types="vite/client" />
-import { supabase } from './supabase';
+import { hostingerService } from './hostingerService';
 
 export interface PaymentRequest {
     amount: number;
@@ -20,7 +19,7 @@ export interface PaymentResponse {
 }
 
 /**
- * Initiates a payment session via Supabase Edge Function (PaySuite API)
+ * Initiates a payment session via Hostinger API (proxying PaySuite)
  */
 export const initiatePayment = async (data: PaymentRequest): Promise<PaymentResponse> => {
     // Ensure phone number starts with 258 and contains only digits
@@ -52,14 +51,7 @@ export const initiatePayment = async (data: PaymentRequest): Promise<PaymentResp
     }
 
     try {
-        const { data: result, error } = await supabase.functions.invoke('process-payment', {
-            body: payload
-        });
-
-        if (error) {
-            console.error('Supabase Payment Function Error:', error);
-            throw error;
-        }
+        const result = await hostingerService.processPayment(payload);
 
         if (result.success && result.data?.checkout_url) {
             return {
@@ -85,30 +77,20 @@ export const initiatePayment = async (data: PaymentRequest): Promise<PaymentResp
 };
 
 /**
- * Verifies the status of a payment transaction via Supabase Edge Function
+ * Verifies the status of a payment transaction via Hostinger API
  */
 export const verifyPayment = async (txId: string): Promise<{ success: boolean; status: string; message?: string }> => {
     try {
-        const { data: result, error } = await supabase.functions.invoke('process-payment', {
-            body: { 
-                action: 'verify',
-                id: txId
-            }
+        const result = await hostingerService.processPayment({ 
+            action: 'verify',
+            id: txId
         });
-
-        if (error) {
-            console.error('Supabase Payment Verification Error:', error);
-            throw error;
-        }
-
-        console.log('PAYSUITE VERIFY RAW:', result);
         
-        // Use the normalized data from the Edge Function
+        // Use the normalized data from the API
         const data = result.data || result;
         const statusString = (data.status || '').toString().toUpperCase();
 
         // Terminal success states for the transaction itself
-        // Added 'SUCCESS' and 'OK' as fallback terminal states if they come from PaySuite's normalized status
         const successStates = ['SUCCESSFUL', 'PAID', 'COMPLETED', 'APPROVED'];
         const isSuccess = successStates.includes(statusString);
 

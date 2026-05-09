@@ -490,19 +490,19 @@ export const AdminMenuView: React.FC<AdminMenuViewProps> = ({ products, companyI
 
     const visibleProducts = products.filter(p => menuVisibility[p.id] !== false);
 
-    const groupedByCategory = visibleProducts.reduce<Record<string, Product[]>>((acc, p) => {
+    const groupedByCategory = (visibleProducts as Product[]).reduce((acc: Record<string, Product[]>, p: Product) => {
         const cat = p.category || 'Outros';
         if (!acc[cat]) acc[cat] = [];
         acc[cat].push(p);
         return acc;
-    }, {});
+    }, {} as Record<string, Product[]>);
 
-    const allGrouped = products.reduce<Record<string, Product[]>>((acc, p) => {
+    const allGrouped = (products as Product[]).reduce((acc: Record<string, Product[]>, p: Product) => {
         const cat = p.category || 'Outros';
         if (!acc[cat]) acc[cat] = [];
         acc[cat].push(p);
         return acc;
-    }, {});
+    }, {} as Record<string, Product[]>);
 
     const uniqueCategories = ['all', ...Array.from(new Set(products.map(p => p.category || 'Outros')))];
 
@@ -594,20 +594,23 @@ export const AdminMenuView: React.FC<AdminMenuViewProps> = ({ products, companyI
                             {dropdownOpen && (
                                 <div className="absolute right-0 top-full mt-2 w-60 bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 overflow-hidden">
                                     <div className="p-2 max-h-64 overflow-y-auto">
-                                        {Object.entries(groupedByCategory).map(([cat, prods]) => (
-                                            <button
-                                                key={cat}
-                                                onClick={() => handleGeneratePDF(cat)}
-                                                disabled={isGenerating}
-                                                className="w-full text-left px-4 py-2.5 text-sm font-semibold text-[#3b2f2f] hover:bg-amber-50 rounded-xl flex items-center justify-between gap-2 disabled:opacity-50"
-                                            >
-                                                <span className="flex items-center gap-2">
-                                                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: getCatColor(cat) }} />
-                                                    {cat}
-                                                </span>
-                                                <span className="text-xs text-gray-400">{prods.length} itens</span>
-                                            </button>
-                                        ))}
+                                        {Object.entries(groupedByCategory).map(([cat, pList]) => {
+                                            const prods = pList as Product[];
+                                            return (
+                                                <button
+                                                    key={cat}
+                                                    onClick={() => handleGeneratePDF(cat)}
+                                                    disabled={isGenerating}
+                                                    className="w-full text-left px-4 py-2.5 text-sm font-semibold text-[#3b2f2f] hover:bg-amber-50 rounded-xl flex items-center justify-between gap-2 disabled:opacity-50"
+                                                >
+                                                    <span className="flex items-center gap-2">
+                                                        <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: getCatColor(cat) }} />
+                                                        {cat}
+                                                    </span>
+                                                    <span className="text-xs text-gray-400">{prods.length} itens</span>
+                                                </button>
+                                            );
+                                        })}
                                         {Object.keys(groupedByCategory).length === 0 && (
                                             <p className="text-xs text-gray-400 text-center py-4">Sem produtos visíveis</p>
                                         )}
@@ -675,21 +678,24 @@ export const AdminMenuView: React.FC<AdminMenuViewProps> = ({ products, companyI
                 </div>
             ) : (
                 <div className="space-y-6">
-                    {Object.entries(filteredGrouped).map(([cat, prods]) => prods.length === 0 ? null : (
-                        <div key={cat} className="bg-white rounded-3xl overflow-hidden shadow-sm border border-gray-100">
-                            {/* Category Header — dark brown, KFC-style */}
-                            <div className="bg-[#3b2f2f] px-6 py-4 flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-1 h-8 rounded-full bg-[#d9a65a]" />
-                                    <div>
-                                        <h3 className="text-white font-black text-lg uppercase tracking-wide">{cat}</h3>
-                                        <p className="text-[#d9a65a]/70 text-xs">{prods.length} {prods.length === 1 ? 'produto' : 'produtos'}</p>
+                    {Object.entries(filteredGrouped).map(([cat, pList]) => {
+                        const prods = pList as Product[];
+                        if (prods.length === 0) return null;
+                        return (
+                            <div key={cat} className="bg-white rounded-3xl overflow-hidden shadow-sm border border-gray-100">
+                                {/* Category Header — dark brown, KFC-style */}
+                                <div className="bg-[#3b2f2f] px-6 py-4 flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-1 h-8 rounded-full bg-[#d9a65a]" />
+                                        <div>
+                                            <h3 className="text-white font-black text-lg uppercase tracking-wide">{cat}</h3>
+                                            <p className="text-[#d9a65a]/70 text-xs">{prods.length} {prods.length === 1 ? 'produto' : 'produtos'}</p>
+                                        </div>
+                                        <div
+                                            className="ml-2 w-3 h-3 rounded-full"
+                                            style={{ background: getCatColor(cat) }}
+                                        />
                                     </div>
-                                    <div
-                                        className="ml-2 w-3 h-3 rounded-full"
-                                        style={{ background: getCatColor(cat) }}
-                                    />
-                                </div>
                                 <button
                                     onClick={() => handleGeneratePDF(cat)}
                                     disabled={isGenerating}
@@ -702,7 +708,7 @@ export const AdminMenuView: React.FC<AdminMenuViewProps> = ({ products, companyI
                             {/* Products grid */}
                             <div className="p-5 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
                                 {/* Visible products */}
-                                {prods.map(product => (
+                                {prods.map((product: Product) => (
                                     <MenuCard
                                         key={product.id}
                                         product={product}
@@ -725,8 +731,9 @@ export const AdminMenuView: React.FC<AdminMenuViewProps> = ({ products, companyI
                                     ))
                                 }
                             </div>
-                        </div>
-                    ))}
+                            </div>
+                        );
+                    })}
                 </div>
             )}
 

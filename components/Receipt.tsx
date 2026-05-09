@@ -60,9 +60,8 @@ export const Receipt: React.FC<ReceiptProps> = ({
 
     const generateVectorPDF = async () => {
         const { generateCustomerReceiptPDF, generateFormalInvoicePDF } = await import('../services/pdfGenerator');
-        const { getCompanySettings } = await import('../services/supabase');
         
-        const companyInfo = await getCompanySettings();
+        const companyInfo = undefined;
         
         const compatOrder = {
             short_id: orderId,

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../../services/supabase';
+import { hostingerService } from '../../services/hostingerService';
 import {
     ShieldCheck,
     Search,
@@ -89,89 +89,38 @@ export const AdminAuditView: React.FC = () => {
     const fetchLogs = async () => {
         setLoading(true);
         try {
-            let query = supabase
-                .from('audit_logs')
-                .select('*', { count: 'exact' });
+            const response = await hostingerService.getAuditLogs({
+                search: searchTerm,
+                severity: severityFilter,
+                page: page,
+                page_size: PAGE_SIZE
+            });
 
-            // audit_logs doesn't have a native severity field, so we skip the severity query filter in DB
-            // and filter locally if needed, or map entity_type to severity.
+            if (response.success) {
+                const finalData = response.data.map((log: any) => ({
+                    ...log,
+                    user: log.user_name ? {
+                        id: log.user_id,
+                        name: log.user_name,
+                        email: log.user_email,
+                        role: log.user_role
+                    } : null,
+                    details: typeof log.details === 'string' ? JSON.parse(log.details) : log.details
+                }));
 
-            if (searchTerm.trim()) {
-                query = query.or(`action.ilike.%${searchTerm}%,entity_type.ilike.%${searchTerm}%,customer_phone.ilike.%${searchTerm}%`);
-            }
+                setLogs(finalData);
+                setTotalPages(Math.ceil(response.total / PAGE_SIZE));
 
-            // Pagination limits
-            const from = (page - 1) * PAGE_SIZE;
-            const to = from + PAGE_SIZE - 1;
-
-            const { data: rawData, count, error } = await query
-                .order('created_at', { ascending: false })
-                .range(from, to);
-
-            if (error) throw error;
-
-            let finalData: AuditLog[] = rawData || [];
-
-            // Manually stitch users since we don't have a strict FK
-            if (finalData.length > 0) {
-                const userIds = Array.from(new Set(finalData.map(l => l.user_id).filter(Boolean)));
-                if (userIds.length > 0) {
-                    const { data: users } = await supabase.from('users').select('id, name, email, role').in('id', userIds);
-                    if (users) {
-                        finalData = finalData.map(log => ({
-                            ...log,
-                            user: users.find(u => u.id === log.user_id) || null
-                        }));
-                    }
-                }
-
-                // Fetch customer details to enrich logs where user_id is null but phone exists
-                const phones = Array.from(new Set(finalData.map(l => l.customer_phone).filter(Boolean)));
-                if (phones.length > 0) {
-                    const { data: customers } = await supabase.from('customers').select('contact_no, name, email').in('contact_no', phones as string[]);
-                    if (customers) {
-                         finalData = finalData.map(log => {
-                             if (!log.user && log.customer_phone) {
-                                 const c = customers.find(c => c.contact_no === log.customer_phone);
-                                 if (c) {
-                                     return {
-                                         ...log,
-                                         user: {
-                                            id: c.contact_no, // Mock
-                                            name: c.name,
-                                            email: c.email || 'Sem Email',
-                                            role: 'cliente'
-                                         }
-                                     };
-                                 }
-                             }
-                             return log;
-                         });
-                    }
-                }
-            }
-
-            setLogs(finalData);
-            if (count) {
-                setTotalPages(Math.ceil(count / PAGE_SIZE));
-            }
-
-            // Fetch overall stats on first load
-            if (page === 1 && severityFilter === 'all' && !searchTerm) {
-                const { data: allLogs } = await supabase.from('audit_logs').select('entity_type, action, created_at');
-
-                if (allLogs) {
-                    setAllAuditEvents(allLogs);
-                    const today = new Date().toISOString().split('T')[0];
+                if (page === 1 && severityFilter === 'all' && !searchTerm) {
+                    setAllAuditEvents(finalData); // Using a subset for the chart if full set not available
                     setStats({
-                        total: allLogs.length,
-                        critical: allLogs.filter(l => l.entity_type === 'system' || l.action.includes('ERROR')).length,
-                        warnings: allLogs.filter(l => l.entity_type === 'purchase').length,
-                        today: allLogs.filter(l => l.created_at.startsWith(today)).length
+                        total: response.total,
+                        critical: finalData.filter((l: any) => l.entity_type === 'system' || l.action.includes('ERROR')).length, // This is an approximation
+                        warnings: finalData.filter((l: any) => l.entity_type === 'purchase').length, // This is an approximation
+                        today: finalData.filter((l: any) => l.created_at.startsWith(new Date().toISOString().split('T')[0])).length
                     });
                 }
             }
-
         } catch (error) {
             console.error('Error fetching audit logs:', error);
         } finally {
@@ -256,52 +205,11 @@ export const AdminAuditView: React.FC = () => {
         setIsAnalyzing(true);
         setAiReport(null);
         try {
-            // Filter logs based on current search and severity filter for AI analysis
-            const filteredLogs = logs.filter(log => {
-                let derivedSeverity = 'INFO';
-                if(log.entity_type === 'system') derivedSeverity = 'CRITICAL';
-                if(log.entity_type === 'purchase') derivedSeverity = 'WARNING';
-                if(log.action?.toLowerCase().includes('error') || log.action?.toLowerCase().includes('fail')) derivedSeverity = 'ERROR';
-
-                return severityFilter === 'all' || derivedSeverity === severityFilter;
-            });
-
-            const logsToAnalyze = filteredLogs.slice(0, 50).map(l => ({
-                action: l.action,
-                entity: l.entity_type,
-                phone: l.customer_phone,
-                user: l.user?.role || 'visitor',
-                details: l.details
-            }));
-
-            const systemContext = `Você é o Auditor IA Oficial do sistema 'Pão Caseiro'. A sua função é analisar métricas, eventos de log e o comportamento dos utilizadores da nossa plataforma.
-Recebeu uma lista de eventos JSON filtrados recentes. Elabore um relatório analítico direto e conciso, em Markdown.
-
-**Foco:**
-1. Resumo da Atividade Global.
-2. Identificação de Padrões Críticos ou Suspeitos (ex: Logins falhados sucessivos, Erros de Checkout).
-3. Jornada de Utilizadores: O que estão tipicamente a tentar fazer? Quais as ações que repetem mais?
-
-Escreva em Português de Portugal. Assuma um tom analítico, sénior e construtivo.`;
-
-            const prompt = "Logs recentes para análise: \n\n" + JSON.stringify(logsToAnalyze);
-
-            const { data, error } = await supabase.functions.invoke('chat-ai', {
-                body: {
-                    systemContext: systemContext,
-                    messages: [
-                        { role: 'user', content: prompt }
-                    ]
-                }
-            });
-
-            if (error) throw new Error(`Edge Error: ${error.message}`);
-            if (data?.error) throw new Error(`OpenRouter Error: ${data.error}`);
-
-            if (data?.choices && data.choices.length > 0) {
-                setAiReport(data.choices[0].message.content);
+            const response = await hostingerService.analyzeAuditLogs();
+            if (response.success) {
+                setAiReport(response.report);
             } else {
-                setAiReport('Não foi possível gerar avaliação. Sem resposta da IA.');
+                setAiReport('Não foi possível gerar a análise: ' + (response.error || 'Erro desconhecido'));
             }
         } catch (err: any) {
             console.error('AI Error:', err);

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { CheckCircle, MapPin, Phone, User, Store, ArrowLeft, Loader, Download, Printer, ShoppingBag } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { supabase } from '../services/supabase';
+import { hostingerService } from '../services/hostingerService';
 
 interface OrderItem {
     product_name: string;
@@ -37,13 +37,13 @@ export const OrderReceipt: React.FC = () => {
     useEffect(() => {
         const fetchOrder = async () => {
             try {
-                const { data, error } = await supabase
-                    .from('orders')
-                    .select('*, items:order_items(*)')
-                    .eq('short_id', orderId)
-                    .single();
+                // In Hostinger system, we can use getOrderById which accepts ID or Short ID
+                const data = await hostingerService.getOrderById(orderId!);
 
-                if (error) throw error;
+                if (!data) throw new Error("Pedido não encontrado");
+                
+                // Map items if needed (Hostinger bridge returns items as 'items' already or needs mapping)
+                // Based on public/paocaseiro_db.php: 'items' => $items
                 setOrder(data);
             } catch (err: any) {
                 console.error("Error fetching order:", err);

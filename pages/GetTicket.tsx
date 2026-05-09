@@ -1,12 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { supabase } from '../services/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Ticket, Clock, CheckCircle, Smartphone, UserCheck, Search, X, Printer, Bell } from 'lucide-react';
 import { queueService } from '../services/queue';
 import { printerService } from '../services/printer';
 import { NotificationService } from '../services/NotificationService';
-
 import { translations, Language } from '../translations';
+import { hostingerService } from '../services/hostingerService';
+import React, { useState, useEffect } from 'react';
 
 export const GetTicket: React.FC<{ language?: Language }> = ({ language = 'pt' }) => {
     const t = translations[language] || translations['pt'];
@@ -26,48 +25,48 @@ export const GetTicket: React.FC<{ language?: Language }> = ({ language = 'pt' }
 
     useEffect(() => {
         const fetchBranding = async () => {
-            const { data: settingsData } = await supabase.from('settings').select('key, value');
-            const settingsMap = settingsData?.reduce((acc: any, item: any) => ({ ...acc, [item.key]: item.value }), {}) || {};
-            const { data: companyData } = await supabase.from('company_profiles').select('*').limit(1).maybeSingle();
-            
-            setCompany({
-                logo_url: settingsMap.logo_url || companyData?.logo_url || '/logo_on_dark.png',
-                office_name: settingsMap.office_name || companyData?.office_name || 'Pão Caseiro',
-                slogan: settingsMap.slogan || companyData?.slogan || 'O Sabor que Aquece o Coração'
-            });
+            try {
+                const settingsData = await hostingerService.getSystemSettings();
+                const settingsMap = settingsData?.reduce((acc: any, item: any) => ({ ...acc, [item.key]: item.value }), {}) || {};
+                
+                setCompany({
+                    logo_url: settingsMap.logo_url || '/logo_on_dark.png',
+                    office_name: settingsMap.office_name || 'Pão Caseiro',
+                    slogan: settingsMap.slogan || 'O Sabor que Aquece o Coração'
+                });
+            } catch (err) {
+                console.error("Error fetching branding:", err);
+                setCompany({
+                    logo_url: '/logo_on_dark.png',
+                    office_name: 'Pão Caseiro',
+                    slogan: 'O Sabor que Aquece o Coração'
+                });
+            }
         };
         fetchBranding();
     }, []);
 
+    // Polling for ticket updates (replacement for real-time channel)
     useEffect(() => {
-        if (!ticket) return;
-        const channel = supabase
-            .channel(`ticket-${ticket.id}`)
-            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'queue_tickets', filter: `id=eq.${ticket.id}` }, 
-            (payload) => {
-                if (payload.new) {
-                    setTicket((prev: any) => ({ ...prev, ...payload.new }));
-                }
-            })
-            .subscribe();
-        return () => { supabase.removeChannel(channel); };
-    }, [ticket?.id]);
+        if (!ticket || ticket.status !== 'waiting') return;
+        
+        const pollTicket = async () => {
+            const identifier = ticket.phone || ticket.user_id || ticket.id;
+            const data = await hostingerService.getActiveTicket(identifier);
+            if (data && data.status !== ticket.status) {
+                setTicket(data);
+            }
+        };
+
+        const interval = setInterval(pollTicket, 5000);
+        return () => clearInterval(interval);
+    }, [ticket?.id, ticket?.status]);
 
     useEffect(() => {
         if (ticket?.status !== 'waiting') return;
         const checkAhead = async () => {
-             const now = new Date();
-             const mzTodayStart = new Date(now.toLocaleString("en-US", {timeZone: "Africa/Maputo"}));
-             mzTodayStart.setHours(0, 0, 0, 0);
-             const todayIso = mzTodayStart.toISOString();
-
-             const { count } = await supabase
-                .from('queue_tickets')
-                .select('*', { count: 'exact', head: true })
-                .eq('status', 'waiting')
-                .gte('created_at', todayIso)
-                .lt('created_at', ticket.created_at);
-             if (count !== null) setPeopleAhead(count);
+             const data = await hostingerService.getQueueCount(ticket.created_at);
+             if (data && data.count !== undefined) setPeopleAhead(Number(data.count));
         };
         checkAhead();
         const interval = setInterval(checkAhead, 10000);

@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { supabase } from '../services/supabase';
 import { Language, translations } from '../translations';
 import { Calendar, ChevronRight, BookOpen, MapPin, Play, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { sendNewsletterEmail } from '../services/email';
+import { hostingerService } from '../services/hostingerService';
 
 interface BlogPost {
     id: string;
@@ -96,20 +96,27 @@ export const Blog: React.FC<{ language: Language }> = ({ language }) => {
         setSubscribing(true);
         setSubscribedMsg('');
         try {
-            const { error } = await supabase.from('newsletter_subscribers').insert([
-                { name: newsletterName, email: newsletterEmail }
-            ]);
-
-            if (error && error.code !== '23505') { 
-                throw error;
+            // Use Hostinger Bridge for Newsletter Subscription
+            await hostingerService.fetch('subscribe_newsletter', { 
+              name: newsletterName, 
+              email: newsletterEmail 
+            });
+            
+            // Trigger Welcome Email (also via Bridge)
+            const emailResult = await sendNewsletterEmail(newsletterName, newsletterEmail);
+            
+            if (emailResult && !emailResult.success) {
+                console.error('Newsletter email failed:', emailResult.error);
+                // We still consider the subscription successful, but notify about the email
+                setSubscribedMsg('Subscrição efetuada! (Nota: O email de boas-vindas pode demorar alguns minutos)');
+            } else {
+                setSubscribedMsg('Subscrição efetuada com sucesso! Verifique o seu email.');
             }
-
-            await sendNewsletterEmail(newsletterName, newsletterEmail);
-            setSubscribedMsg('Subscrição efetuada com sucesso!');
             setNewsletterEmail('');
             setNewsletterName('');
         } catch (err) {
-            setSubscribedMsg('Erro ao subscrever. Tente novamente.');
+            console.error('Erro ao subscrever newsletter:', err);
+            setSubscribedMsg('Erro ao subscrever. Por favor, tente novamente.');
         } finally {
             setSubscribing(false);
         }
@@ -119,12 +126,7 @@ export const Blog: React.FC<{ language: Language }> = ({ language }) => {
         const fetchPosts = async () => {
             setLoading(true);
             try {
-                const { data, error } = await supabase
-                    .from('blog_posts')
-                    .select('*')
-                    .order('created_at', { ascending: false });
-
-                if (error) throw error;
+                const data = await hostingerService.getBlogPosts();
 
                 if (data) {
                     setPosts(data);

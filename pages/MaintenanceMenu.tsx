@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Phone, MessageSquare, Clock, ShieldAlert, ChevronRight, Package, ShoppingBag, Info, ExternalLink } from 'lucide-react';
-import { supabase } from '../services/supabase';
+import { hostingerService } from '../services/hostingerService';
 import { Language } from '../translations';
 
 interface MaintenanceMenuProps {
@@ -16,21 +16,28 @@ export const MaintenanceMenu: React.FC<MaintenanceMenuProps> = ({ language }) =>
     useEffect(() => {
         const loadMaintenanceData = async () => {
             try {
-                // Load products that are marked as visible in menu
-                const { data: prodData } = await supabase
-                    .from('products')
-                    .select('*')
-                    .eq('inStock', true)
-                    .eq('show_in_menu', true)
-                    .order('category', { ascending: true });
+                // Load products
+                const prodData = await hostingerService.getProducts();
+                if (prodData) {
+                    // Filter in-stock and visible in menu
+                    const visibleProducts = prodData.filter((p: any) => 
+                        (p.is_available === 1 || p.inStock === true) && 
+                        (p.show_in_menu === 1 || p.show_in_menu === true)
+                    );
+                    setProducts(visibleProducts);
+                }
 
-                if (prodData) setProducts(prodData);
-
-                // Load company info for WhatsApp link
-                const { data: settings } = await supabase.from('settings').select('*');
+                // Load company info from settings
+                const settings = await hostingerService.getSettings();
                 if (settings) {
                     const settingsMap: any = {};
-                    settings.forEach(s => settingsMap[s.key] = s.value);
+                    // Settings response might be an array or object depending on bridge implementation
+                    if (Array.isArray(settings)) {
+                        settings.forEach(s => settingsMap[s.key] = s.value);
+                    } else {
+                        Object.assign(settingsMap, settings);
+                    }
+
                     setCompanyInfo({
                         name: settingsMap['branding_name'] || 'Pão Caseiro',
                         phone: settingsMap['branding_phone'] || '+258879146662',

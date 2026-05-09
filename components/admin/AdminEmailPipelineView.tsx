@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../../services/supabase';
+import { hostingerService } from '../../services/hostingerService';
 import { sendEmail } from '../../services/email';
-import { Mail, Send, Save, AlertTriangle, CheckCircle, Loader, Copy, Trash2, Search, ArrowLeft, LayoutTemplate, PlusCircle, Check } from 'lucide-react';
+import { Mail, Send, Save, AlertTriangle, CheckCircle, Loader, Copy, Trash2, Search, ArrowLeft, LayoutTemplate, PlusCircle, Check, Beaker } from 'lucide-react';
 
 interface Campaign {
     id: string;
@@ -34,6 +34,7 @@ export const AdminEmailPipelineView: React.FC = () => {
     // Status
     const [saving, setSaving] = useState(false);
     const [sending, setSending] = useState(false);
+    const [testing, setTesting] = useState(false);
     const [actionResult, setActionResult] = useState<{ success?: string; error?: string } | null>(null);
 
     useEffect(() => {
@@ -43,12 +44,7 @@ export const AdminEmailPipelineView: React.FC = () => {
     const loadCampaigns = async () => {
         setLoading(true);
         try {
-            const { data, error } = await supabase
-                .from('email_campaigns')
-                .select('*')
-                .order('created_at', { ascending: false });
-            
-            if (error) throw error;
+            const data = await hostingerService.getEmailCampaigns();
             setCampaigns(data || []);
         } catch (error: any) {
             console.error('Error:', error);
@@ -103,12 +99,11 @@ export const AdminEmailPipelineView: React.FC = () => {
 
     const handleSaveEntity = async (forceStatus?: 'draft' | 'template') => {
         if (!subject || !title) {
-            setActionResult({ error: 'Assunto e Título são origatórios.' });
+            setActionResult({ error: 'Assunto e Título são obrigatórios.' });
             return;
         }
         setSaving(true);
         setActionResult(null);
-        
         
         let finalContent = content;
         if (isRawHtml && !finalContent.includes('<!--RAW_HTML-->')) {
@@ -116,24 +111,42 @@ export const AdminEmailPipelineView: React.FC = () => {
         }
 
         const targetStatus = forceStatus || (activeTab === 'templates' ? 'template' : 'draft');
-        const payload = { subject, title, content: finalContent, status: targetStatus };
+        const payload = { 
+            id: currentCampaign?.id,
+            subject, 
+            title, 
+            content: finalContent, 
+            status: targetStatus 
+        };
 
         try {
-            if (currentCampaign && !currentCampaign.id.startsWith('sys_')) {
-                const { error, data } = await supabase.from('email_campaigns').update(payload).eq('id', currentCampaign.id).select().single();
-                if (error) throw error;
-                if (data) setCurrentCampaign(data);
-            } else {
-                const { data, error } = await supabase.from('email_campaigns').insert([payload]).select().single();
-                if (error) throw error;
-                if (data) setCurrentCampaign(data);
-            }
+            const data = await hostingerService.saveEmailCampaign(payload);
+            if (data) setCurrentCampaign(data);
             setActionResult({ success: targetStatus === 'template' ? 'Modelo guardado com sucesso!' : 'Rascunho gravado com sucesso!' });
             loadCampaigns();
         } catch (error: any) {
             setActionResult({ error: 'Erro ao guardar: ' + error.message });
         } finally {
             setSaving(false);
+        }
+    };
+
+    const handleTestEmail = async () => {
+        const email = prompt('Para que email deseja enviar o teste?', 'geral@paocaseiro.co.mz');
+        if (!email) return;
+        
+        setTesting(true);
+        try {
+            const result = await hostingerService.testEmail(email);
+            if (result.success) {
+                alert('Email de teste enviado com sucesso!');
+            } else {
+                alert('Erro no envio: ' + (result.result?.message || 'Erro desconhecido'));
+            }
+        } catch (e: any) {
+            alert('Falha crítica no teste: ' + e.message);
+        } finally {
+            setTesting(false);
         }
     };
 
@@ -154,24 +167,22 @@ export const AdminEmailPipelineView: React.FC = () => {
         setActionResult(null);
 
         try {
-            const { data: subscribers, error: subsError } = await supabase.from('newsletter_subscribers').select('email');
-            if (subsError) throw subsError;
-
+            const subscribers = await hostingerService.getNewsletterSubscribers();
+            
             if (!subscribers || subscribers.length === 0) {
                 setActionResult({ error: 'A base de subscritores está vazia.' });
                 setSending(false);
                 return;
             }
 
-            const emails = subscribers.map(sub => sub.email);
-            let campaignId = currentCampaign?.id;
-            
+            const emails = subscribers.map((sub: any) => sub.email);
             let finalContent = content;
             if (isRawHtml && !finalContent.includes('<!--RAW_HTML-->')) {
                 finalContent = '<!--RAW_HTML-->\n' + finalContent;
             }
 
             const payload = {
+                id: currentCampaign?.id,
                 subject,
                 title,
                 content: finalContent,
@@ -180,24 +191,18 @@ export const AdminEmailPipelineView: React.FC = () => {
                 target_count: emails.length
             };
 
-            if (campaignId) {
-                await supabase.from('email_campaigns').update(payload).eq('id', campaignId);
-            } else {
-                const { data } = await supabase.from('email_campaigns').insert([payload]).select().single();
-                campaignId = data?.id;
-            }
+            const data = await hostingerService.saveEmailCampaign(payload);
+            const campaignId = data?.id;
 
             const domain = typeof window !== 'undefined' ? window.location.origin : 'https://paocaseiro.co.mz';
             
             let htmlContent = '';
             
             if (isRawHtml) {
-                // Send raw HTML exactly as the user provided
                 htmlContent = content;
             } else {
-                // Wrap in standard Pão Caseiro standard branding
                 htmlContent = `
-                    <div style="font-family: Arial, sans-serif; max-w: 600px; margin: 0 auto; color: #3b2f2f;">
+                    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #3b2f2f;">
                         <div style="background-color: #3b2f2f; padding: 20px; text-align: center;">
                             <img src="${domain}/logo_on_dark.png" alt="Pão Caseiro" style="height: 50px; max-width: 100%;">
                         </div>
@@ -220,7 +225,6 @@ export const AdminEmailPipelineView: React.FC = () => {
                 await sendEmail(chunk, subject, htmlContent);
             }
 
-            // Important: Avoiding literal backticks nested inside the react component code which broke vite parser earlier.
             setActionResult({ 
                 success: 'Soberbo! Foram informados ' + emails.length + ' leitores com sucesso!'
             });
@@ -237,7 +241,7 @@ export const AdminEmailPipelineView: React.FC = () => {
         e.stopPropagation();
         if (!window.confirm('Eliminar permanentemente este registo?')) return;
         try {
-            await supabase.from('email_campaigns').delete().eq('id', id);
+            await hostingerService.deleteEmailCampaign(id);
             setCampaigns(prev => prev.filter(c => c.id !== id));
         } catch (error: any) {
             alert('Falha ao eliminar.');
@@ -271,6 +275,13 @@ export const AdminEmailPipelineView: React.FC = () => {
                     </button>
                     
                     <div className="flex gap-3">
+                        <button 
+                            onClick={handleTestEmail} 
+                            disabled={testing}
+                            className="bg-gray-100 text-[#3b2f2f] px-4 py-2 rounded-xl font-bold text-sm cursor-pointer hover:bg-gray-200 transition-colors flex items-center gap-2"
+                        >
+                            {testing ? <Loader size={16} className="animate-spin" /> : <Beaker size={16} />} Testar Envio
+                        </button>
                         {currentCampaign?.status !== 'sent' && (
                             <>
                                 {isTemplateMode ? (

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { supabase, generateReceipt, previewDocumentPDF } from '../../services/supabase';
+import { hostingerService } from '../../services/hostingerService';
+import { previewDocumentPDF, generateAndUploadReceipt } from '../../services/billingService';
 import { FileText, Search, ExternalLink, Plus, RefreshCw, X, User, CheckCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -35,26 +36,17 @@ const BillingDetailsModal = ({ doc, onClose, onRefresh }: { doc: any, onClose: (
     const handleMarkAsPaid = async () => {
         setMarkingPaid(true);
         try {
-            // Update current document to paid
-            const { error: updateError } = await supabase.from('receipts')
-                .update({ status: 'paid' })
-                .eq('id', doc.id);
-                
-            if (updateError) throw updateError;
-
-            // Generate paired Recibo since it was an invoice that just got paid
+            // 1. Hostinger
             const shortIdStr = doc.receipt_no.split('-').pop() || '000';
-            await generateReceipt(
-                doc.order_id,
-                shortIdStr,
-                doc.customer_id,
-                doc.customer_name,
-                doc.items,
-                doc.total_amount,
-                'Receipt', // Gen the Receipt natively
-                true,
-                false // Do not loop paired gen since invoice already exists
-            );
+            const receiptData = {
+                ...doc,
+                id: crypto.randomUUID(),
+                receipt_no: `REC-${shortIdStr}`,
+                status: 'paid'
+            };
+            await hostingerService.saveReceipt(receiptData);
+
+            // 2. No more Supabase Fallback
 
             alert("Fatura marcada como Paga e correspondente Recibo criado com sucesso!");
             onRefresh();
@@ -180,15 +172,23 @@ const CreateDocumentModal = ({ type, onClose, onSuccess }: { type: 'Receipt'|'In
 
     useEffect(() => {
         const fetchProds = async () => {
-            const { data } = await supabase.from('products').select('*').order('name');
-            if (data) setProducts(data);
-        };
-        const fetchCustomers = async () => {
-            const { data } = await supabase.from('customers').select('*').order('name');
-            if (data) setCustomers(data);
+            try {
+                const hData = await hostingerService.getProducts();
+                if (hData && hData.length > 0) {
+                    setProducts(hData);
+                    return;
+                }
+            } catch (e) {}
+            // No more Supabase Fallback
         };
         fetchProds();
-        fetchCustomers();
+        const fetchCustomersData = async () => {
+            try {
+                const data = await hostingerService.fetch('clients');
+                if (data) setCustomers(data);
+            } catch (e) {}
+        };
+        fetchCustomersData();
     }, []);
 
     // Auto-fill customer details when phone changes
@@ -243,22 +243,10 @@ const CreateDocumentModal = ({ type, onClose, onSuccess }: { type: 'Receipt'|'In
             const fakeOrderId = 'MANUAL-' + Date.now();
             const shortId = Date.now().toString().slice(-5);
             
-            const { data } = await supabase.from('customers').upsert({
-                 name: customerName, 
-                 contact_no: customerPhone || `MANUAL-${shortId}`,
-                 phone: customerPhone || `MANUAL-${shortId}`,
-                 nuit: customerNuit,
-                 address: customerLocation,
-                 email: customerEmail
-            }, { onConflict: 'contact_no' }).select().single();
-            
-            const customerId = data?.id || 'manual-customer';
-            
-            // Paired document constraint
-            // If it's a paid Invoice or a Receipt, we generate Paired Document = true!
+            // 0. Customer Preparation
+            const customerId = `manual-${shortId}`;
             const isPaid = status === 'paid';
-            const shouldGeneratePaired = isPaid; // Ensures company gets Receipt and client gets Invoice if applicable
-            
+            const shouldGeneratePaired = isPaid;
             const docMetadata = {
                 customer_phone: customerPhone,
                 customer_nuit: customerNuit,
@@ -266,7 +254,22 @@ const CreateDocumentModal = ({ type, onClose, onSuccess }: { type: 'Receipt'|'In
                 customer_email: customerEmail,
             };
 
-            await generateReceipt(
+            // 1. Hostinger
+            const receiptData = {
+                id: crypto.randomUUID(),
+                receipt_no: type === 'Receipt' ? `REC-${shortId}` : `FAT-${shortId}`,
+                order_id: fakeOrderId,
+                customer_id: customerId,
+                customer_name: customerName,
+                amount: totalAmount,
+                payment_method: 'cash',
+                items: itemsFormatted,
+                status: status
+            };
+            await hostingerService.saveReceipt(receiptData);
+
+            // 2. Automated PDF & paired doc generation via Billing Service
+            await generateAndUploadReceipt(
                 fakeOrderId,
                 shortId,
                 customerId,
@@ -274,7 +277,7 @@ const CreateDocumentModal = ({ type, onClose, onSuccess }: { type: 'Receipt'|'In
                 itemsFormatted,
                 totalAmount,
                 type,
-                true, // generate PDF upload
+                true,
                 shouldGeneratePaired,
                 docMetadata
             );
@@ -461,12 +464,17 @@ export const AdminBillingView: React.FC = () => {
     const loadBillingData = async () => {
         setLoading(true);
         try {
-            let query = supabase.from('receipts').select('*').order('created_at', { ascending: false }).limit(200);
-            if (filterType !== 'All') query = query.eq('document_type', filterType);
-            
-            const { data, error } = await query;
-            if (error) throw error;
-            if (data) setReceipts(data);
+            // 1. Hostinger
+            try {
+                const hData = await hostingerService.getReceipts();
+                if (hData && hData.length > 0) {
+                    setReceipts(hData);
+                    setLoading(false);
+                    return;
+                }
+            } catch (hErr) {}
+
+            // 2. No more Supabase Fallback
         } catch (e) {
             console.error("Failed to load billing data", e);
         } finally {

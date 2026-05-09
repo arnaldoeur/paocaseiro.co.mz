@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import ReactECharts from 'echarts-for-react';
-import { supabase } from '../../services/supabase';
+import { hostingerService } from '../../services/hostingerService';
 import { Clock, Activity, Target, Zap, AlertTriangle, TrendingUp, Filter, Search, ChevronRight, CheckCircle, BrainCircuit, X, Calendar } from 'lucide-react';
 
 export const AdminPerformanceView: React.FC = () => {
@@ -30,25 +30,19 @@ export const AdminPerformanceView: React.FC = () => {
         setLoading(true);
         try {
             // Fetch users (staff) from correct table
-            const { data: userData } = await supabase.from('team_members').select('*');
-            const staffList = userData || [];
+            const staffList = await hostingerService.getTeam();
             
             // 1. Fetch Today's Orders
             const today = new Date();
             today.setHours(0,0,0,0);
-            const { data: ordersData } = await supabase
-                .from('orders')
-                .select('staff_id, status, created_at, updated_at')
-                .gte('created_at', today.toISOString());
+            const allOrders = await hostingerService.getOrders();
+            const ordersData = allOrders.filter((o: any) => new Date(o.created_at) >= today);
             
             // 2. Fetch Active Team Sessions
-            const { data: sessionsData } = await supabase
-                .from('work_sessions')
-                .select('*')
-                .order('check_in', { ascending: false });
+            const sessionsData = await hostingerService.getWorkSessions();
             
-            const activeSessions = (sessionsData || []).filter((s:any) => !s.check_out);
-            const activeStaffIds = new Set(activeSessions.map((s:any) => s.staff_id));
+            const activeSessions = (sessionsData || []).filter((s:any) => !s.check_out || s.status === 'active');
+            const activeStaffIds = new Set(activeSessions.map((s:any) => s.member_id));
 
             // Calculate Order Times
             let totalOrderTime = 0;
@@ -56,7 +50,7 @@ export const AdminPerformanceView: React.FC = () => {
             (ordersData || []).forEach((o:any) => {
                 if(o.status === 'concluido' || o.status === 'completed' || o.status === 'pronto') {
                     const created = new Date(o.created_at).getTime();
-                    const updated = new Date(o.updated_at).getTime();
+                    const updated = new Date(o.updated_at || o.created_at).getTime();
                     if(updated > created) {
                         totalOrderTime += (updated - created) / 60000; // in minutes
                         completedOrdersCount++;
@@ -67,12 +61,12 @@ export const AdminPerformanceView: React.FC = () => {
 
             // 3. Map Staff Data
             const staffWithMetrics = staffList.map((u:any) => {
-                const session = activeSessions.find((s:any) => s.staff_id === u.id);
+                const session = activeSessions.find((s:any) => s.member_id === u.id);
                 const ordersByMe = (ordersData||[]).filter((o:any) => o.staff_id === u.id).length;
                 let currentDuration = '---';
                 let checkInTime = '---';
                 if(session) {
-                    const cIn = new Date(session.check_in);
+                    const cIn = new Date(session.clock_in);
                     checkInTime = cIn.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
                     const diffMs = Date.now() - cIn.getTime();
                     const diffHrs = Math.floor(diffMs / 3600000);
@@ -92,13 +86,13 @@ export const AdminPerformanceView: React.FC = () => {
 
             // 4. Calculate Stats
             let todayHours = 0;
-            const todaySessions = (sessionsData || []).filter((s:any) => new Date(s.check_in) >= today);
+            const todaySessions = (sessionsData || []).filter((s:any) => new Date(s.clock_in) >= today);
             todaySessions.forEach((s:any) => {
                 if (s.total_hours) {
                     todayHours += parseFloat(s.total_hours.toString());
                 } else {
-                    const start = new Date(s.check_in).getTime();
-                    const stop = s.check_out ? new Date(s.check_out).getTime() : Date.now();
+                    const start = new Date(s.clock_in).getTime();
+                    const stop = s.clock_out ? new Date(s.clock_out).getTime() : Date.now();
                     todayHours += (stop - start) / 3600000;
                 }
             });
@@ -108,7 +102,7 @@ export const AdminPerformanceView: React.FC = () => {
             setStats({
                 totalHours: Math.round(todayHours),
                 activeStaff: activeStaffCount,
-                absentStaff: staffList.length - activeStaffCount,
+                absentStaff: Math.max(0, staffList.length - activeStaffCount),
                 productivityScore: activeStaffCount > 0 ? Math.min(100, Math.round(((ordersData?.length || 0) / (activeStaffCount * 10)) * 100)) : 0, 
                 avgOrderTime: avgOrderTime
             });
@@ -126,13 +120,13 @@ export const AdminPerformanceView: React.FC = () => {
                 const dayEnd = new Date(d); dayEnd.setHours(23,59,59,999);
                 let hrs = 0;
                 (sessionsData || []).forEach((s:any) => {
-                    const sDate = new Date(s.check_in);
+                    const sDate = new Date(s.clock_in);
                     if(sDate >= dayStart && sDate <= dayEnd) {
                         if (s.total_hours) {
                             hrs += parseFloat(s.total_hours.toString());
                         } else {
-                            const start = new Date(s.check_in).getTime();
-                            const stop = s.check_out ? new Date(s.check_out).getTime() : Date.now();
+                            const start = new Date(s.clock_in).getTime();
+                            const stop = s.clock_out ? new Date(s.clock_out).getTime() : Date.now();
                             hrs += (stop - start) / 3600000;
                         }
                     }
@@ -147,7 +141,8 @@ export const AdminPerformanceView: React.FC = () => {
                 series: [{ data: barData, type: 'bar', itemStyle: { color: '#d9a65a', borderRadius: [4,4,0,0] } }]
             };
 
-            const { data: weekOrders } = await supabase.from('orders').select('created_at').gte('created_at', new Date(Date.now() - 7 * 86400000).toISOString());
+            const weekAgo = new Date(Date.now() - 7 * 86400000);
+            const weekOrders = allOrders.filter((o: any) => new Date(o.created_at) >= weekAgo);
             
             const hours = Array.from({length:24}, (_,i) => `${i}h`);
             const days = ['Dom','Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -194,7 +189,7 @@ export const AdminPerformanceView: React.FC = () => {
 
             setChartData({ barOptions, heatmapOptions });
 
-            const { data: insightData } = await supabase.from('ai_insights').select('*').order('created_at', { ascending: false });
+            const insightData = await hostingerService.getAIInsights();
             if (insightData) setInsights(insightData);
             else setInsights([]);
 
@@ -245,7 +240,7 @@ export const AdminPerformanceView: React.FC = () => {
 
             // Insert into the database
             for (const ins of newInsights) {
-                await supabase.from('ai_insights').insert(ins);
+                await hostingerService.saveAIInsight(ins);
             }
 
             // Reload data

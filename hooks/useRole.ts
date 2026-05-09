@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../services/supabase';
+import { authService } from '../services/authService';
 
 export type UserRole = 'admin' | 'it' | 'staff' | 'vendas' | 'driver' | 'kitchen' | 'customer' | null;
 
@@ -13,7 +13,7 @@ export const useRole = () => {
 
     async function fetchRole() {
       try {
-        const { data: { session }, error } = await supabase.auth.getSession();
+        const { data: { session }, error } = await authService.getSession();
         
         if (error) {
            console.error('Session Error:', error);
@@ -21,10 +21,10 @@ export const useRole = () => {
 
         if (!mounted) return;
 
-        // Try getting role from Supabase Auth explicitly
+        // Try getting role from Auth explicitly
         if (session?.user) {
            setUser(session.user);
-           const appRole = session.user.app_metadata?.role as UserRole;
+           const appRole = session.user.role as UserRole;
            if (appRole) {
              setRole(appRole);
              setLoading(false);
@@ -52,11 +52,11 @@ export const useRole = () => {
 
     fetchRole();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = authService.onAuthStateChange((_event, session) => {
       if (!mounted) return;
       if (session?.user) {
          setUser(session.user);
-         const appRole = session.user.app_metadata?.role as UserRole;
+         const appRole = session.user.role as UserRole;
          if (appRole) {
             setRole(appRole);
          } else {

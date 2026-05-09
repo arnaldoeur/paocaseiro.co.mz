@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../../services/supabase';
+import { hostingerService } from '../../services/hostingerService';
 import { Mail, ShieldCheck, Search, Trash2, Download, X, MessageSquare, ShoppingBag, Loader, CalendarDays, User } from 'lucide-react';
 
 interface Subscriber {
@@ -33,24 +33,14 @@ export const AdminNewsletterView: React.FC = () => {
     const loadSubscribers = async () => {
         setLoading(true);
         try {
-            const { data: subsData, error: subsError } = await supabase
-                .from('newsletter_subscribers')
-                .select('*')
-                .order('created_at', { ascending: false });
+            const subsData = await hostingerService.getNewsletterSubscribers();
+            const customers = await hostingerService.getCustomers();
 
-            if (subsError) throw subsError;
+            const customersEmails = new Set(customers?.map((c: any) => c.email?.toLowerCase()).filter(Boolean));
 
-            const { data: custData, error: custError } = await supabase
-                .from('customers')
-                .select('email, contact_no');
-
-            if (custError) throw custError;
-
-            const customersEmails = new Set(custData?.map(c => c.email?.toLowerCase()).filter(Boolean));
-
-            const mapped: Subscriber[] = (subsData || []).map(sub => ({
+            const mapped: Subscriber[] = (subsData || []).map((sub: any) => ({
                 ...sub,
-                isClient: customersEmails.has(sub.email.toLowerCase())
+                isClient: customersEmails.has(sub.email?.toLowerCase())
             }));
 
             setSubscribers(mapped);
@@ -65,8 +55,7 @@ export const AdminNewsletterView: React.FC = () => {
         e.stopPropagation();
         if (!window.confirm(`Tem a certeza que deseja remover ${email} da newsletter?`)) return;
         try {
-            const { error } = await supabase.from('newsletter_subscribers').delete().eq('id', id);
-            if (error) throw error;
+            await hostingerService.deleteNewsletterSubscriber(id);
             setSubscribers(prev => prev.filter(s => s.id !== id));
             if (selectedSub?.id === id) setSelectedSub(null);
         } catch (error) {
@@ -107,33 +96,25 @@ export const AdminNewsletterView: React.FC = () => {
         setSubDetails({ comments: [], orders: [], loading: true });
         
         try {
-            const { data: comments } = await supabase
-                .from('blog_comments')
-                .select('content, created_at, blog_posts(title)')
-                .eq('author_email', sub.email)
-                .order('created_at', { ascending: false })
-                .limit(5);
+            const comments = await hostingerService.getBlogComments();
+            const filteredComments = (comments || []).filter((c: any) => c.author_email?.toLowerCase() === sub.email?.toLowerCase());
 
             let orders: any[] = [];
             if (sub.isClient) {
-                const { data: customerData } = await supabase
-                    .from('customers')
-                    .select('id')
-                    .eq('email', sub.email)
-                    .single();
+                const customers = await hostingerService.getCustomers();
+                const customer = customers.find((c: any) => c.email?.toLowerCase() === sub.email?.toLowerCase());
                     
-                if (customerData) {
-                    const { data: ordersData } = await supabase
-                        .from('orders')
-                        .select('id, created_at, total_amount, status')
-                        .eq('customer_id', customerData.id)
-                        .order('created_at', { ascending: false })
-                        .limit(5);
-                    orders = ordersData || [];
+                if (customer) {
+                    const ordersData = await hostingerService.getOrders({ customer_id: customer.id });
+                    orders = (ordersData || []).slice(0, 5);
                 }
             }
 
-            setSubDetails({ comments: comments || [], orders, loading: false });
+            setSubDetails({ 
+                comments: filteredComments.slice(0, 5), 
+                orders, 
+                loading: false 
+            });
         } catch (error) {
             console.error('Error fetching details:', error);
             setSubDetails(prev => ({ ...prev, loading: false }));

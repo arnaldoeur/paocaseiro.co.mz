@@ -9,10 +9,11 @@ import { AddressAutocomplete } from './AddressAutocomplete'; // Import the new c
 import { translations, Language } from '../translations';
 import { notifyTeam } from '../services/sms';
 import { NotificationService } from '../services/NotificationService';
-import { saveOrderToSupabase, supabase } from '../services/supabase';
+import { authService } from '../services/authService';
+import { hostingerService } from '../services/hostingerService';
+import { logAudit } from '../services/audit';
 import { formatProductName, getEnglishProductName } from '../services/stringUtils';
 import { ClientLoginModal } from './ClientLoginModal';
-import { logAudit } from '../services/audit';
 
 
 type CheckoutStep = 'cart' | 'details' | 'payment' | 'processing' | 'receipt';
@@ -94,12 +95,12 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
         window.addEventListener('open-cart', handleOpenCart);
         
         // Setup Auth Listeners
-        supabase.auth.getSession().then(({ data: { session } }) => {
+        authService.getSession().then(({ data: { session } }) => {
             setUser(session?.user ?? null);
         });
         setManualUserPhone(localStorage.getItem('pc_auth_phone'));
 
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+        const { data: { subscription } } = authService.onAuthStateChange((event, session) => {
             setUser(session?.user ?? null);
         });
 
@@ -421,35 +422,19 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                     }
                     phoneFormatted = '+' + phoneFormatted;
 
-                    const { data: existing } = await supabase
-                        .from('customers')
-                        .select('id')
-                        .or(`contact_no.eq."${phoneFormatted}",email.eq."${details.email}"`)
-                        .limit(1);
-
-                    if (existing && existing.length > 0) {
-                        setIsCreatingAccount(false);
-                        setError(language === 'en' ? 'This Email or Phone is already registered! Please click "Already have an account" at the top to Log In and continue your order.' : 'Este Telemóvel ou Email já está registado! Por favor clique em "Já tenho conta" no topo para fazer Log In e prosseguir com a compra.');
-                        return;
-                    }
-
-                    const { data: authData, error: authError } = await supabase.auth.signUp({
-                        email: details.email,
-                        password: checkoutPassword,
-                        options: {
-                            data: {
-                                full_name: details.name,
-                                phone: phoneFormatted
-                            }
-                        }
-                    });
+                    const { data: authData, error: authError } = await authService.signUp(
+                        details.email,
+                        checkoutPassword,
+                        details.name,
+                        phoneFormatted
+                    );
                     
                     if (authError) {
                         setIsCreatingAccount(false);
                         if (authError.message.includes('already registered')) {
                             setError(language === 'en' ? 'Email already registered. Please Log In.' : 'Este email já está registado. Por favor clique em "Já tenho conta" para fazer login.');
                         } else {
-                            setError('Erro ao criar conta: Ocorreu uma incompatibilidade na plataforma (' + authError.message + '). Tente no painel de Log In.');
+                            setError('Erro ao criar conta: ' + authError.message);
                         }
                         return;
                     }
@@ -677,8 +662,8 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
             .catch(err => console.error("Customer notification failed", err));
 
 
-        // Save to Supabase
-        const supabaseOrder = {
+        // Save to Database
+        const orderPayload = {
             short_id: orderId,
             payment_ref: refId,
             transaction_id: txId,
@@ -705,68 +690,57 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
         };
 
         // If user wants to save changes to profile
-        const userData = localStorage.getItem('pc_user_data');
-        if (saveToProfile && userData) {
-            try {
-                const user = JSON.parse(userData);
-                supabase.from('customers').update({
-                    name: details.name,
-                    contact_no: details.phone,
-                    email: details.email,
-                    whatsapp: details.whatsapp,
-                    address: details.address,
-                    street: details.street,
-                    reference_point: details.referencePoint,
-                    updated_at: new Date().toISOString()
-                }).eq('id', user.id).then(({ data: updated, error }) => {
-                    if (!error) {
-                        // Refresh local storage
-                        supabase.from('customers').select('*').eq('id', user.id).single().then(({ data }) => {
-                            if (data) {
-                                localStorage.setItem('pc_user_data', JSON.stringify(data));
-                                window.dispatchEvent(new Event('pc_user_update'));
-                            }
-                        });
-                    }
-                });
-            } catch (e) { console.error("Error updating profile during checkout", e); }
+        if (saveToProfile && user) {
+            authService.updateCurrentUser({
+                name: details.name,
+                contact_no: details.phone,
+                email: details.email,
+                whatsapp: details.whatsapp,
+                address: details.address,
+                street: details.street,
+                reference_point: details.referencePoint
+            }).catch(e => console.error("Error updating profile during checkout", e));
         }
 
-        const supabaseItems = cart.map(item => ({
+        const itemsPayload = cart.map(item => ({
             name: item.name,
             quantity: item.quantity,
             price: item.price
         }));
 
-        saveOrderToSupabase(supabaseOrder, supabaseItems)
-            .then(res => {
-                if (!res.success) {
-                    console.error("Database save failed", res.error);
-                } else {
-                    logAudit({
-                        action: 'ORDER_PLACED',
-                        entity_type: 'order',
-                        entity_id: orderId,
-                        details: { total: supabaseOrder.total_amount, method: 'online' },
-                        customer_phone: details.phone
-                    });
-                    
-                    const invoiceLink = `${window.location.origin}/order-receipt/${orderId}`;
-                    let msg = '';
+        hostingerService.saveOrder({
+            short_id: orderId,
+            customer_name: details.name,
+            customer_phone: details.phone,
+            customer_email: details.email,
+            total_amount: finalTotal,
+            delivery_type: details.type as any,
+            delivery_address: details.address,
+            notes: details.notes,
+            items: itemsPayload
+        }).then(() => {
+            logAudit({
+                action: 'ORDER_PLACED',
+                entity_type: 'order',
+                entity_id: orderId,
+                details: { total: finalTotal, method: 'online' },
+                customer_phone: details.phone
+            });
+            
+            const invoiceLink = `${window.location.origin}/order-receipt/${orderId}`;
+            let msg = '';
 
-                    if (remainingBalance > 0) {
-                        msg = `A sua Fatura PaoCaseiro gerada c/sucesso! Fatura online em: ${invoiceLink}. Aguarda pagamento do valor restante.`;
-                    } else {
-                        msg = `A sua encomenda #${orderId} foi paga c/sucesso! Consulte o Recibo da Encomenda no seu E-mail ou em: ${invoiceLink}.`;
-                    }
+            if (remainingBalance > 0) {
+                msg = `A sua Fatura PaoCaseiro gerada c/sucesso! Fatura online em: ${invoiceLink}. Aguarda pagamento do valor restante.`;
+            } else {
+                msg = `A sua encomenda #${orderId} foi paga c/sucesso! Consulte o Recibo da Encomenda no seu E-mail ou em: ${invoiceLink}.`;
+            }
 
-                    // Enforce 160 char limit
-                    msg = msg.substring(0, 160);
-                    NotificationService.sendCustomNotification(details.phone, msg)
-                        .catch(err => console.error("Invoice notification failed", err));
-                }
-            })
-            .catch(err => console.error("Database save exception", err));
+            // Enforce 160 char limit
+            msg = msg.substring(0, 160);
+            NotificationService.sendCustomNotification(details.phone, msg)
+                .catch(err => console.error("Invoice notification failed", err));
+        }).catch(err => console.error("Database save failed", err));
     };
 
     const renderStepContent = () => {

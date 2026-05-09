@@ -1,6 +1,6 @@
 import * as whatsapp from './whatsapp';
 import * as sms from './sms';
-import { supabase } from './supabase';
+import { hostingerService } from './hostingerService';
 
 /**
  * Unified Notification Service
@@ -15,7 +15,6 @@ export class NotificationService {
         const message = `Pão Caseiro: Senha ${ticket.ticket_number} - Dirija-se ao ${counter}. Bom atendimento!\nO sabor que aquece o seu coracao!`;
         
         try {
-            console.log(`[Notification] Attempting WhatsApp for ticket ${ticket.ticket_number}`);
             await whatsapp.sendWhatsAppMessage(phone, message);
             return { success: true, provider: 'whatsapp' };
         } catch (error: any) {
@@ -173,7 +172,8 @@ export class NotificationService {
     static async notifyTeam(title: string, message: string) {
         const team = {
             admin1: '258879146662',
-            admin2: '258846930960'
+            admin2: '258846930960',
+            admin3: '258876666903'
         };
 
         const fullMessage = `[PÃO CASEIRO ALERT]\n*${title}*\n\n${message}`;
@@ -181,7 +181,6 @@ export class NotificationService {
         for (const [member, phone] of Object.entries(team)) {
             if (!phone) continue;
             try {
-                console.log(`[Notification] Broadcasting to ${member} (${phone})`);
                 await this.sendCustomNotification(phone, fullMessage);
             } catch (err) {
                 console.error(`[Notification] Failed broadcast to ${member}:`, err);
@@ -194,25 +193,14 @@ export class NotificationService {
      */
     static async logSystemEvent(title: string, message: string, type: 'ORDER' | 'SUPPORT' | 'TICKET' | 'SYSTEM' | 'USER' = 'SYSTEM', level: 'info' | 'success' | 'warning' | 'error' = 'info', userId?: string) {
         try {
-            // Log to the new actionable notifications table
-            await supabase.from('notifications').insert([{
+            await hostingerService.saveNotification({
                 type: type.toLowerCase(),
                 title,
                 message,
                 entity_id: userId,
                 link: this.getLinkForType(type, userId),
                 read: false
-            }]);
-
-            // Legacy log also for audit trail (optional but keeping for now)
-            await supabase.from('system_logs').insert([{
-                title,
-                message,
-                type,
-                level,
-                user_id: userId,
-                read: false
-            }]);
+            });
 
             // Auto-broadcast high priority events to team
             if (type === 'SUPPORT' || type === 'USER' || (type === 'ORDER' && level === 'error')) {
@@ -253,11 +241,10 @@ export class NotificationService {
         link?: string 
     }) {
         try {
-            const { error } = await supabase.from('notifications').insert([{
+            await hostingerService.saveNotification({
                 ...data,
                 read: false
-            }]);
-            if (error) throw error;
+            });
             return { success: true };
         } catch (error: any) {
             console.error(`[Notification] createNotification failed:`, error.message);

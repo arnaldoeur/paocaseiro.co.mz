@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, MessageCircle, Sparkles, Loader, Trash2, Clock, Plus, ChevronRight, Menu, X, ChevronLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { supabase } from '../services/supabase';
+
 
 // OpenRouter API Configuration
 const OPENROUTER_API_KEY = (import.meta as any).env.VITE_OPENROUTER_API_KEY || "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";

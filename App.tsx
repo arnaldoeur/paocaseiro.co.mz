@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { supabase } from './services/supabase';
+import { hostingerService } from './services/hostingerService';
 import OneSignal from 'react-onesignal';
 import { Navbar } from './components/Navbar';
 import { Footer } from './components/Footer';
@@ -23,7 +23,6 @@ const ITSupport = React.lazy(() => import('./pages/ITSupport').then(module => ({
 const Delivery = React.lazy(() => import('./pages/Delivery').then(module => ({ default: module.Delivery })));
 const Kitchen = React.lazy(() => import('./pages/Kitchen').then(module => ({ default: module.Kitchen })));
 const OrderReceipt = React.lazy(() => import('./pages/OrderReceipt').then(module => ({ default: module.OrderReceipt })));
-const Seeder = React.lazy(() => import('./Seeder').then(module => ({ default: module.Seeder })));
 const Privacy = React.lazy(() => import('./pages/Privacy').then(module => ({ default: module.Privacy })));
 const Terms = React.lazy(() => import('./pages/Terms').then(module => ({ default: module.Terms })));
 const TVDisplay = React.lazy(() => import('./pages/TVDisplay').then(module => ({ default: module.TVDisplay })));
@@ -105,30 +104,19 @@ const MaintenanceGuard: React.FC<{ children: React.ReactNode, language: Language
       try {
         setDebugStatus("Verificando ligação...");
         if (!navigator.onLine) {
-            console.log("App is currently offline. Skipping maintenance check.");
-            setLoading(false);
-            return;
-        }
-
-        if (!supabase || !supabase.from) {
-            console.warn("Supabase client not initialized correctly.");
+            
             setLoading(false);
             return;
         }
 
         setDebugStatus("Lendo definições de sistema...");
-        const { data, error } = await supabase.from('system_settings').select('key, value').in('key', ['maintenance_mode', 'panic_mode', 'whatsapp_menu_mode']);
+        const data = await hostingerService.getSystemSettings();
 
-        if (error) {
-            console.warn("Could not fetch maintenance status:", error.message);
-            setLoading(false);
-            return;
-        }
-
-        if (data) {
-          const maint = data.find(d => d.key === 'maintenance_mode');
-          const panic = data.find(d => d.key === 'panic_mode');
-          const waOnly = data.find(d => d.key === 'whatsapp_menu_mode');
+        if (data && Array.isArray(data)) {
+          const maint = data.find((d: any) => d.key === 'maintenance_mode');
+          const panic = data.find((d: any) => d.key === 'panic_mode');
+          const waOnly = data.find((d: any) => d.key === 'whatsapp_menu_mode');
+          
           setIsMaintenance(maint?.value?.active === true);
           setIsPanic(panic?.value?.active === true);
           setIsWAOnly(waOnly?.value?.active === true);
@@ -140,7 +128,7 @@ const MaintenanceGuard: React.FC<{ children: React.ReactNode, language: Language
       clearTimeout(safetyTimeout);
     };
     checkStatus();
-    const interval = setInterval(checkStatus, 30000); // check every 30s
+    const interval = setInterval(checkStatus, 60000); // check every 60s
     return () => {
       clearInterval(interval);
       clearTimeout(safetyTimeout);
@@ -281,8 +269,24 @@ const LoadingFallback = () => (
   </div>
 );
 
+const RouteObserver: React.FC<{ language: Language, setLanguage: (l: Language) => void }> = ({ language, setLanguage }) => {
+  const location = useLocation();
+  useEffect(() => {
+    const isEn = location.pathname === '/en' || location.pathname.startsWith('/en/');
+    if (isEn && language !== 'en') {
+      setLanguage('en');
+      localStorage.setItem('app_language', 'en');
+    } else if (!isEn && language === 'en' && !location.pathname.startsWith('/admin') && !location.pathname.startsWith('/it') && !location.pathname.startsWith('/kitchen')) {
+      setLanguage('pt');
+      localStorage.setItem('app_language', 'pt');
+    }
+  }, [location.pathname]);
+  return null;
+};
+
 const App: React.FC = () => {
   const [language, setLanguage] = useState<Language>(() => {
+    // We let RouteObserver handle the actual source of truth for paths, but initialize from localStorage
     const saved = localStorage.getItem('app_language');
     return (saved as Language) || 'pt';
   });
@@ -295,7 +299,7 @@ const App: React.FC = () => {
           allowLocalhostAsSecureOrigin: true,
           notifyButton: {
             enable: true,
-          },
+          } as any,
         });
         OneSignal.Slidedown.promptPush();
       } catch (error) {
@@ -306,14 +310,30 @@ const App: React.FC = () => {
   }, []);
 
   const toggleLanguage = () => {
-    const newLang = language === 'pt' ? 'en' : 'pt';
-    setLanguage(newLang);
-    localStorage.setItem('app_language', newLang);
+    const current = window.location.pathname;
+    let newPath = '';
+    
+    if (current.startsWith('/en')) {
+      // Switch EN -> PT
+      newPath = current.replace('/en', '');
+      if (newPath === '/privacy') newPath = '/privacidade';
+      if (newPath === '/terms') newPath = '/termos';
+      if (newPath === '') newPath = '/';
+    } else {
+      // Switch PT -> EN
+      if (current === '/') newPath = '/en';
+      else if (current === '/privacidade') newPath = '/en/privacy';
+      else if (current === '/termos') newPath = '/en/terms';
+      else newPath = '/en' + current;
+    }
+    
+    window.location.href = newPath;
   };
 
   return (
     <CartProvider>
       <Router>
+        <RouteObserver language={language} setLanguage={setLanguage} />
         <RouteMetadata language={language} />
         <ScrollToTop />
         <div className="min-h-screen bg-[#f7f1eb] text-[#3b2f2f] font-sans">
@@ -329,13 +349,13 @@ const App: React.FC = () => {
                   <Route path="/tv-display" element={<TVDisplay />} />
                   <Route path="/get-ticket" element={<GetTicket language={language} />} />
                   <Route path="/tv-senhas" element={<TVTickets language={language} />} />
-                  <Route path="/seed" element={<Seeder />} />
 
                   {/* Main Website Pages */}
                   <Route path="/*" element={
                     <>
                       <Navbar language={language} toggleLanguage={toggleLanguage} />
                       <Routes>
+                        {/* PT Routes */}
                         <Route path="/" element={<Home language={language} />} />
                         <Route path="/menu" element={<Menu language={language} />} />
                         <Route path="/gallery" element={<Gallery language={language} />} />
@@ -345,7 +365,17 @@ const App: React.FC = () => {
                         <Route path="/dashboard" element={<ClientDashboard language={language} />} />
                         <Route path="/privacidade" element={<Privacy language={language} />} />
                         <Route path="/termos" element={<Terms language={language} />} />
-                        {/* Add other main routes here */}
+                        
+                        {/* EN Routes */}
+                        <Route path="/en" element={<Home language="en" />} />
+                        <Route path="/en/menu" element={<Menu language="en" />} />
+                        <Route path="/en/gallery" element={<Gallery language="en" />} />
+                        <Route path="/en/blog" element={<Blog language="en" />} />
+                        <Route path="/en/blog/:slug" element={<BlogPost language="en" />} />
+                        <Route path="/en/order-receipt/:orderId" element={<OrderReceipt />} />
+                        <Route path="/en/dashboard" element={<ClientDashboard language="en" />} />
+                        <Route path="/en/privacy" element={<Privacy language="en" />} />
+                        <Route path="/en/terms" element={<Terms language="en" />} />
                       </Routes>
                       <Footer language={language} />
                       <Cart language={language} />

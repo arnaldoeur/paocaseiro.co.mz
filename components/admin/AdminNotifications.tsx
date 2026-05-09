@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { supabase } from '../../services/supabase';
+import { hostingerService } from '../../services/hostingerService';
 import { Bell, ShoppingBag, MessageSquare, Ticket, Settings, Info, AlertTriangle, CheckCircle, Clock, Users } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -28,16 +28,9 @@ export const AdminNotifications: React.FC = () => {
 
     const fetchNotifications = async () => {
         try {
-            // Fetch from the unified notifications table
-            const { data, error } = await supabase
-                .from('notifications')
-                .select('*')
-                .order('created_at', { ascending: false })
-                .limit(50);
-
-            if (error) throw error;
+            const data = await hostingerService.getNotifications();
             setNotifications(data || []);
-            setUnreadCount(data?.filter(n => !n.read).length || 0);
+            setUnreadCount(data?.filter((n: any) => !n.read).length || 0);
         } catch (err) {
             console.error("Error fetching notifications:", err);
         } finally {
@@ -47,29 +40,15 @@ export const AdminNotifications: React.FC = () => {
 
     useEffect(() => {
         fetchNotifications();
-
-        // Subscribe to real-time changes on the notifications table
-        const subscription = supabase
-            .channel('notifications_channel')
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, (payload) => {
-                const newNotification = payload.new as SystemNotification;
-                setNotifications(prev => [newNotification, ...prev].slice(0, 50));
-                setUnreadCount(c => c + 1);
-                
-                if (soundEnabled && audioRef.current) {
-                    audioRef.current.play().catch(e => console.warn("Audio play blocked:", e));
-                }
-            })
-            .subscribe();
-
-        return () => {
-            subscription.unsubscribe();
-        };
-    }, [soundEnabled]);
+        
+        // Polling as bridge doesn't support real-time yet
+        const interval = setInterval(fetchNotifications, 30000); // 30s
+        return () => clearInterval(interval);
+    }, []);
 
     const markAsRead = async (id: string) => {
         try {
-            await supabase.from('notifications').update({ read: true }).eq('id', id);
+            await hostingerService.markNotificationRead(id);
             setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
             setUnreadCount(c => Math.max(0, c - 1));
         } catch (err) {
@@ -79,7 +58,7 @@ export const AdminNotifications: React.FC = () => {
 
     const markAllRead = async () => {
         try {
-            await supabase.from('notifications').update({ read: true }).eq('read', false);
+            await hostingerService.markAllNotificationsRead();
             setNotifications(prev => prev.map(n => ({ ...n, read: true })));
             setUnreadCount(0);
         } catch (err) {

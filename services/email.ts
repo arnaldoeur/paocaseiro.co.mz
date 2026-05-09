@@ -1,10 +1,7 @@
-// services/email.ts
 import { formatProductName } from './stringUtils';
-import { supabase } from './supabase';
-import { NotificationService } from './NotificationService';
 
 /**
- * Service to handle Email notifications via Resend API (routed through Supabase Edge Function)
+ * Service to handle Email notifications via Resend API (routed through Hostinger Bridge)
  */
 
 const DEFAULT_FROM = 'Pão Caseiro <sistema@paocaseiro.co.mz>';
@@ -31,119 +28,40 @@ const brandedEmailLayout = (content: string) => `
     </div>
 `;
 
+import { hostingerService } from './hostingerService';
+
 /**
- * Send an email using the Resend API via Supabase Edge Function.
+ * Send an email using the Resend API via Hostinger Bridge.
  */
 export const sendEmail = async (to: string[], subject: string, html: string, replyTo?: string, fromOverride?: string, bcc: string[] = [], attachments: any[] = []) => {
     try {
-        // Automatically CC the bakery on all platform dispatch emails so they never miss anything
-        const finalBcc = Array.from(new Set([...bcc, 'geral@paocaseiro.co.mz']));
-
         const payload: any = {
-            from: fromOverride || DEFAULT_FROM,
             to,
             subject,
-            html: brandedEmailLayout(html),
-            bcc: finalBcc
+            html: brandedEmailLayout(html)
         };
 
-        if (replyTo) {
-            payload.reply_to = replyTo;
-        }
-        if (attachments && attachments.length > 0) {
-            payload.attachments = attachments;
-        }
+        if (replyTo) payload.reply_to = replyTo;
+        if (fromOverride) payload.from = fromOverride;
+        if (bcc && bcc.length > 0) payload.bcc = bcc;
+        if (attachments && attachments.length > 0) payload.attachments = attachments;
 
-        const { data, error } = await supabase.functions.invoke('notify-email', {
-            body: payload
-        });
+        const data = await hostingerService.fetch('send_email', payload);
 
-        // 403 Forbidden specifically indicates domain verification issues in Resend
-        if (error || (data && (data.statusCode === 403 || data.error?.includes('403') || data.code === 403))) {
-            const err = error || new Error(data.message || 'Resend: Domain Verification Required (403)');
-            console.error('❌ [EMAIL SERVICE] Critical Failure:', err);
-            
-            // Log actionable system event for admin visibility
-            NotificationService.logSystemEvent(
-                'Falha Crítica no Email',
-                'O domínio "paocaseiro.co.mz" não está verificado no Resend (Erro 403). Por favor, configure as entradas DNS.',
-                'SYSTEM',
-                'error'
-            ).catch(e => console.error("Failed to log system notification:", e));
-
-            // Update system settings to reflect critical error
-            supabase.from('system_settings')
-                .upsert({ key: 'email_status', value: { mode: 'error', last_checked: new Date().toISOString() } })
-                .catch(e => console.error("Failed to update email status:", e));
-
-            throw err;
-        }
-
-        // Check for sandbox flag from the Edge Function
-        if (data && data._fallback) {
-            console.warn('⚠️ [EMAIL SERVICE] Sandbox Mode Active: Delivery may be limited to the account owner.');
-            
-            // Periodically log sandbox reminder if not already noted today? 
-            // For now just update the status setting
-            supabase.from('system_settings')
-                .upsert({ key: 'email_status', value: { mode: 'sandbox', last_checked: new Date().toISOString() } })
-                .catch(e => console.error("Failed to update email status:", e));
-        } else if (data && !data.error) {
-            // Success mode
-            supabase.from('system_settings')
-                .upsert({ key: 'email_status', value: { mode: 'production', last_checked: new Date().toISOString() } })
-                .catch(e => console.error("Failed to update email status:", e));
-        }
-
-        const responseData = data;
-        console.log('Email sent successfully:', responseData);
-
-        // --- Asynchronous Logging of Communication ---
-        Promise.resolve().then(async () => {
-            try {
-                // Defensive check: Query the 'system_settings' table for pricing.
-                const { data: pricingData } = await supabase
-                    .from('system_settings')
-                    .select('value')
-                    .eq('key', 'sms_pricing')
-                    .maybeSingle();
-
-                const pricing = pricingData?.value || { cost_per_email: 0.05 };
-                const cost = pricing.cost_per_email || 0.05;
-
-                await supabase.from('sms_logs').insert([{
-                    type: 'email',
-                    recipient: to.join(', '),
-                    content: subject, // Log the subject as content
-                    status: 'sent',
-                    cost: cost
-                }]);
-            } catch (e) {
-                console.error("[Email Log Async Error]", e);
-            }
-        });
+        // Log to local DB
+        hostingerService.logNotification('email', to.join(', '), subject, 'sent')
+            .catch(e => console.error('[Email Log Error]', e));
 
         return { success: true, data };
     } catch (error: any) {
         console.error('Email service error:', error);
-        Promise.resolve().then(async () => {
-            await supabase.from('sms_logs').insert([{
-                type: 'email',
-                recipient: to.join(', '),
-                content: subject,
-                status: 'error',
-                cost: 0
-            }]);
-            
-            // Log to Notification Center for visibility
-            await NotificationService.logSystemEvent(
-                "Falha no Envio de Email", 
-                `Não foi possível enviar email para ${to[0]}. Assunto: ${subject}. Erro: ${error.message}`, 
-                'SYSTEM', 
-                'error'
-            );
-        }).catch(() => { });
-        return { success: false, error: error.message };
+        
+        // Log error to local DB
+        hostingerService.logNotification('email', to.join(', '), error.message, 'error')
+            .catch(e => console.error('[Email Log Error]', e));
+
+        // Re-throw to allow callers (like UI components) to handle the error
+        throw error;
     }
 };
 
@@ -216,6 +134,34 @@ export const sendOrderConfirmationEmail = async (order: any, items: any[]) => {
         `Pedido #${order.short_id || order.id.slice(-6).toUpperCase()} - Pão Caseiro`,
         html
     );
+};
+
+/**
+ * Password Reset Email for Customers
+ */
+export const sendPasswordResetEmail = async (email: string, name: string, newPassword: string) => {
+    const html = `
+        <h2 style="color: #3b2f2f; text-align: center;">Redefinição de Senha</h2>
+        <p>Olá, <strong>${name}</strong>!</p>
+        <p>A sua palavra-passe de acesso ao portal da Pão Caseiro foi redefinida com sucesso conforme solicitado.</p>
+        
+        <div style="background-color: #fcfbf9; padding: 25px; border-radius: 12px; margin: 25px 0; text-align: center; border: 1px solid #d9a65a;">
+            <p style="margin: 0; color: #888; font-size: 12px; text-transform: uppercase; font-weight: bold;">Nova Palavra-passe</p>
+            <h3 style="margin: 10px 0; color: #3b2f2f; font-size: 28px; letter-spacing: 3px;">${newPassword}</h3>
+        </div>
+
+        <p style="text-align: center;">Recomendamos que altere a sua senha após o primeiro acesso para garantir a segurança da sua conta.</p>
+
+        <div style="text-align: center; margin: 30px 0;">
+            <a href="${window.location.origin}/login" style="background-color: #3b2f2f; color: #d9a65a; padding: 15px 30px; text-decoration: none; border-radius: 30px; font-weight: bold; display: inline-block;">ENTRAR NA CONTA</a>
+        </div>
+
+        <p style="font-size: 12px; color: #999; text-align: center; margin-top: 20px;">
+            Se não solicitou esta alteração, por favor contacte a nossa equipa de suporte imediatamente.
+        </p>
+    `;
+
+    return sendEmail([email], 'Nova Palavra-passe - Pão Caseiro', html);
 };
 
 /**
@@ -584,4 +530,63 @@ export const sendPresentationEmail = async (name: string, userEmail: string) => 
     `;
 
     return sendEmail([userEmail], 'Descubra a Tradição da Pão Caseiro', html);
+};
+
+/**
+ * Birthday Celebration Email
+ */
+export const sendBirthdayEmail = async (email: string, name: string) => {
+    const html = `
+        <div style="text-align: center;">
+            <h1 style="color: #d9a65a; font-size: 32px;">Feliz Aniversário! 🎂</h1>
+            <p style="font-size: 18px; color: #3b2f2f;">Olá, <strong>${name}</strong>!</p>
+            <p>Hoje é um dia especial e a equipa da Pão Caseiro não quis deixar passar em branco.</p>
+            
+            <div style="background-color: #ffffff; padding: 30px; border-radius: 20px; margin: 30px 0; border: 2px solid #f7f1eb;">
+                <p style="font-size: 16px; margin-bottom: 20px;">Para celebrar o seu dia, temos um presente para si:</p>
+                <div style="background-color: #3b2f2f; color: #d9a65a; padding: 20px; border-radius: 12px; display: inline-block;">
+                    <p style="margin: 0; font-size: 12px; text-transform: uppercase;">Use o Cupão:</p>
+                    <h2 style="margin: 5px 0; font-size: 24px; letter-spacing: 5px;">BDAY-PC2026</h2>
+                    <p style="margin: 5px 0 0; font-size: 14px;"><strong>15% DESCONTO</strong> no seu próximo pedido</p>
+                </div>
+            </div>
+
+            <p>Esperamos que o seu dia seja repleto de doçura e momentos inesquecíveis.</p>
+            
+            <div style="text-align: center; margin-top: 30px;">
+                <a href="${window.location.origin}/menu" style="background-color: #d9a65a; color: #3b2f2f; padding: 15px 30px; text-decoration: none; border-radius: 30px; font-weight: bold; display: inline-block;">ESCOLHER O MEU BOLO</a>
+            </div>
+        </div>
+    `;
+
+    return sendEmail([email], `Parabéns, ${name}! 🎈 Temos um presente para si`, html);
+};
+
+/**
+ * New Product Notification (Broadcast)
+ */
+export const sendNewProductNotification = async (emails: string[], product: any) => {
+    const html = `
+        <div style="text-align: center; margin-bottom: 20px;">
+            <span style="background-color: #d9a65a; color: #3b2f2f; padding: 5px 15px; border-radius: 20px; font-weight: bold; font-size: 12px; text-transform: uppercase;">NOVIDADE NO MENU</span>
+        </div>
+        <h2 style="color: #3b2f2f; text-align: center;">Temos um novo sabor para si!</h2>
+        
+        <div style="background-color: #ffffff; border-radius: 16px; overflow: hidden; margin: 30px 0; border: 1px solid #eee;">
+            ${product.image ? `<img src="${product.image}" alt="${product.name}" style="width: 100%; height: 250px; object-cover: cover;">` : ''}
+            <div style="padding: 25px;">
+                <h3 style="margin: 0; color: #3b2f2f; font-size: 22px;">${product.name}</h3>
+                <p style="color: #666; margin: 15px 0;">${product.description || 'Uma nova delícia artesanal acaba de chegar à nossa vitrine. Venha provar enquanto está quentinho!'}</p>
+                <p style="color: #d9a65a; font-size: 20px; font-weight: bold; margin: 0;">Apenas ${product.price} MT</p>
+            </div>
+        </div>
+
+        <div style="text-align: center; margin: 30px 0;">
+            <a href="${window.location.origin}/menu" style="background-color: #3b2f2f; color: #d9a65a; padding: 15px 30px; text-decoration: none; border-radius: 30px; font-weight: bold; display: inline-block;">ENCOMENDAR AGORA</a>
+        </div>
+
+        <p style="text-align: center; color: #999; font-size: 12px;">Fique atento às nossas novidades semanais!</p>
+    `;
+
+    return sendEmail(emails, `Novidade: Conheça o nosso novo ${product.name}! 🥖`, html);
 };

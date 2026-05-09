@@ -1,62 +1,28 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { supabase } from '../services/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
+import { hostingerService } from '../services/hostingerService';
 
 export const TVDisplay: React.FC = () => {
     const [orders, setOrders] = useState<any[]>([]);
 
     useEffect(() => {
         const fetchOrders = async () => {
-            const { data } = await supabase
-                .from('orders')
-                .select('id, short_id, status, created_at')
-                .in('status', ['kitchen', 'processing', 'ready'])
-                .order('created_at', { ascending: true });
-            
-            if (data) setOrders(data);
+            try {
+                // In Hostinger MySQL, we use getOrders with specific statuses
+                const data = await hostingerService.getOrders({ 
+                    statuses: ['kitchen', 'processing', 'ready'],
+                    limit: 50 
+                });
+                if (data) setOrders(data);
+            } catch (err) {
+                console.error("TVDisplay: Error fetching orders:", err);
+            }
         };
 
         fetchOrders();
-
-        const channel = supabase
-            .channel('tv-display-orders')
-            .on(
-                'postgres_changes',
-                {
-                    event: '*',
-                    schema: 'public',
-                    table: 'orders'
-                },
-                (payload) => {
-                    const newOrder = payload.new as any;
-                    const oldOrder = payload.old as any;
-                    
-                    if (payload.eventType === 'INSERT') {
-                        if (['kitchen', 'processing', 'ready'].includes(newOrder.status)) {
-                            setOrders(prev => [...prev, newOrder]);
-                        }
-                    } else if (payload.eventType === 'UPDATE') {
-                        if (['kitchen', 'processing', 'ready'].includes(newOrder.status)) {
-                            // Either insert or update
-                            setOrders(prev => {
-                                const exists = prev.find(o => o.id === newOrder.id);
-                                if (exists) return prev.map(o => o.id === newOrder.id ? newOrder : o);
-                                return [...prev, newOrder];
-                            });
-                        } else {
-                            // Remove if it changed to e.g., 'completed', 'delivering', 'cancelled'
-                            setOrders(prev => prev.filter(o => o.id !== newOrder.id));
-                        }
-                    } else if (payload.eventType === 'DELETE') {
-                        setOrders(prev => prev.filter(o => o.id !== oldOrder.id));
-                    }
-                }
-            )
-            .subscribe();
-
-        return () => {
-            supabase.removeChannel(channel);
-        };
+        // Set up polling (Hostinger backend doesn't support WebSocket real-time yet)
+        const interval = setInterval(fetchOrders, 8000);
+        return () => clearInterval(interval);
     }, []);
 
     // Filter for today's orders (24h Reset)

@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../../services/supabase';
-import { logAudit } from '../../services/audit';
+import { hostingerService } from '../../services/hostingerService';
 import { 
     Folder, 
     File, 
@@ -51,47 +50,18 @@ export const AdminDriveView: React.FC = () => {
         setLoading(true);
         try {
             // Load folders
-            let folderQuery = supabase.from('drive_folders').select('*').order('name', { ascending: true });
-            
-            if (currentFolderId) {
-                folderQuery = folderQuery.eq('parent_id', currentFolderId);
-            } else {
-                folderQuery = folderQuery.is('parent_id', null);
+            const folderResponse = await hostingerService.getDriveFolders(currentFolderId);
+            if (folderResponse.success) {
+                setFolders(folderResponse.data || []);
             }
-            
-            const { data: folderData, error: folderError } = await folderQuery;
-            if (folderError) throw folderError;
 
             // Load files
-            let fileQuery = supabase.from('drive_files').select(`*`).order('created_at', { ascending: false });
-
-            if (currentFolderId) {
-                fileQuery = fileQuery.eq('folder_id', currentFolderId);
-            } else {
-                fileQuery = fileQuery.is('folder_id', null);
+            const fileResponse = await hostingerService.getDriveFiles(currentFolderId);
+            if (fileResponse.success) {
+                setFiles(fileResponse.data || []);
             }
-
-            const { data: fileData, error: fileError } = await fileQuery;
-            if (fileError) throw fileError;
-
-            if (!currentFolderId && folderData && folderData.length === 0 && fileData && fileData.length === 0) {
-                // Auto create initial folder based on user request
-                const { data: newFolder } = await supabase.from('drive_folders').insert({
-                    name: 'Pão Caseiro',
-                    parent_id: null
-                }).select().single();
-                
-                if (newFolder) {
-                    setFolders([newFolder]);
-                }
-            } else {
-                setFolders(folderData || []);
-            }
-            
-            setFiles(fileData || []);
         } catch (error) {
             console.error("Error loading drive contents:", error);
-            // Fallback for robust initialization if table missing
         } finally {
             setLoading(false);
         }
@@ -102,16 +72,17 @@ export const AdminDriveView: React.FC = () => {
         if (!newFolderName.trim()) return;
 
         try {
-            const { error } = await supabase.from('drive_folders').insert({
-                name: newFolderName.trim(),
-                parent_id: currentFolderId
-            });
-
-            if (error) throw error;
-            setNewFolderName('');
-            setIsCreateFolderModalOpen(false);
-            loadDriveContents();
-            await logAudit({ action: 'CREATE_FOLDER', entity_type: 'file', details: { folder_name: newFolderName.trim() } });
+            const response = await hostingerService.saveDriveFolder(newFolderName.trim(), currentFolderId);
+            if (response.success) {
+                setNewFolderName('');
+                setIsCreateFolderModalOpen(false);
+                loadDriveContents();
+                await hostingerService.saveAuditLog({ 
+                    action: 'CREATE_FOLDER', 
+                    entity_type: 'file', 
+                    details: { folder_name: newFolderName.trim() } 
+                });
+            }
         } catch (error: any) {
             alert('Erro ao criar pasta: ' + error.message);
         }
@@ -125,33 +96,13 @@ export const AdminDriveView: React.FC = () => {
         try {
             for (let i = 0; i < uploaderFiles.length; i++) {
                 const file = uploaderFiles[i];
-                const fileExt = file.name.split('.').pop();
-                const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-                const pathName = `z_drive/${Date.now()}_${safeName}`;
-                
-                // Upload to Supabase Storage (assuming bucket "products")
-                const { error: uploadError } = await supabase.storage.from('products').upload(pathName, file);
-                
-                if (uploadError) {
-                    console.error("Upload Error:", uploadError);
-                    continue;
-                }
-                
-                // Get URL
-                const { data: urlData } = supabase.storage.from('products').getPublicUrl(pathName);
-                
-                // Register in drive_files table
-                await supabase.from('drive_files').insert({
-                    name: file.name,
-                    path: pathName,
-                    size: file.size,
-                    type: file.type || 'application/octet-stream',
-                    folder_id: currentFolderId,
-                    uploaded_by: 'admin'
+                await hostingerService.uploadDriveFile(file, currentFolderId);
+                await hostingerService.saveAuditLog({ 
+                    action: 'UPLOAD_FILE', 
+                    entity_type: 'file', 
+                    details: { file_name: file.name, size: file.size } 
                 });
-                await logAudit({ action: 'UPLOAD_FILE', entity_type: 'file', details: { file_name: file.name, size: file.size } });
             }
-            
             loadDriveContents();
         } catch (error: any) {
             alert('Erro ao carregar ficheiro: ' + error.message);
@@ -165,23 +116,19 @@ export const AdminDriveView: React.FC = () => {
         if (!confirm('Deseja eliminar este ficheiro permanentemente?')) return;
         
         try {
-            // First DB Record
-            const { error: dbError } = await supabase.from('drive_files').delete().eq('id', fileId);
-            if (dbError) throw dbError;
-            
-            // Then Storage
-            if (storagePath) {
-                const { error: storageError } = await supabase.storage.from('products').remove([storagePath]);
-                if (storageError) console.error("Storage delete error:", storageError);
+            const response = await hostingerService.deleteDriveFile(fileId);
+            if (response.success) {
+                if (selectedFile?.id === fileId) {
+                    setSelectedFile(null);
+                }
+                await hostingerService.saveAuditLog({ 
+                    action: 'DELETE_FILE', 
+                    entity_type: 'file', 
+                    entity_id: fileId, 
+                    details: { path: storagePath } 
+                });
+                loadDriveContents();
             }
-            
-            // If the selected file in preview is the one being deleted, close it
-            if (selectedFile?.id === fileId) {
-                setSelectedFile(null);
-            }
-            
-            await logAudit({ action: 'DELETE_FILE', entity_type: 'file', entity_id: fileId, details: { path: storagePath } });
-            loadDriveContents();
         } catch (error: any) {
             alert('Erro ao eliminar este ficheiro: ' + error.message);
         }
@@ -192,22 +139,17 @@ export const AdminDriveView: React.FC = () => {
         if (!confirm(`Deseja eliminar permanentemente os ${selectedFileIds.length} ficheiros selecionados?`)) return;
         
         try {
-            const filesToDelete = files.filter(f => selectedFileIds.includes(f.id));
-            const storagePaths = filesToDelete.map(f => f.path).filter(Boolean);
-
-            // DB Records
-            const { error: dbError } = await supabase.from('drive_files').delete().in('id', selectedFileIds);
-            if (dbError) throw dbError;
-
-            // Storage
-            if (storagePaths.length > 0) {
-                const { error: storageError } = await supabase.storage.from('products').remove(storagePaths);
-                if (storageError) console.error("Bulk storage delete error:", storageError);
+            for (const id of selectedFileIds) {
+                await hostingerService.deleteDriveFile(id);
             }
 
             setSelectedFileIds([]);
             setIsSelectMode(false);
-            await logAudit({ action: 'BULK_DELETE_FILES', entity_type: 'file', details: { count: selectedFileIds.length } });
+            await hostingerService.saveAuditLog({ 
+                action: 'BULK_DELETE_FILES', 
+                entity_type: 'file', 
+                details: { count: selectedFileIds.length } 
+            });
             loadDriveContents();
         } catch (error: any) {
             alert('Erro ao eliminar ficheiros: ' + error.message);
@@ -226,13 +168,12 @@ export const AdminDriveView: React.FC = () => {
         if (!confirm('Deseja eliminar esta pasta permanentemente? Quaisquer ficheiros associados serão perdidos e não podem ser recuperados.')) return;
         
         try {
-            // Delete the folder record (requires CASCADE on foreign keys or empty folder enforcement in DB)
-            const { error } = await supabase.from('drive_folders').delete().eq('id', folderId);
-            if (error) throw error;
-            
-            loadDriveContents();
+            const response = await hostingerService.deleteDriveFolder(folderId);
+            if (response.success) {
+                loadDriveContents();
+            }
         } catch (error: any) {
-            alert('Aviso: Certifique-se que a pasta está vazia antes de a eliminar. Erro detalhado: ' + error.message);
+            alert('Erro ao eliminar pasta: ' + error.message);
         }
     };
 
@@ -242,9 +183,10 @@ export const AdminDriveView: React.FC = () => {
         if (!newName || newName.trim() === currentName) return;
         
         try {
-            const { error } = await supabase.from('drive_folders').update({ name: newName.trim() }).eq('id', folderId);
-            if (error) throw error;
-            loadDriveContents();
+            const response = await hostingerService.saveDriveFolder(newName.trim(), null, folderId);
+            if (response.success) {
+                loadDriveContents();
+            }
         } catch (error: any) {
             alert('Erro ao renomear pasta: ' + error.message);
         }
@@ -255,12 +197,20 @@ export const AdminDriveView: React.FC = () => {
         const newName = prompt('Introduza o novo nome para este ficheiro (não esqueça da extensão, ex: .png):', currentName);
         if (!newName || newName.trim() === currentName) return;
         try {
-            const { error } = await supabase.from('drive_files').update({ name: newName.trim() }).eq('id', fileId);
-            if (error) throw error;
-            if (selectedFile?.id === fileId) setSelectedFile({...selectedFile, name: newName.trim()});
-            loadDriveContents();
-            await logAudit({ action: 'RENAME_FILE', entity_type: 'file', entity_id: fileId, details: { new_name: newName } });
-        } catch (error) {
+            const file = files.find(f => f.id === fileId);
+            if (!file) return;
+            const response = await hostingerService.saveDriveFile({ ...file, name: newName.trim() });
+            if (response.success) {
+                if (selectedFile?.id === fileId) setSelectedFile({...selectedFile, name: newName.trim()});
+                loadDriveContents();
+                await hostingerService.saveAuditLog({ 
+                    action: 'RENAME_FILE', 
+                    entity_type: 'file', 
+                    entity_id: fileId, 
+                    details: { new_name: newName } 
+                });
+            }
+        } catch (error: any) {
             alert('Erro ao renomear ficheiro: ' + error.message);
         }
     };
@@ -277,7 +227,11 @@ export const AdminDriveView: React.FC = () => {
             a.click();
             document.body.removeChild(a);
             window.URL.revokeObjectURL(blobUrl);
-            await logAudit({ action: 'DOWNLOAD_FILE', entity_type: 'file', details: { file_name: filename } });
+            await hostingerService.saveAuditLog({ 
+                action: 'DOWNLOAD_FILE', 
+                entity_type: 'file', 
+                details: { file_name: filename } 
+            });
         } catch(e) {
             window.open(url, '_blank');
         }
@@ -288,16 +242,21 @@ export const AdminDriveView: React.FC = () => {
             const defaultTitle = fileName.split('.')[0].replace(/_/g, ' ');
             const title = prompt('Introduza um título para exibir na Galeria do site:', defaultTitle);
             if (!title) return;
-            const { error } = await supabase.from('gallery_items').insert({
+            const response = await hostingerService.saveGalleryItem({
                 title: title,
                 image_url: fileUrl,
                 category: 'Geral',
                 active: true
             });
-            if (error) throw error;
-            alert('Imagem adicionada à Galeria com sucesso!');
-            await logAudit({ action: 'ADD_TO_GALLERY', entity_type: 'file', details: { title } });
-        } catch (e) {
+            if (response.success) {
+                alert('Imagem adicionada à Galeria com sucesso!');
+                await hostingerService.saveAuditLog({ 
+                    action: 'ADD_TO_GALLERY', 
+                    entity_type: 'file', 
+                    details: { title } 
+                });
+            }
+        } catch (e: any) {
             alert('Erro ao adicionar à Galeria: ' + e.message);
         }
     };
@@ -470,17 +429,7 @@ export const AdminDriveView: React.FC = () => {
                                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
                                     {filteredFiles.map(file => {
                                         const isImage = file.type?.startsWith('image/');
-                                        // Build public URL from path since the column 'url' doesn't exist.
-                                        let displayUrl = '';
-                                        const pathToCheck = file.path || file.name;
-                                        if (pathToCheck.startsWith('http')) {
-                                            displayUrl = pathToCheck;
-                                        } else if (pathToCheck.startsWith('/')) {
-                                            displayUrl = pathToCheck;
-                                        } else {
-                                            const { data: { publicUrl } } = supabase.storage.from('products').getPublicUrl(pathToCheck);
-                                            displayUrl = publicUrl;
-                                        }
+                                        const displayUrl = file.path.startsWith('http') ? file.path : `https://paocaseiro.co.mz/${file.path}`;
 
                                         return (
                                             <div 

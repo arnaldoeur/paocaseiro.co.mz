@@ -298,7 +298,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                                             <div className="flex items-center gap-2">
                                                 <ShoppingBag className="w-5 h-5" />
                                                 <span className="text-lg">
-                                                    {language === 'pt' ? 'Encomendar via WhatsApp' : 'Order via WhatsApp'}
+                                                    {language === 'pt' ? 'Adicionar ao Carrinho' : 'Add to Cart'}
                                                 </span>
                                             </div>
 

@@ -9,6 +9,7 @@ import { ScheduleOrderModal } from '../components/ScheduleOrderModal';
 import { UpsellModal } from '../components/UpsellModal';
 import { formatProductName, getEnglishProductName, getEnglishProductDesc } from '../services/stringUtils';
 import { ComingSoonOverlay } from '../components/ComingSoonOverlay';
+import { hostingerService } from '../services/hostingerService';
 
 // Launch Date in CAT (Mozambique Time): Monday, March 30th, 2026 at 00:00
 const LAUNCH_DATE = new Date('2026-03-31T00:00:00+02:00');
@@ -131,34 +132,21 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
     const [loading, setLoading] = useState(true);
     const [maintenanceMode, setMaintenanceMode] = useState(false);
 
-    // Import getProducts
-    // NOTE: Make sure to import getProducts at the top of the file in the next step or assume user adds it
-
-
-
     useEffect(() => {
         const fetchMenu = async () => {
             setLoading(true);
             try {
-                // Fetch dynamically from db so Admin updates reflect immediately on client side
-                const { supabase } = await import('../services/supabase');
-                const { data, error } = await supabase.from('products').select('*');
-                const success = !error;
-
-                if (success && data && data.length > 0) {
-                    console.log("Menu loaded from DB: ", data.length, " items.");
-
+                const data = await hostingerService.getProducts();
+                
+                if (data && data.length > 0) {
                     const grouped = data.reduce((acc: any, product: any) => {
-                        // Use raw category or default to 'Outros'. Normalize Pizzaria to Pizzas.
                         let cat = product.category || 'Outros';
                         if (cat.trim().toLowerCase() === 'pizzaria') cat = 'Pizzas';
-                        
                         if (!acc[cat]) acc[cat] = [];
 
                         acc[cat].push({
                             name: product.name,
                             price: product.price,
-                            // Use image exactly as generated locally, or use full URL if provided
                             image: product.image 
                                 ? (product.image.startsWith('http') || product.image.startsWith('/')) 
                                     ? product.image 
@@ -169,11 +157,11 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
                             name_en: product.name_en,
                             prepTime: product.prep_time,
                             deliveryTime: product.delivery_time,
-                            variations: product.variations || [],
-                            complements: product.complements || [],
+                            variations: typeof product.variations === 'string' ? JSON.parse(product.variations) : (product.variations || []),
+                            complements: typeof product.complements === 'string' ? JSON.parse(product.complements) : (product.complements || []),
                             unit: product.unit || 'un',
                             stock: product.stock_quantity || 0,
-                            isAvailable: product.is_available === false ? false : product.stock_quantity > 0
+                            isAvailable: product.is_available === false ? false : (product.stock_quantity > 0)
                         });
                         return acc;
                     }, {});
@@ -183,31 +171,15 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
                         items: grouped[title]
                     }));
 
-                    // Sort newSections based on a preferred order
                     const categoryOrder = [
-                        'Pães',
-                        'Folhados e Doces',
-                        'Folhados & Salgados',
-                        'Brioches',
-                        'Salgados',
-                        'Fatias e Bolos',
-                        'Bolos & Sobremesas',
-                        'Bolos Inteiros/Encomenda',
-                        'Pizzas',
-                        'Pizzas Grandes',
-                        'Pizzas Médias',
-                        'Lanches',
-                        'Waffle',
-                        'Cafés',
-                        'Chás',
-                        'Bebidas',
-                        'Extras'
+                        'Pães', 'Folhados e Doces', 'Folhados & Salgados', 'Brioches', 
+                        'Salgados', 'Fatias e Bolos', 'Bolos & Sobremesas', 'Bolos Inteiros/Encomenda',
+                        'Pizzas', 'Pizzas Grandes', 'Pizzas Médias', 'Lanches', 'Cafés', 'Bebidas'
                     ];
 
-                    newSections.sort((a, b) => {
+                    const sortedSections = newSections.sort((a, b) => {
                         const indexA = categoryOrder.indexOf(a.title);
                         const indexB = categoryOrder.indexOf(b.title);
-                        // If both are not in array, map to end
                         const posA = indexA === -1 ? 999 : indexA;
                         const posB = indexB === -1 ? 999 : indexB;
                         
@@ -217,47 +189,22 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
                         return posA - posB;
                     });
 
-                    setMenuSections(newSections);
-                    // Open first section by default
-                    if (newSections.length > 0) {
+                    setMenuSections(sortedSections);
+                    if (sortedSections.length > 0) {
                         try {
-                            setActiveSections(newSections.map(s => s.title));
+                            setActiveSections(sortedSections.map(s => s.title));
                         } catch (e) { }
                     }
                 } else {
-                    console.warn("Products DB empty or failed. Using local translation fallback.");
-                    // Fallback to translations with stock fix
-                    let fallback = getFallbackData();
-
-                    // Apply same category order as live DB path
-                    const categoryOrder = [
-                        'Pães',
-                        'Folhados e Doces',
-                        'Brioches',
-                        'Salgados',
-                        'Fatias e Bolos',
-                        'Pizzas Grandes',
-                        'Pizzas Médias',
-                        'Waffle',
-                        'Bolos Inteiros/Encomenda',
-                        'Cafés',
-                        'Chás',
-                        'Bebidas',
-                        'Extras'
-                    ];
-                    fallback = [...fallback].sort((a, b) => {
-                        const posA = categoryOrder.indexOf(a.title);
-                        const posB = categoryOrder.indexOf(b.title);
-                        return (posA === -1 ? 999 : posA) - (posB === -1 ? 999 : posB);
-                    });
-
+                    const fallback = getFallbackData();
                     setMenuSections(fallback);
                     setActiveSections(fallback.map(s => s.title));
                 }
             } catch (err) {
-                console.error("Critical error loading menu:", err);
-                // Last resort fallback
-                setMenuSections(getFallbackData());
+                console.error("Erro crítico ao carregar menu:", err);
+                const fallback = getFallbackData();
+                setMenuSections(fallback);
+                setActiveSections(fallback.map(s => s.title));
             } finally {
                 setLoading(false);
             }
@@ -265,30 +212,9 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
 
         fetchMenu();
 
-        // Real-time Products Listener
-        let channel: any;
-        (async () => {
-            const { supabase } = await import('../services/supabase');
-            channel = supabase
-                .channel('menu-products-changes')
-                .on(
-                    'postgres_changes',
-                    { event: '*', schema: 'public', table: 'products' },
-                    () => {
-                        console.log('Menu products changed, reloading...');
-                        fetchMenu();
-                    }
-                )
-                .subscribe();
-        })();
-
-        return () => {
-            if (channel) {
-                import('../services/supabase').then(({ supabase }) => {
-                    supabase.removeChannel(channel);
-                });
-            }
-        };
+        // Refresh menu every 5 minutes to check for stock/availability changes
+        const interval = setInterval(fetchMenu, 300000);
+        return () => clearInterval(interval);
     }, [language]);
 
     // Helper to process fallback data
@@ -372,24 +298,16 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
     };
 
     const handleAddToCartFromModal = (item: any, quantity: number, variation?: any) => {
-        const finalItemName = variation ? `${language === 'en' && item.name_en ? item.name_en : item.name} (${variation.name})` : item.name;
-        const finalPrice = variation ? variation.price : item.price;
-
-        const text = encodeURIComponent(`Olá Pão Caseiro! Gostaria de encomendar: ${quantity}x ${finalItemName} (${finalPrice * quantity} MT).`);
-        window.open(`https://wa.me/258879146662?text=${text}`, '_blank');
-
+        addToCart(item, quantity, variation);
         handleCloseModal();
     };
 
     // Fix for "Plus" button logic
     const addToOrder = (item: any) => {
-        // If has variations or complements, must open modal to choose
         if ((item.variations && item.variations.length > 0) || (item.complements && item.complements.length > 0)) {
             handleProductClick(item);
         } else {
-            // Add single item directly via WhatsApp
-            const text = encodeURIComponent(`Olá Pão Caseiro! Gostaria de encomendar: 1x ${item.name} (${item.price} MT).`);
-            window.open(`https://wa.me/258879146662?text=${text}`, '_blank');
+            addToCart(item, 1);
         }
     };
 
@@ -680,6 +598,7 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
                                                     src={item.image}
                                                     alt={(language === 'en') ? formatProductName(item.name_en || getEnglishProductName(item.name)) : formatProductName(item.name)}
                                                     className={`w-full h-full object-contain object-center group-hover:scale-110 transition-transform duration-700 ${!item.isAvailable ? 'grayscale opacity-50' : ''}`}
+                                                    loading="lazy"
                                                 />
                                                 
                                                 {!item.isAvailable && (
@@ -740,7 +659,7 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
                                                                 }}
                                                                 className="flex items-center gap-2 bg-[#3b2f2f] text-[#d9a65a] px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-[#d9a65a] hover:text-[#3b2f2f] transition-all shadow-lg active:scale-95 group-hover:shadow-[#d9a65a]/20"
                                                             >
-                                                                <ShoppingBag className="w-4 h-4" /> WhatsApp
+                                                                <Plus className="w-4 h-4" /> {language === 'pt' ? 'Adicionar' : 'Add'}
                                                             </button>
                                                         ) : (
                                                             <div className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-400 rounded-xl text-[10px] font-black uppercase tracking-widest border border-gray-200 cursor-help" title={language === 'pt' ? 'Encomendas abrem em breve' : 'Ordering opens soon'}>

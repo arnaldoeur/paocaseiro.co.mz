@@ -9,7 +9,7 @@ import { LandingLaunchPopup } from '../components/LandingLaunchPopup';
 import { translations, Language } from '../translations';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 
-import { supabase } from '../services/supabase';
+import { hostingerService } from '../services/hostingerService';
 import { sendEmail } from '../services/email';
 import { sendSMS } from '../services/sms';
 import { notifyAdminSystemsAlert } from '../services/whatsapp';
@@ -108,6 +108,23 @@ const DEFAULT_GALLERY_ITEMS = [
 ];
 
 export const Home: React.FC<HomeProps> = ({ language }) => {
+    // Prefetch menu data in background for instant navigation
+    useEffect(() => {
+        const prefetchMenu = async () => {
+            try {
+                // Use Hostinger instead of Supabase
+                await hostingerService.getProducts();
+                
+                
+            } catch (e) {
+                // Silently fail
+            }
+        };
+        // Delay prefetch slightly to prioritize Hero section loading
+        const timer = setTimeout(prefetchMenu, 3000);
+        return () => clearTimeout(timer);
+    }, []);
+
     const t = translations[language];
 
     if (!t) {
@@ -128,22 +145,20 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
 
     useEffect(() => {
         const fetchGallery = async () => {
-            const { data, error } = await supabase.from('gallery_items').select('*').order('display_order', { ascending: true });
-            if (!error && data && data.length > 0) {
-                setGalleryItems(data);
+            try {
+                const data = await hostingerService.getGallery();
+                if (data && data.length > 0) {
+                    setGalleryItems(data);
+                }
+            } catch (err) {
+                console.error("Gallery fetch error:", err);
             }
         };
         fetchGallery();
 
-        const channel = supabase.channel('gallery-changes')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'gallery_items' }, () => {
-                fetchGallery();
-            })
-            .subscribe();
-
-        return () => {
-            supabase.removeChannel(channel);
-        };
+        // Polling as fallback for realtime
+        const interval = setInterval(fetchGallery, 60000); // 1 min
+        return () => clearInterval(interval);
     }, []);
 
 
@@ -228,16 +243,13 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
         setSubmitStatus('idle');
 
         try {
-            // 1. Save to Supabase (Database Log)
-            await supabase
-                .from('contact_messages')
-                .insert([{
-                    name: formData.name,
-                    phone: formData.phone,
-                    email: formData.email,
-                    message: formData.message,
-                    status: 'unread'
-                }]);
+            // 1. Save to Hostinger (MySQL)
+            await hostingerService.saveContactMessage({
+                name: formData.name,
+                phone: formData.phone,
+                email: formData.email,
+                message: formData.message
+            });
 
             // 2. Send Notifications to Admin
             const adminEmail = 'geral@paocaseiro.co.mz';
@@ -338,6 +350,8 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                         src="/images/hero-bg-2.png" 
                         alt="Hero Background" 
                         className="w-full h-full object-cover"
+                        fetchPriority="high"
+                        loading="eager"
                     />
                     <div className="absolute inset-0 bg-black/60" />
                 </div>
@@ -410,7 +424,7 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                         loop
                         playsInline
                         webkit-playsinline="true"
-                        preload="auto"
+                        preload="metadata"
                         src="https://files.zyphtech.com/video_paocaseiro.mp4"
                     >
                     </video>

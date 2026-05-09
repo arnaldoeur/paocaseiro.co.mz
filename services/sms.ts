@@ -1,7 +1,5 @@
 import { formatProductName } from './stringUtils';
-import { supabase } from './supabase';
 import * as whatsapp from './whatsapp';
-import { NotificationService } from './NotificationService';
 
 const DISABLE_SMS = false; // WhatsApp is primary, but SMS is enabled as fallback
 
@@ -20,12 +18,13 @@ const getTeamNumbers = () => {
 
 const TEAM_NUMBERS = getTeamNumbers();
 
+import { hostingerService } from './hostingerService';
+
 /**
- * Send an SMS via Supabase Edge Function (Turbo Host API)
+ * Send an SMS via Hostinger Bridge (Turbo Host API)
  */
 export const sendSMS = async (to: string, body: string) => {
     if (DISABLE_SMS) {
-        console.log(`[SMS] Global SMS Disabled. Skipping for: ${to}`);
         return { status: 'success', message: 'SMS disabled temporarily' };
     }
     try {
@@ -34,61 +33,24 @@ export const sendSMS = async (to: string, body: string) => {
             formattedNumber = '258' + formattedNumber;
         }
 
-        console.log(`[SMS] Attempting to send to: ${formattedNumber}`);
 
-        const { data, error } = await supabase.functions.invoke('notify-sms', {
-            body: {
-                number: formattedNumber,
-                message: body.normalize("NFD").replace(/[\u0300-\u036f]/g, "") // Remove accents
-            }
+        const data = await hostingerService.fetch('send_sms', {
+            number: formattedNumber,
+            message: body.normalize("NFD").replace(/[\u0300-\u036f]/g, "") // Remove accents
         });
 
-        if (error) {
-            console.error('Supabase SMS Function Error:', error);
-            throw error;
-        }
-
-        // --- Asynchronous Logging of Communication ---
-        Promise.resolve().then(async () => {
-            try {
-                // Defensive check: Query the 'system_settings' table for pricing.
-                const { data: pricingData } = await supabase
-                    .from('system_settings')
-                    .select('value')
-                    .eq('key', 'sms_pricing')
-                    .maybeSingle();
-
-                const pricing = pricingData?.value || { cost_per_sms: 1.62 };
-                const cost = pricing.cost_per_sms || 1.62;
-
-                await supabase.from('sms_logs').insert([{
-                    type: 'sms',
-                    recipient: formattedNumber,
-                    content: body,
-                    status: 'sent',
-                    cost: cost
-                }]);
-            } catch (e) {
-                console.error("[SMS Log Async Error]", e);
-            }
-        });
+        // Log to local DB
+        hostingerService.logNotification('sms', formattedNumber, body, 'sent')
+            .catch(e => console.error('[SMS Log Error]', e));
 
         return data;
     } catch (error: any) {
         console.error('SMS Send Failed:', error);
-        Promise.resolve().then(async () => {
-            await supabase.from('sms_logs').insert([{
-                type: 'sms', recipient: to, content: body, status: 'error', cost: 0
-            }]);
-            
-            // Log to Notification Center for visibility
-            await NotificationService.logSystemEvent(
-                "Falha no Envio de SMS", 
-                `Não foi possível enviar SMS para ${to}. Erro: ${error.message}`, 
-                'SYSTEM', 
-                'error'
-            );
-        }).catch(() => { });
+        
+        // Log error to local DB
+        hostingerService.logNotification('sms', to, error.message, 'error')
+            .catch(e => console.error('[SMS Log Error]', e));
+
         return { status: 'error', message: error.message };
     }
 };

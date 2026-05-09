@@ -1,4 +1,4 @@
-import { supabase } from '../../services/supabase';
+import { hostingerService } from '../../services/hostingerService';
 
 export const syncFileToDrive = async (
     originalName: string,
@@ -9,12 +9,9 @@ export const syncFileToDrive = async (
     uploadedBy: string = 'admin'
 ) => {
     try {
-        const { data: folderInfo } = await supabase.from('drive_folders')
-            .select('id')
-            .eq('name', folderName)
-            .maybeSingle();
+        const folderInfo = await hostingerService.getDriveFolder(folderName);
 
-        await supabase.from('drive_files').insert({
+        await hostingerService.registerDriveFile({
             name: originalName,
             path: storagePath,
             size: fileSize,
@@ -27,3 +24,4 @@ export const syncFileToDrive = async (
         console.error("Failed to sync file to Drive:", error);
     }
 };
+

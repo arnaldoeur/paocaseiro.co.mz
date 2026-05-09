@@ -4,8 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { translations, Language } from '../translations';
 import { ClientLoginModal } from './ClientLoginModal';
-import { supabase } from '../services/supabase';
-import { User as SupabaseUser } from '@supabase/supabase-js';
+import { authService } from '../services/authService';
 import { sendWelcomeEmail, sendAdminNewUserNotification } from '../services/email';
 
 interface NavItem {
@@ -30,16 +29,17 @@ interface NavbarProps {
 export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
-  const [user, setUser] = useState<SupabaseUser | null>(null);
+  const [user, setUser] = useState<any | null>(null);
   const [manualUserPhone, setManualUserPhone] = useState<string | null>(null);
   const [userData, setUserData] = useState<any>(JSON.parse(localStorage.getItem('pc_user_data') || '{}'));
   const t = translations[language];
   const location = useLocation();
   const navigate = useNavigate();
+  const menuLoginMaintenance = false;
 
   React.useEffect(() => {
     // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    authService.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
     });
 
@@ -48,31 +48,37 @@ export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
     if (savedPhone) setManualUserPhone(savedPhone);
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = authService.onAuthStateChange((event, session) => {
       setUser(session?.user ?? null);
       if (session?.user) {
         setManualUserPhone(null);
         
         if (event === 'SIGNED_IN') {
           const user = session.user;
-          const created = new Date(user.created_at).getTime();
-          const now = new Date().getTime();
-          const isNewUser = (now - created) < 15 * 60 * 1000; // Registration within last 15 minutes
-          
-          if (isNewUser) {
-            const hasSent = localStorage.getItem(`welcome_sent_${user.id}`);
-            if (!hasSent) {
-              const userName = user.user_metadata?.full_name || user.user_metadata?.name || '';
-              const userEmail = user.email || '';
-              
-              if (userEmail) {
-                localStorage.setItem(`welcome_sent_${user.id}`, 'true');
-                sendWelcomeEmail(userEmail, userName).catch(err => console.error("Welcome email error:", err));
-                sendAdminNewUserNotification(userEmail, userName).catch(err => console.error("Admin notification error:", err));
+          // Note: hostinger user might have different field for created_at
+          const createdAt = user.created_at || user.registration_date;
+          if (createdAt) {
+            const created = new Date(createdAt).getTime();
+            const now = new Date().getTime();
+            const isNewUser = (now - created) < 15 * 60 * 1000; // Registration within last 15 minutes
+            
+            if (isNewUser) {
+              const hasSent = localStorage.getItem(`welcome_sent_${user.id}`);
+              if (!hasSent) {
+                const userName = user.name || user.full_name || '';
+                const userEmail = user.email || '';
+                
+                if (userEmail) {
+                  localStorage.setItem(`welcome_sent_${user.id}`, 'true');
+                  sendWelcomeEmail(userEmail, userName).catch(err => console.error("Welcome email error:", err));
+                  sendAdminNewUserNotification(userEmail, userName).catch(err => console.error("Admin notification error:", err));
+                }
               }
             }
           }
         }
+      } else {
+        setManualUserPhone(localStorage.getItem('pc_auth_phone'));
       }
     });
 
@@ -117,7 +123,7 @@ export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
     // External Trigger for Login Modal
     React.useEffect(() => {
       const handleOpenLogin = () => {
-        alert("Login temporariamente indisponível. Brevemente disponível.");
+        setIsLoginModalOpen(true);
       };
       window.addEventListener('open_pc_login', handleOpenLogin);
       return () => window.removeEventListener('open_pc_login', handleOpenLogin);
@@ -204,13 +210,13 @@ export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
               // Not logged in -> Show Login button
               <button
                 onClick={() => {
-                  alert("Login temporariamente indisponível. Brevemente disponível.");
+                  setIsLoginModalOpen(true);
                 }}
                 title={t.nav.login}
-                className="flex items-center justify-center h-10 px-4 bg-white hover:bg-gray-50 text-gray-400 rounded-full transition-colors border border-gray-200 shadow-sm font-bold text-sm cursor-not-allowed"
+                className="flex items-center justify-center h-10 px-4 bg-white hover:bg-gray-50 text-[#3b2f2f] rounded-full transition-colors border border-[#d9a65a]/30 shadow-sm font-bold text-sm"
               >
-                <User size={18} className="mr-2 opacity-50" />
-                {language === 'pt' ? 'Login (Em Breve)' : 'Login (Soon)'}
+                <User size={18} className="mr-2 text-[#d9a65a]" />
+                {t.nav.login}
               </button>
             )}
 
@@ -279,16 +285,12 @@ export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
             })}
             <button
               onClick={() => {
-                if (menuLoginMaintenance) {
-                  alert("Acesso ao menu temporariamente indisponível devido a manutenção.");
-                  return;
-                }
                 navigate('/menu');
                 setMobileMenuOpen(false);
               }}
               className="w-full text-center px-4 py-3 rounded-xl bg-[#3b2f2f] text-[#d9a65a] font-black uppercase tracking-widest text-sm"
             >
-              {t.nav.menu} {menuLoginMaintenance && <span className="text-orange-500 ml-1">(Manutenção)</span>}
+              {t.nav.menu}
             </button>
 
             <button

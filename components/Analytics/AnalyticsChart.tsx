@@ -32,7 +32,7 @@ import { ReportTemplate } from './ReportTemplate';
 import { Loader2, LayoutGrid, Activity, BarChart3, Maximize2, TrendingUp, Users, Sparkles, Bot } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { generateMetricReport } from '../../services/reportGenerator';
-import { supabase } from '../../services/supabase';
+import { hostingerService } from '../../services/hostingerService';
 
 interface Order {
     id: string;
@@ -86,25 +86,19 @@ export const AnalyticsChart: React.FC<AnalyticsChartProps> = ({ orders = [], tea
 
             const systemContext = 'Você é a Zyph AI, a IA analítica de negócios do painel Pão Caseiro. Seja extremamente técnica, direta e assertiva. Responda em Português.';
 
-            const { data, error } = await supabase.functions.invoke('chat-ai', {
-                body: {
-                    systemContext: systemContext,
-                    messages: [
-                        { role: 'user', content: prompt }
-                    ]
-                }
-            });
+            const response = await hostingerService.getAiInsights(prompt, systemContext);
             
             clearTimeout(timeoutId);
 
-            if (error) throw new Error(`Edge Error: ${error.message}`);
-            if (data?.error) throw new Error(`OpenRouter/Edge Error: ${data.error}`);
-
+            if (response.error) throw new Error(`Hostinger AI Error: ${response.error}`);
+            
+            const data = response.data;
             if (data?.choices && data.choices.length > 0) {
                 setAiInsights(data.choices[0].message.content);
             } else {
-                throw new Error('Sem resposta válida');
+                throw new Error('Sem resposta válida da Zyph AI');
             }
+
         } catch (error) {
             console.error('AI Insights Error:', error);
             setAiInsights('Não foi possível gerar insights com a Zyph AI no momento. Tente novamente mais tarde.');

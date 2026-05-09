@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { Language } from '../translations';
 import { formatProductName } from '../services/stringUtils';
+import { hostingerService } from '../services/hostingerService';
 
 // --- Static Data from Home ---
 const CLASSICS = [
@@ -112,20 +113,16 @@ export const Gallery: React.FC<{ language: Language }> = ({ language }) => {
         }));
         allItems = [...allItems, ...statics];
 
-        // 3. Fetch DB Products (Supabase - Daily Info)
+        // 3. Fetch DB Products (Hostinger)
         try {
-            const { supabase } = await import('../services/supabase');
-            const { data, error } = await supabase
-                .from('products')
-                .select('*')
-                .order('name');
+            const data = await hostingerService.getProducts();
 
-            if (data && !error) {
+            if (data) {
                 const dbProducts: GalleryItem[] = data.map((p: any) => ({
                     id: p.id,
                     name: p.name,
                     price: parseFloat(p.price) || 0,
-                    inStock: p.is_available,
+                    inStock: p.is_available === 1 || p.is_available === true || p.is_available === '1',
                     image: p.image,
                     type: 'product'
                 }));
@@ -137,11 +134,10 @@ export const Gallery: React.FC<{ language: Language }> = ({ language }) => {
 
         // 4. Fetch Heavy Gallery (Hostinger - Large Files)
         try {
-            const { invokeHostingerDB } = await import('../services/supabase');
-            const result = await invokeHostingerDB('fetch_gallery');
+            const data = await hostingerService.fetchGallery();
 
-            if (result.success && result.data) {
-                const hostingerItems: GalleryItem[] = result.data.map((p: any) => ({
+            if (data) {
+                const hostingerItems: GalleryItem[] = data.map((p: any) => ({
                     id: `h-${p.id}`,
                     name: p.title,
                     price: 0,

@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { supabase } from '../services/supabase';
+import { authService } from '../services/authService';
+import { hostingerService } from '../services/hostingerService';
 import { Language, translations } from '../translations';
 import { Calendar, User, ArrowLeft, Share2, Tag, BookOpen, ChevronRight, Facebook, MessageCircle, Link as LinkIcon, Trash2, Edit3 } from 'lucide-react';
 import { ClientLoginModal } from '../components/ClientLoginModal';
@@ -40,17 +41,17 @@ export const BlogPost: React.FC<{ language: Language }> = ({ language }) => {
 
     useEffect(() => {
         // Setup auth listener
-        supabase.auth.getSession().then(({ data: { session } }) => {
+        authService.getSession().then(({ data: { session } }) => {
             setCurrentUser(session?.user || null);
             if (session?.user) {
-                setNewCommentName(session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || '');
+                setNewCommentName(session.user.name || session.user.full_name || session.user.email?.split('@')[0] || '');
             }
         });
 
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        const { data: { subscription } } = authService.onAuthStateChange((_event, session) => {
             setCurrentUser(session?.user || null);
             if (session?.user) {
-                setNewCommentName(session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || '');
+                setNewCommentName(session.user.name || session.user.full_name || session.user.email?.split('@')[0] || '');
             }
         });
 
@@ -61,57 +62,50 @@ export const BlogPost: React.FC<{ language: Language }> = ({ language }) => {
         const fetchPostAndComments = async () => {
             if (!slug) return;
             
-            // Fetch single post
-            const { data: postData, error: postError } = await supabase
-                .from('blog_posts')
-                .select('*')
-                .eq('slug', slug)
-                .single();
+            try {
+                // Fetch single post
+                const postData = await hostingerService.getBlogPostBySlug(slug);
 
-            if (!postError && postData) {
-                setPost(postData);
-                
-                // --- Advanced SEO & Open Graph Tags ---
-                document.title = `${postData.title} | Pão Caseiro`;
-                const setMetaTag = (property: string, content: string) => {
-                    // Handle both name and property attributes for better compatibility
-                    const attr = property.includes(':') ? 'property' : 'name';
-                    let element = document.querySelector(`meta[${attr}="${property}"]`);
-                    if (!element) {
-                        element = document.createElement('meta');
-                        element.setAttribute(attr, property);
-                        document.head.appendChild(element);
-                    }
-                    element.setAttribute('content', content);
-                };
-
-                const excerpt = postData.excerpt || postData.content?.substring(0, 150).replace(/<[^>]*>?/gm, '') + '...';
-                const image = postData.image_url || 'https://paocaseiro.co.mz/images/about-bread.jpeg';
-
-                setMetaTag('description', excerpt);
-                setMetaTag('og:title', postData.title);
-                setMetaTag('og:description', excerpt);
-                setMetaTag('og:image', image);
-                setMetaTag('og:url', window.location.href);
-                setMetaTag('og:type', 'article');
-                
-                // Twitter / X cards
-                setMetaTag('twitter:card', 'summary_large_image');
-                setMetaTag('twitter:title', postData.title);
-                setMetaTag('twitter:description', excerpt);
-                setMetaTag('twitter:image', image);
-                // ---------------------------------------
-
-                // Fetch comments for this post
-                const { data: commentsData } = await supabase
-                    .from('blog_comments')
-                    .select('*')
-                    .eq('post_id', postData.id)
-                    .order('created_at', { ascending: true });
+                if (postData) {
+                    setPost(postData);
                     
-                if (commentsData) {
-                    setComments(commentsData);
+                    // --- Advanced SEO & Open Graph Tags ---
+                    document.title = `${postData.title} | Pão Caseiro`;
+                    const setMetaTag = (property: string, content: string) => {
+                        const attr = property.includes(':') ? 'property' : 'name';
+                        let element = document.querySelector(`meta[${attr}="${property}"]`);
+                        if (!element) {
+                            element = document.createElement('meta');
+                            element.setAttribute(attr, property);
+                            document.head.appendChild(element);
+                        }
+                        element.setAttribute('content', content);
+                    };
+
+                    const excerpt = postData.excerpt || postData.content?.substring(0, 150).replace(/<[^>]*>?/gm, '') + '...';
+                    const image = postData.image_url || 'https://paocaseiro.co.mz/images/about-bread.jpeg';
+
+                    setMetaTag('description', excerpt);
+                    setMetaTag('og:title', postData.title);
+                    setMetaTag('og:description', excerpt);
+                    setMetaTag('og:image', image);
+                    setMetaTag('og:url', window.location.href);
+                    setMetaTag('og:type', 'article');
+                    
+                    setMetaTag('twitter:card', 'summary_large_image');
+                    setMetaTag('twitter:title', postData.title);
+                    setMetaTag('twitter:description', excerpt);
+                    setMetaTag('twitter:image', image);
+                    // ---------------------------------------
+
+                    // Fetch comments for this post
+                    const commentsData = await hostingerService.getBlogComments(postData.id);
+                    if (commentsData) {
+                        setComments(commentsData);
+                    }
                 }
+            } catch (err) {
+                console.error("Error fetching blog post:", err);
             }
 
             setLoading(false);
@@ -121,7 +115,6 @@ export const BlogPost: React.FC<{ language: Language }> = ({ language }) => {
 
     const handleShare = async () => {
         try {
-            // Guarantee full actual URL for sharing
             const shareUrl = window.location.href;
             if (navigator.share) {
                 await navigator.share({
@@ -145,39 +138,35 @@ export const BlogPost: React.FC<{ language: Language }> = ({ language }) => {
         setSubmittingComment(true);
         setCommentMessage({ text: '', type: '' });
         
-        const { data, error } = await supabase
-            .from('blog_comments')
-            .insert([{
+        try {
+            const data = await hostingerService.saveBlogComment({
                 post_id: post.id,
                 author: newCommentName.trim(),
                 content: newCommentContent.trim(),
                 user_id: currentUser?.id,
-                status: 'pending' // requires status to be accepted by db or handled properly
-            }])
-            .select();
-            
-        setSubmittingComment(false);
-        
-        if (error) {
-            setCommentMessage({ text: t.comments?.error || 'Erro ao enviar comentário.', type: 'error' });
-        } else if (data) {
+                status: 'pending'
+            });
+                
             setCommentMessage({ text: t.comments?.success || 'Comentário enviado!', type: 'success' });
-            setComments([...comments, data[0]]);
+            setComments([...comments, data]);
             setNewCommentName('');
             setNewCommentContent('');
             
-            // Clear message after 3 seconds
             setTimeout(() => setCommentMessage({ text: '', type: '' }), 3000);
+        } catch (error) {
+            setCommentMessage({ text: t.comments?.error || 'Erro ao enviar comentário.', type: 'error' });
+        } finally {
+            setSubmittingComment(false);
         }
     };
 
     const handleDeleteComment = async (id: string) => {
         if (!window.confirm('Tem a certeza que deseja apagar este comentário?')) return;
-        const { error } = await supabase.from('blog_comments').delete().eq('id', id);
-        if (!error) {
+        try {
+            await hostingerService.deleteBlogComment(id);
             setComments(comments.filter(c => c.id !== id));
-        } else {
-            alert('Erro ao apagar comentário: ' + error.message);
+        } catch (error: any) {
+            alert('Erro ao apagar comentário: ' + (error.message || 'Erro desconhecido'));
         }
     };
 

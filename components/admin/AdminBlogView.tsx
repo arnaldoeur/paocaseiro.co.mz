@@ -6,7 +6,7 @@ import {
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 import { motion, AnimatePresence } from 'framer-motion';
-import { supabase, getPublicUrlSafely } from '../../services/supabase';
+import { hostingerService } from '../../services/hostingerService';
 import { AdminNewsletterView } from './AdminNewsletterView';
 import { AdminEmailPipelineView } from './AdminEmailPipelineView';
 
@@ -50,15 +50,9 @@ export function AdminBlogView() {
             const file = input.files ? input.files[0] : null;
             if (!file) return;
 
-            const fileExt = file.name.split('.').pop();
-            const fileName = `blog_inline_${Date.now()}.${fileExt}`;
-            
             try {
-                const { error } = await supabase.storage.from('products').upload(fileName, file);
-                if (error) throw error;
-                
-                // Use safe public URL helper
-                const finalUrl = getPublicUrlSafely('products', fileName);
+                const uploadResult = await hostingerService.uploadDriveFile(file, null, 'blog_editor');
+                const finalUrl = hostingerService.getPublicUrl(uploadResult.path);
                 
                 const quill = quillRef.current?.getEditor();
                 if (quill) {
@@ -95,7 +89,7 @@ export function AdminBlogView() {
         loadGalleryItems();
 
         const loadTeam = async () => {
-            const { data } = await supabase.from('team_members').select('id, name, username, email, phone, role, avatar_url');
+            const data = await hostingerService.getTeam();
             if (data) setTeamMembers(data);
         };
         loadTeam();
@@ -103,38 +97,23 @@ export function AdminBlogView() {
         // Background AI Auto-Approval Loop
         const interval = setInterval(async () => {
             try {
-                const fiveMinutesAgo = new Date(Date.now() - 5 * 60000).toISOString();
-                const { data, error } = await supabase
-                    .from('blog_comments')
-                    .select('*')
-                    .eq('status', 'pending')
-                    .lt('created_at', fiveMinutesAgo);
-
-                if (!error && data && data.length > 0) {
-                    for (const comment of data) {
+                // Simplified AI moderation check using the new Hostinger getAiInsights
+                const hComments = await hostingerService.getBlogComments();
+                const pending = hComments.filter((c: any) => c.status === 'pending');
+                
+                if (pending.length > 0) {
+                    for (const comment of pending) {
                         try {
-                            const apiKey = import.meta.env.VITE_OPENROUTER_API_KEY || "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";
-                            const aiResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-                                method: "POST",
-                                headers: {
-                                    "Authorization": `Bearer ${apiKey}`,
-                                    "Content-Type": "application/json"
-                                },
-                                body: JSON.stringify({
-                                    model: "openrouter/free",
-                                    messages: [
-                                        { role: "system", content: "You are a strict, objective comment moderator for a bakery blog. Read the user's comment. Reply ONLY with the word 'APPROVE' if it's safe, relevant, or neutral. Reply ONLY with 'REJECT' if it contains spam, hate, severe profanity, or malicious links. Do NOT output anything else." },
-                                        { role: "user", content: `Comment to moderate: "${comment.content}"` }
-                                    ],
-                                    temperature: 0.1
-                                })
-                            });
-                            const aiData = await aiResponse.json();
+                            const aiData = await hostingerService.getAiInsights(
+                                `Comment to moderate: "${comment.content}"`,
+                                "You are a strict, objective comment moderator for a bakery blog. Reply ONLY with the word 'APPROVE' if it's safe, relevant, or neutral. Reply ONLY with 'REJECT' if it contains spam, hate, severe profanity, or malicious links."
+                            );
+                            
                             const reply = aiData.choices?.[0]?.message?.content?.trim()?.toUpperCase() || "";
                             const isApproved = reply.includes("APPROVE");
-                            
                             const newStatus = isApproved ? 'approved' : 'rejected';
-                            await supabase.from('blog_comments').update({ status: newStatus }).eq('id', comment.id);
+                            
+                            await hostingerService.fetch('update_blog_comment_status', { id: comment.id, status: newStatus });
                         } catch (aiErr) {
                             console.error("AI auto-check error", aiErr);
                         }
@@ -152,20 +131,8 @@ export function AdminBlogView() {
     const loadPosts = async () => {
         setLoading(true);
         try {
-            const { data, error } = await supabase
-                .from('blog_posts')
-                .select('*')
-                .order('created_at', { ascending: false });
-            
-            if (error) {
-                if (error.code === 'PGRST116' || error.code === '42P01') {
-                    setPosts([]);
-                } else {
-                    throw error;
-                }
-            } else if (data) {
-                setPosts(data);
-            }
+            const data = await hostingerService.getBlogPosts();
+            if (data) setPosts(data);
         } catch (err: any) {
             console.error('Error loading posts:', err);
         } finally {
@@ -175,20 +142,8 @@ export function AdminBlogView() {
 
     const loadComments = async () => {
         try {
-            const { data, error } = await supabase
-                .from('blog_comments')
-                .select('*')
-                .order('created_at', { ascending: false });
-                
-            if (error) {
-                if (error.code === '42P01') {
-                    setComments([]);
-                } else {
-                    throw error;
-                }
-            } else if (data) {
-                setComments(data);
-            }
+            const data = await hostingerService.getBlogComments();
+            if (data) setComments(data);
         } catch (err) {
             console.error('Error loading comments:', err);
         }
@@ -196,9 +151,9 @@ export function AdminBlogView() {
 
     const loadMediaFiles = async () => {
         try {
-            const { data, error } = await supabase.storage.from('products').list('blog_media/');
-            if (!error && data) {
-                setMediaFiles(data.filter(f => f.name !== '.emptyFolderPlaceholder'));
+            const data = await hostingerService.getDriveFiles();
+            if (data) {
+                setMediaFiles(data.filter((f: any) => f.type.startsWith('image/')));
             }
         } catch (err) {
             console.error('Error loading media files:', err);
@@ -207,14 +162,8 @@ export function AdminBlogView() {
 
     const loadGalleryItems = async () => {
         try {
-            const { data, error } = await supabase
-                .from('gallery_items')
-                .select('*')
-                .order('created_at', { ascending: false });
-                
-            if (!error && data) {
-                setGalleryItems(data);
-            }
+            const data = await hostingerService.getGallery();
+            if (data) setGalleryItems(data);
         } catch (err) {
             console.error('Error loading gallery items:', err);
         }
@@ -225,11 +174,8 @@ export function AdminBlogView() {
         if (!file) return;
         
         setUploadingRepoMedia(true);
-        const fileName = `blog_media/${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
-        
         try {
-            const { error } = await supabase.storage.from('products').upload(fileName, file);
-            if (error) throw error;
+            await hostingerService.uploadDriveFile(file, null, 'admin');
             await loadMediaFiles();
             alert('Ficheiro guardado no repositório!');
         } catch (err: any) {
@@ -241,12 +187,7 @@ export function AdminBlogView() {
 
     const handleUpdateCommentStatus = async (id: string, newStatus: string) => {
         try {
-            const { error } = await supabase
-                .from('blog_comments')
-                .update({ status: newStatus })
-                .eq('id', id);
-                
-            if (error) throw error;
+            await hostingerService.fetch('update_blog_comment_status', { id, status: newStatus });
             loadComments();
         } catch (e: any) {
             alert(`Erro ao atualizar comentário: ${e.message}`);
@@ -255,8 +196,8 @@ export function AdminBlogView() {
 
     const handleDeleteComment = async (id: string) => {
         if(!window.confirm('Tem a certeza que deseja apagar este comentário permanentemente?')) return;
-        const { error } = await supabase.from('blog_comments').delete().eq('id', id);
-        if(!error) loadComments();
+        await hostingerService.fetch('delete_blog_comment', { id });
+        loadComments();
     };
 
     const handleEdit = (post: any) => {
@@ -291,9 +232,12 @@ export function AdminBlogView() {
 
     const handleDelete = async (id: string) => {
         if (!window.confirm('Tem a certeza que deseja apagar este artigo?')) return;
-        const { error } = await supabase.from('blog_posts').delete().eq('id', id);
-        if (error) alert('Erro ao apagar: ' + error.message);
-        else loadPosts();
+        try {
+            await hostingerService.deleteBlogPost(id);
+            loadPosts();
+        } catch (err: any) {
+            alert('Erro ao apagar: ' + err.message);
+        }
     };
 
     const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -315,12 +259,8 @@ export function AdminBlogView() {
         // Deferred upload for Blog Cover
         if (selectedImageFile) {
             try {
-                const fileExt = selectedImageFile.name.split('.').pop();
-                const fileName = `blog_cover_${Date.now()}.${fileExt}`;
-                const { error: uploadError } = await supabase.storage.from('products').upload(`blog_media/${fileName}`, selectedImageFile);
-                if (uploadError) throw uploadError;
-                
-                finalImageUrl = getPublicUrlSafely('products', `blog_media/${fileName}`);
+                const uploadResult = await hostingerService.uploadDriveFile(selectedImageFile, null, 'admin');
+                finalImageUrl = hostingerService.getPublicUrl(uploadResult.path);
             } catch (err: any) {
                 alert('Erro ao carregar imagem de capa: ' + err.message);
                 setLoading(false);
@@ -348,15 +288,17 @@ export function AdminBlogView() {
             updated_at: new Date().toISOString()
         };
 
-        const { error } = await supabase
-            .from('blog_posts')
-            .upsert(currentPost ? { ...payload, id: currentPost.id } : payload);
-
-        if (error) {
-            alert('Erro ao guardar: ' + error.message);
-        } else {
+        try {
+            await hostingerService.saveBlogPost({
+                ...payload,
+                id: currentPost?.id
+            });
             setIsEditing(false);
             loadPosts();
+        } catch (err: any) {
+            alert('Erro ao guardar: ' + err.message);
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -593,7 +535,7 @@ export function AdminBlogView() {
                             </div>
                             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
                                 {mediaFiles.map((file, idx) => {
-                                    const url = supabase.storage.from('products').getPublicUrl(`blog_media/${file.name}`).data.publicUrl;
+                                    const url = hostingerService.getPublicUrl(file.path);
                                     return (
                                         <div key={idx} className="bg-white p-3 rounded-2xl border border-gray-100 flex flex-col items-center group relative shadow-sm hover:shadow-md transition-all">
                                             <div className="w-full aspect-square bg-gray-50 rounded-xl mb-3 overflow-hidden border">
@@ -630,14 +572,16 @@ export function AdminBlogView() {
                                             const file = e.target.files?.[0];
                                             if (!file) return;
                                             try {
-                                                const fileExt = file.name.split('.').pop();
-                                                const fileName = `gallery_${Date.now()}.${fileExt}`;
-                                                const { error: uploadError } = await supabase.storage.from('products').upload(fileName, file);
-                                                if (uploadError) throw uploadError;
+                                                const uploadResult = await hostingerService.uploadDriveFile(file, null, 'admin');
+                                                const url = hostingerService.getPublicUrl(uploadResult.path);
                                                 
-                                                let url = supabase.storage.from('products').getPublicUrl(fileName).data.publicUrl;
                                                 const caption = prompt('Legenda para a imagem:') || 'Nova Imagem';
-                                                await supabase.from('gallery_items').insert({ src: url, caption, display_order: galleryItems.length });
+                                                await hostingerService.saveGalleryItem({
+                                                    image_url: url,
+                                                    title: caption,
+                                                    category: 'Geral',
+                                                    description: ''
+                                                });
                                                 loadGalleryItems();
                                             } catch (err: any) {
                                                 alert('Erro: ' + err.message);
@@ -660,7 +604,7 @@ export function AdminBlogView() {
                                         <button 
                                             onClick={async () => {
                                                 if (confirm('Remover esta imagem?')) {
-                                                    await supabase.from('gallery_items').delete().eq('id', item.id);
+                                                    await hostingerService.deleteGalleryItem(item.id);
                                                     loadGalleryItems();
                                                 }
                                             }}

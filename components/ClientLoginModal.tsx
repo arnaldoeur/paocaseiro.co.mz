@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Phone, KeyRound, Loader, AlertTriangle, CheckCircle, UserPlus, ShieldAlert, Scale, ScrollText, Lock, User, Mail, MapPin } from 'lucide-react';
-import { supabase } from '../services/supabase';
+
 import { useNavigate } from 'react-router-dom';
 import { sendSMS } from '../services/sms';
 import { sendOTPEmail } from '../services/email';
@@ -9,6 +9,10 @@ import { logAudit } from '../services/audit';
 import { sendWhatsAppMessage } from '../services/whatsapp';
 import { NotificationService } from '../services/NotificationService';
 import { normalizeIdentifier } from '../src/utils/phone';
+import { hostingerService } from '../services/hostingerService';
+import { authService } from '../services/authService';
+import { GoogleOAuthProvider, GoogleLogin } from '@react-oauth/google';
+import { jwtDecode } from 'jwt-decode';
 
 interface ClientLoginModalProps {
     isOpen: boolean;
@@ -53,15 +57,8 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
             const isEmail = formattedIdentifier.includes('@');
 
             if (mode === 'password') {
-                // Check if user exists by email or phone
-                const { data: customers, error: dbError } = await supabase
-                    .from('customers')
-                    .select('*')
-                    .or(`contact_no.eq."${formattedIdentifier}",email.eq."${formattedIdentifier}"`)
-                    .limit(1);
-
-                if (dbError) throw dbError;
-                const customerData = customers?.[0];
+                // Check if user exists by email or phone via Hostinger
+                const customerData = await hostingerService.getCustomerByIdentifier(formattedIdentifier);
 
                 if (!customerData) {
                     throw new Error('Conta não encontrada.');
@@ -96,14 +93,7 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
             }
 
             if (mode === 'otp') {
-                const { data: customers, error: dbError } = await supabase
-                    .from('customers')
-                    .select('*')
-                    .or(`contact_no.eq."${formattedIdentifier}",email.eq."${formattedIdentifier}"`)
-                    .limit(1);
-
-                if (dbError) throw dbError;
-                const customerData = customers?.[0];
+                const customerData = await hostingerService.getCustomerByIdentifier(formattedIdentifier);
 
                 if (!customerData) {
                     throw new Error(language === 'en' ? 'Account not found. If new, use "Create Account".' : 'Conta não encontrada. Se é novo, utilize a opção "Criar Conta".');
@@ -113,11 +103,11 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                 setGeneratedOtp(code);
                 
                 if (isEmail) {
-                    console.log(`[AUTH] Sending OTP to Email ${formattedIdentifier}: ${code}`);
+                    
                     await sendOTPEmail(formattedIdentifier, code);
                     setSuccessMsg(language === 'en' ? 'Code sent via Email! Check your inbox.' : 'Código enviado por Email! Verifique a sua caixa de entrada.');
                 } else {
-                    console.log(`[AUTH] Sending OTP to phone ${formattedIdentifier}: ${code}`);
+                    
                     let waSent = false;
                     try {
                         const waMsg = `Pão Caseiro: O seu código de acesso é *${code}*. Não partilhe com ninguém.`;
@@ -132,9 +122,9 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                         setSuccessMsg(language === 'en' ? 'Code sent via WhatsApp! Check your phone.' : 'Código enviado por WhatsApp! Verifique o telemóvel.');
                     } else {
                         const smsMsg = `Pao Caseiro: O seu codigo de acesso e ${code}.`;
-                        console.log(`[AUTH] Calling sendSMS for ${formattedIdentifier}`);
+                        
                         const smsRes = await sendSMS(formattedIdentifier.replace('+', ''), smsMsg);
-                        console.log(`[AUTH] SMS response:`, smsRes);
+                        
                         setSuccessMsg(language === 'en' ? 'Code sent via SMS! Check your phone.' : 'Código enviado por SMS! Verifique o telemóvel.');
                     }
                 }
@@ -155,19 +145,13 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                     throw new Error('Introduza um número de telemóvel válido (ex: 84/85/86/87...).');
                 }
 
-                // Check if already exists
-                const { data: existing } = await supabase
-                    .from('customers')
-                    .select('*')
-                    .eq('contact_no', formattedIdentifier)
-                    .limit(1);
-
-                const existingCustomerData = existing?.[0];
+                // Check if already exists via Hostinger
+                const existingCustomerData = await hostingerService.getCustomerByIdentifier(formattedIdentifier);
 
                 const code = Math.floor(100000 + Math.random() * 900000).toString();
                 setGeneratedOtp(code);
 
-                console.log(`[AUTH] Sending registration OTP to phone ${formattedIdentifier}: ${code}`);
+                
                 
                 let waSent = false;
                 try {
@@ -181,9 +165,9 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
 
                 if (!waSent) {
                     const smsMsg = `Pao Caseiro: O seu codigo de acesso e ${code}.`;
-                    console.log(`[AUTH] Calling sendSMS for registration: ${formattedIdentifier}`);
+                    
                     const smsRes = await sendSMS(formattedIdentifier.replace('+', ''), smsMsg);
-                    console.log(`[AUTH] Registration SMS response:`, smsRes);
+                    
                 }
 
                 if (existingCustomerData) {
@@ -211,15 +195,7 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
         setError('');
 
         try {
-            const { data: customers, error: dbError } = await supabase
-                .from('customers')
-                .select('*')
-                .or(`contact_no.eq."${normalizeIdentifier(identifier)}",email.eq."${normalizeIdentifier(identifier)}"`)
-                .eq('password', password)
-                .limit(1);
-
-            if (dbError) throw dbError;
-            const customerData = customers?.[0];
+            const customerData = await hostingerService.authCustomer(normalizeIdentifier(identifier), password);
 
             if (!customerData) {
                 throw new Error('Palavra-passe incorreta.');
@@ -299,8 +275,13 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
         setError('');
         try {
             const formattedId = normalizeIdentifier(identifier);
-            const { error } = await supabase.from('customers').update({ password }).or(`contact_no.eq."${formattedId}",email.eq."${formattedId}"`);
-            if (error) throw error;
+            const customer = await hostingerService.getCustomerByIdentifier(formattedId);
+            if (!customer) throw new Error('Customer not found');
+
+            await hostingerService.saveCustomer({
+                ...customer,
+                password: password
+            });
             
             setSuccessMsg(language === 'en' ? 'Password updated successfully! Please log in.' : 'Palavra-passe atualizada com sucesso! Por favor, entre na sua conta.');
             setTimeout(() => {
@@ -363,30 +344,23 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
 
         try {
             const formattedIdentifier = normalizeIdentifier(identifier);
-            const { error: upsertError } = await supabase
-                .from('customers')
-                .upsert({
-                    contact_no: formattedIdentifier,
-                    phone: formattedIdentifier,
-                    name: name,
-                    email: email || null,
-                    date_of_birth: dob || null,
-                    address: address || null,
-                    nuit: nuit || null,
-                    whatsapp: whatsapp ? normalizeIdentifier(whatsapp) : null,
-                    password: password,
-                    updated_at: new Date().toISOString()
-                }, { onConflict: 'contact_no' });
+            const customerPayload = {
+                id: existingCustomer?.id || crypto.randomUUID(),
+                contact_no: formattedIdentifier,
+                phone: formattedIdentifier,
+                name: name,
+                email: email || null,
+                date_of_birth: dob || null,
+                address: address || null,
+                nuit: nuit || null,
+                whatsapp: whatsapp ? normalizeIdentifier(whatsapp) : null,
+                password: password,
+                updated_at: new Date().toISOString()
+            };
 
-            if (upsertError) throw upsertError;
+            await hostingerService.saveCustomer(customerPayload);
 
-            const { data: customers } = await supabase
-                .from('customers')
-                .select('*')
-                .eq('contact_no', formattedIdentifier)
-                .limit(1);
-
-            const customerData = customers?.[0];
+            const customerData = await hostingerService.getCustomerByIdentifier(formattedIdentifier);
 
             // Envia em background para não bloquear o utilizador
             NotificationService.sendCustomNotification(formattedIdentifier, `Olá ${name.split(' ')[0]}, o seu registo na Pão Caseiro foi concluído com sucesso!`).catch(e => console.error('Failed to send welcome notification:', e));
@@ -570,38 +544,37 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                                     </div>
 
                                     <div className="space-y-4">
-                                        <button
-                                            onClick={async () => {
-                                                try {
-                                                    if (!acceptedTerms) {
-                                                        setError('Deve aceitar os Termos e a Política de Privacidade antes de continuar.');
-                                                        return;
-                                                    }
-                                                    setLoading(true);
-                                                    setError('');
-                                                    const { error } = await supabase.auth.signInWithOAuth({
-                                                        provider: 'google',
-                                                        options: { redirectTo: `${window.location.origin}/dashboard` }
-                                                    });
-                                                    if (error) throw error;
-                                                } catch (err: any) {
-                                                    setError(err.message || 'Erro ao iniciar sessão.');
-                                                    setLoading(false);
-                                                }
-                                            }}
-                                            disabled={loading}
-                                            className="w-full py-4 px-6 rounded-2xl border-2 border-gray-100 flex items-center justify-center gap-4 transition-all bg-white hover:bg-gray-50 hover:border-gray-200 disabled:opacity-70 group"
-                                        >
-                                            <svg viewBox="0 0 24 24" width="24" height="24" xmlns="http://www.w3.org/2000/svg" className="group-hover:scale-110 transition-transform">
-                                                <g transform="matrix(1, 0, 0, 1, 27.009001, -39.238998)">
-                                                    <path fill="#4285F4" d="M -3.264 51.509 C -3.264 50.719 -3.334 49.969 -3.454 49.239 L -14.754 49.239 L -14.754 53.749 L -8.284 53.749 C -8.574 55.229 -9.424 56.479 -10.684 57.329 L -10.684 60.329 L -6.824 60.329 C -4.564 58.239 -3.264 55.159 -3.264 51.509 Z" />
-                                                    <path fill="#34A853" d="M -14.754 63.239 C -11.514 63.239 -8.804 62.159 -6.824 60.329 L -10.684 57.329 C -11.764 58.049 -13.134 58.489 -14.754 58.489 C -17.884 58.489 -20.534 56.379 -21.484 53.529 L -25.464 53.529 L -25.464 56.619 C -23.494 60.539 -19.444 63.239 -14.754 63.239 Z" />
-                                                    <path fill="#FBBC05" d="M -21.484 53.529 C -21.734 52.809 -21.864 52.039 -21.864 51.239 C -21.864 50.439 -21.724 49.669 -21.484 48.949 L -21.484 45.859 L -25.464 45.859 C -26.284 47.479 -26.754 49.299 -26.754 51.239 C -26.754 53.179 -26.284 54.999 -25.464 56.619 L -21.484 53.529 Z" />
-                                                    <path fill="#EA4335" d="M -14.754 43.989 C -12.984 43.989 -11.404 44.599 -10.154 45.789 L -6.734 42.369 C -8.804 40.429 -11.514 39.239 -14.754 39.239 C -19.444 39.239 -23.494 41.939 -25.464 45.859 L -21.484 48.949 C -20.534 46.099 -17.884 43.989 -14.754 43.989 Z" />
-                                                </g>
-                                            </svg>
-                                            <span className="font-black uppercase tracking-widest text-[#3b2f2f] text-xs">{language === 'en' ? 'Continue with Google' : 'Continuar com o Google'}</span>
-                                        </button>
+                                        <GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID || 'dummy'}>
+                                            <div className="flex justify-center w-full">
+                                                <GoogleLogin
+                                                    onSuccess={async (credentialResponse) => {
+                                                        if (!acceptedTerms) {
+                                                            setError('Deve aceitar os Termos e a Política de Privacidade antes de continuar.');
+                                                            return;
+                                                        }
+                                                        setLoading(true);
+                                                        setError('');
+                                                        try {
+                                                            if (!credentialResponse.credential) throw new Error('No credential received');
+                                                            const decoded: any = jwtDecode(credentialResponse.credential);
+                                                            const { email, name, picture } = decoded;
+                                                            const { data, error } = await authService.signInWithGoogle(email, name, picture || '');
+                                                            if (error) throw error;
+                                                            onClose();
+                                                            navigate('/dashboard');
+                                                        } catch (err: any) {
+                                                            setError(err.message || 'Erro ao iniciar sessão.');
+                                                        } finally {
+                                                            setLoading(false);
+                                                        }
+                                                    }}
+                                                    onError={() => {
+                                                        setError('Google Login Failed');
+                                                    }}
+                                                    useOneTap
+                                                />
+                                            </div>
+                                        </GoogleOAuthProvider>
 
                                         <label className="flex items-center gap-3 cursor-pointer group justify-center pt-2">
                                             <div className="relative">

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { supabase } from '../services/supabase';
+
 
 export interface Order {
     id: string;
@@ -56,20 +56,16 @@ export const useRealtimeOrders = (onNewOrder?: (order: Order) => void) => {
   const fetchOrders = useCallback(async () => {
     try {
       setLoading(true);
-      const { data, error: fetchError } = await supabase
-        .from('orders')
-        .select('*, items:order_items(*)')
-        .order('created_at', { ascending: false })
-        .limit(100);
       
-      if (fetchError) throw fetchError;
-
-      const transformedData = (data || []).map(transformOrder);
-      const newMap = new Map<string, Order>();
-      transformedData.forEach(order => newMap.set(order.id!, order));
-      ordersMapRef.current = newMap;
-      
-      setOrders(transformedData);
+      const { hostingerService } = await import('../services/hostingerService');
+      const hData = await hostingerService.getOrders();
+      if (hData) {
+        const transformed = hData.map(transformOrder);
+        const newMap = new Map<string, Order>();
+        transformed.forEach(order => newMap.set(order.id!, order));
+        ordersMapRef.current = newMap;
+        setOrders(transformed);
+      }
       setError(null);
     } catch (err: any) {
       console.error('[useRealtimeOrders] Fetch Error:', err);
@@ -88,57 +84,13 @@ export const useRealtimeOrders = (onNewOrder?: (order: Order) => void) => {
   useEffect(() => {
     fetchOrders();
 
-    const channel = supabase
-      .channel('admin-orders-realtime')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'orders' },
-        async (payload) => {
-          console.log('[useRealtimeOrders] Change received:', payload.eventType, payload.new?.id);
-          
-          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-            const orderId = payload.new.id;
-            
-            const { data: enrichedOrder, error: enrichError } = await supabase
-              .from('orders')
-              .select('*, items:order_items(*)')
-              .eq('id', orderId)
-              .single();
-
-            if (!enrichError && enrichedOrder) {
-              const transformed = transformOrder(enrichedOrder);
-              setOrders((prev) => {
-                const map = new Map(ordersMapRef.current);
-                const isNew = !map.has(transformed.id!) && payload.eventType === 'INSERT';
-                map.set(transformed.id!, transformed);
-                ordersMapRef.current = map;
-                
-                if (isNew && onNewOrderRef.current) {
-                    onNewOrderRef.current(transformed);
-                }
-
-                return Array.from(map.values()).sort((a: Order, b: Order) => 
-                  new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-                );
-              });
-            }
-          } else if (payload.eventType === 'DELETE') {
-            setOrders((prev) => {
-              const map = new Map(ordersMapRef.current);
-              map.delete(payload.old.id);
-              ordersMapRef.current = map;
-              
-              return Array.from(map.values()).sort((a: Order, b: Order) => 
-                new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-              );
-            });
-          }
-        }
-      )
-      .subscribe();
+    // Use a short interval for polling as a replacement for realtime
+    const interval = setInterval(() => {
+      fetchOrders();
+    }, 15000); // Poll every 15s
 
     return () => {
-      supabase.removeChannel(channel);
+      clearInterval(interval);
     };
   }, [fetchOrders]);
 

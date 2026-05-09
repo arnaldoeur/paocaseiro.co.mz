@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { hostingerService } from './hostingerService';
 
 export type AuditEntityType = 'website' | 'system' | 'purchase' | 'product' | 'file' | 'order' | 'customer' | 'auth' | 'blog' | 'logistics' | 'team_member';
 
@@ -32,20 +32,15 @@ export const logAudit = async (entry: AuditLogEntry) => {
             }
         }
 
-        const { error } = await supabase
-            .from('audit_logs')
-            .insert([{
-                user_id: entry.user_id || null,
-                customer_phone: entry.customer_phone || null,
-                action: entry.action,
-                entity_type: entry.entity_type,
-                entity_id: entry.entity_id || null,
-                details: entry.details || null
-            }]);
+        await hostingerService.saveAuditLog({
+            user_id: entry.user_id || null,
+            customer_phone: entry.customer_phone || null,
+            action: entry.action,
+            entity_type: entry.entity_type,
+            entity_id: entry.entity_id || null,
+            details: entry.details || null
+        });
 
-        if (error) {
-            console.error('Failed to write audit log:', error);
-        }
     } catch (err) {
         console.error('Audit exception:', err);
     }

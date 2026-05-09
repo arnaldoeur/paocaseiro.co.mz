@@ -1,163 +1,64 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { supabase } from '../services/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Megaphone, Volume2, Clock, Info, ShieldCheck, Ticket } from 'lucide-react';
-import { useRealtimeTickets } from '../hooks/useRealtimeTickets';
-
 import { translations, Language } from '../translations';
+import { hostingerService } from '../services/hostingerService';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 
 export const TVTickets: React.FC<{ language?: Language }> = ({ language = 'pt' }) => {
     const t = translations[language];
-    const { tickets, loading } = useRealtimeTickets();
+    const [tickets, setTickets] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
     const [company, setCompany] = useState<any>(null);
     const [isAudioEnabled, setIsAudioEnabled] = useState(false);
     const lastAnnouncedId = useRef<string | null>(null);
     const audioContext = useRef<AudioContext | null>(null);
     const lastUpdateRef = useRef<string | null>(null);
 
-    // 1. Time-based Reset (24h)
-    // The hook now handles timezone correctly for Maputo
-    const todayTickets = tickets;
+    const callingTickets = tickets.filter(t => t.status === 'calling').sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+    const lastCalled = callingTickets[0];
+    const waitingNext = tickets.filter(t => t.status === 'waiting').sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()).slice(0, 6);
+    
+    const stats = {
+        waitingCount: tickets.filter(t => t.status === 'waiting').length,
+        estMinutes: Math.max(2, tickets.filter(t => t.status === 'waiting').length * 3)
+    };
 
-    // 2. State Derivations
-    const callingTickets = useMemo(() => 
-        todayTickets
-            .filter(t => t.status === 'calling')
-            .sort((a, b) => {
-                const timeA = a.called_at ? new Date(a.called_at).getTime() : 0;
-                const timeB = b.called_at ? new Date(b.called_at).getTime() : 0;
-                return timeB - timeA;
-            })
-    , [todayTickets]);
-
-    const lastCalled = callingTickets.length > 0 ? callingTickets[0] : null;
-
-    const waitingNext = useMemo(() => 
-        todayTickets
-            .filter(t => t.status === 'waiting')
-            .sort((a, b) => {
-                if (a.is_priority && !b.is_priority) return -1;
-                if (!a.is_priority && b.is_priority) return 1;
-                const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
-                const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
-                return timeA - timeB;
-            })
-            .slice(0, 3)
-    , [todayTickets]);
-
-    const stats = useMemo(() => {
-        const waitingCount = todayTickets.filter(t => t.status === 'waiting').length;
-        
-        const activeCounters = 1;
-
-        // Calculate actual average service time from last 10 completed tickets today
-        const completedToday = todayTickets
-            .filter(t => t.status === 'completed' && t.created_at && t.updated_at)
-            .sort((a, b) => new Date(b.updated_at!).getTime() - new Date(a.updated_at!).getTime())
-            .slice(0, 10);
-
-        let avgServiceMinutes = 5; // Default fallback
-        if (completedToday.length > 0) {
-            const totalMinutes = completedToday.reduce((acc, t) => {
-                const start = new Date(t.created_at).getTime();
-                const end = new Date(t.updated_at!).getTime();
-                return acc + (end - start) / (1000 * 60);
-            }, 0);
-            avgServiceMinutes = Math.max(3, Math.min(15, totalMinutes / completedToday.length));
+    const fetchTickets = useCallback(async () => {
+        try {
+            const data = await hostingerService.getTicketsToday();
+            if (data) setTickets(data);
+        } catch (err) {
+            console.error("TVTickets: Error fetching tickets:", err);
+        } finally {
+            setLoading(false);
         }
-        
-        // Total waiting time estimation
-        const estMinutes = Math.max(2, Math.ceil((waitingCount / activeCounters) * avgServiceMinutes));
-        
-        return { waitingCount, estMinutes, activeCounters };
-    }, [todayTickets]);
-
-    const announcementQueue = useRef<string[]>([]);
-    const isSpeaking = useRef(false);
-
-    // High-Quality Chime Sound
-    const playNotificationSound = useCallback(() => {
-        const chime = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
-        chime.volume = 0.5;
-        chime.play().catch(e => console.warn("[Audio] Chime playback blocked:", e));
     }, []);
 
-    const processNextAnnouncement = useCallback(() => {
-        if (isSpeaking.current || announcementQueue.current.length === 0 || !isAudioEnabled) return;
-
-        const text = announcementQueue.current.shift()!;
-        isSpeaking.current = true;
-
-        // Reset any existing synthesis
-        window.speechSynthesis.cancel();
-
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = language === 'en' ? 'en-US' : 'pt-PT';
-        utterance.rate = 0.85;
-        utterance.pitch = 1.0;
-        utterance.volume = 1.0;
-
-        // Find a natural voice
-        const voices = window.speechSynthesis.getVoices();
-        const voice = voices.find(v => v.lang.startsWith(language) && v.name.includes('Natural')) || 
-                      voices.find(v => v.lang.startsWith(language)) || 
-                      voices[0];
-        if (voice) utterance.voice = voice;
-
-        utterance.onend = () => {
-            isSpeaking.current = false;
-            setTimeout(processNextAnnouncement, 1500);
-        };
-
-        utterance.onerror = () => {
-            isSpeaking.current = false;
-            setTimeout(processNextAnnouncement, 1000);
-        };
-
-        // Play chime before speaking
-        playNotificationSound();
-        
-        // Wait for chime to breathe before TTS starts
-        setTimeout(() => {
-            window.speechSynthesis.speak(utterance);
-        }, 1200);
-    }, [isAudioEnabled, playNotificationSound, language]);
-
-    // Monitor for new calls and add to queue
     useEffect(() => {
-        if (lastCalled && isAudioEnabled) {
-            const currentUpdate = lastCalled.updated_at || lastCalled.called_at;
-            const currentCallKey = `${lastCalled.id}-${currentUpdate}`;
-            
-            if (currentCallKey !== lastUpdateRef.current) {
-                lastUpdateRef.current = currentCallKey;
-                
-                const ticketLabel = lastCalled.ticket_number;
-                const announcementText = language === 'en' 
-                    ? `Ticket ${ticketLabel}, please come forward`
-                    : `Senha ${ticketLabel}, por favor dirija-se ao atendimento`;
-                
-                console.log(`[Announcer] Queueing: ${announcementText}`);
-                announcementQueue.current.push(announcementText);
-                
-                if (!isSpeaking.current) {
-                    processNextAnnouncement();
-                }
-            }
-        }
-    }, [lastCalled?.id, lastCalled?.updated_at, lastCalled?.called_at, processNextAnnouncement, language, isAudioEnabled]);
+        fetchTickets();
+        const interval = setInterval(fetchTickets, 5000);
+        return () => clearInterval(interval);
+    }, [fetchTickets]);
 
     useEffect(() => {
         const fetchBranding = async () => {
-            const { data: settingsData } = await supabase.from('settings').select('key, value');
-            const settingsMap = settingsData?.reduce((acc: any, item: any) => ({ ...acc, [item.key]: item.value }), {}) || {};
-            const { data: companyData } = await supabase.from('company_profiles').select('*').limit(1).maybeSingle();
-            
-            setCompany({
-                logo_url: '/logo_on_dark.png',
-                office_name: settingsMap.office_name || companyData?.office_name || 'Pão Caseiro',
-                slogan: settingsMap.slogan || companyData?.slogan || 'O Sabor que Aquece o Coração'
-            });
+            try {
+                const settingsData = await hostingerService.getSystemSettings();
+                const settingsMap = settingsData?.reduce((acc: any, item: any) => ({ ...acc, [item.key]: item.value }), {}) || {};
+                
+                setCompany({
+                    logo_url: '/logo_on_dark.png',
+                    office_name: settingsMap.office_name || 'Pão Caseiro',
+                    slogan: settingsMap.slogan || 'O Sabor que Aquece o Coração'
+                });
+            } catch (err) {
+                console.error("TVTickets: Error fetching branding:", err);
+                setCompany({
+                    logo_url: '/logo_on_dark.png',
+                    office_name: 'Pão Caseiro',
+                    slogan: 'O Sabor que Aquece o Coração'
+                });
+            }
         };
         fetchBranding();
         

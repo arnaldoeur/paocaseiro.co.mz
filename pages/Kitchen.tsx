@@ -109,7 +109,7 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
 
     useEffect(() => {
         if (externalUser) {
-            console.log("Kitchen loaded in Admin mode", externalUser);
+            
             setIsAuthenticated(true);
             setUser(externalUser);
             fetchOrders();
@@ -135,17 +135,10 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
 
     const checkActiveSession = async (memberId: string) => {
         try {
-            const { supabase } = await import('../services/supabase');
-            const { data } = await supabase
-                .from('work_sessions')
-                .select('*')
-                .eq('member_id', memberId)
-                .eq('status', 'active')
-                .order('clock_in', { ascending: false })
-                .limit(1)
-                .maybeSingle();
+            const { hostingerService } = await import('../services/hostingerService');
+            const data = await hostingerService.getActiveWorkSession(memberId);
 
-            if (data) {
+            if (data && data.id) {
                 setIsClockedIn(true);
                 setActiveSessionId(data.id);
             }
@@ -159,13 +152,8 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
         setLoading(true);
         setError('');
         try {
-            const { supabase } = await import('../services/supabase');
-            const { data, error } = await supabase
-                .from('team_members')
-                .select('*')
-                .eq('username', username)
-                .eq('password', password)
-                .single();
+            const { hostingerService } = await import('../services/hostingerService');
+            const data = await hostingerService.authTeam(username, password);
 
             if (data) {
                 setIsAuthenticated(true);
@@ -197,79 +185,59 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
     const fetchOrders = async () => {
         setRefreshing(true);
         try {
-            const { supabase } = await import('../services/supabase');
-            // Fetch Active
-            const { data: activeData, error: activeError } = await supabase
-                .from('orders')
-                .select('*, items:order_items(*)')
-                .in('status', ['kitchen', 'pending', 'processing', 'ready'])
-                .order('created_at', { ascending: true });
-
-            if (activeError) { console.error('fetchOrders error:', activeError); }
-            if (activeData) {
-                const mapped = activeData.map((o: any) => ({
+            const { hostingerService } = await import('../services/hostingerService');
+            const data = await hostingerService.getOrders();
+            
+            if (data && Array.isArray(data)) {
+                const mapped = data.map((o: any) => ({
                     ...o,
-                    orderId: o.short_id, // Map short_id for UI
+                    orderId: o.short_id,
                     items: (o.items || []).map((i: any) => ({
-                        name: i.product_name,
+                        name: i.product_name || i.name,
                         quantity: i.quantity,
                         notes: i.notes
                     }))
                 }));
-                setOrders(mapped);
+                
+                const active = mapped.filter((o: any) => ['kitchen', 'pending', 'processing', 'ready'].includes(o.status));
+                const completed = mapped.filter((o: any) => o.status === 'completed');
+                
+                setOrders(active);
+                if (completed.length > 0) setArchivedOrders(completed);
             }
-
-            // Fetch Archived
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-
-            const { data: archData } = await supabase
-                .from('orders')
-                .select('*, items:order_items(*)')
-                .eq('status', 'completed')
-                .gte('created_at', today.toISOString())
-                .order('created_at', { ascending: false })
-                .limit(50);
-
-            if (archData) {
-                const mappedArch = archData.map((o: any) => ({
-                    ...o,
-                    items: (o.items || []).map((i: any) => ({
-                        name: i.product_name,
-                        quantity: i.quantity,
-                        notes: i.notes
-                    }))
-                }));
-                setArchivedOrders(mappedArch);
-            }
-
-        } catch (e) { console.error(e); }
-        finally { setRefreshing(false); }
+        } catch (e) { 
+            console.error("Kitchen fetchOrders error:", e); 
+        } finally { 
+            setRefreshing(false); 
+        }
     };
 
     const fetchProducts = async () => {
         try {
-            const { supabase } = await import('../services/supabase');
-            const { data } = await supabase.from('products').select('id, name, price, stock_quantity').order('name');
+            const { hostingerService } = await import('../services/hostingerService');
+            const hProducts = await hostingerService.getProducts();
+            const data = await hostingerService.getProducts();
             if (data) setProducts(data);
-        } catch (e) { }
-    }
+        } catch (error) {
+            console.error('Error fetching products:', error);
+        }
+    };
 
     const fetchStatus = async () => {
         try {
-            const { supabase } = await import('../services/supabase');
-            const { data } = await supabase.from('settings').select('*').eq('key', 'kitchen_status').single();
-            if (data) setKitchenStatus(data.value);
+            const { hostingerService } = await import('../services/hostingerService');
+            const data = await hostingerService.getKitchenStatus();
+            if (data) setKitchenStatus(data);
         } catch (e) { }
     };
 
     const updateStatus = async (status: 'open' | 'busy' | 'closed') => {
         setKitchenStatus(status);
         try {
-            const { supabase } = await import('../services/supabase');
-            await supabase.from('settings').upsert({ key: 'kitchen_status', value: status });
+            const { hostingerService } = await import('../services/hostingerService');
+            await hostingerService.updateKitchenStatus(status);
         } catch (e) {
-            console.warn("Could not save status to DB (Table 'settings' might be missing)");
+            console.warn("Could not save status");
         }
     };
 
@@ -310,18 +278,12 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
         if (!soundEnabled) return;
 
         try {
-            // Play a small "ping" first
             const chime = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
             chime.volume = 0.2;
             chime.play().catch(() => {});
 
-            // Fetch full order details with items for accurate announcement
-            const { supabase } = await import('../services/supabase');
-            const { data: order } = await supabase
-                .from('orders')
-                .select('*, items:order_items(product_name, quantity)')
-                .eq('id', orderIdInDB)
-                .single();
+            const { hostingerService } = await import('../services/hostingerService');
+            const order = await hostingerService.getOrderById(orderIdInDB);
 
             if (order) {
                 const displayId = order.short_id || order.id.slice(-4).toUpperCase();
@@ -355,23 +317,18 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
         if (!user) return;
         setLoading(true);
         try {
-            const { supabase } = await import('../services/supabase');
-            const { data, error } = await supabase
-                .from('work_sessions')
-                .insert([{
-                    member_id: user.id,
-                    clock_in: new Date().toISOString(),
-                    status: 'active'
-                }])
-                .select()
-                .single();
+            const { hostingerService } = await import('../services/hostingerService');
+            const newSession = await hostingerService.saveWorkSession({
+                member_id: user.id,
+                clock_in: new Date().toISOString(),
+                status: 'active'
+            });
 
-            if (data) {
+            if (newSession) {
                 setIsClockedIn(true);
-                setActiveSessionId(data.id);
+                setActiveSessionId(newSession.id);
                 alert("Início de turno registado!");
             }
-            if (error) throw error;
         } catch (e: any) {
             alert("Erro ao registar início de turno: " + e.message);
         } finally {
@@ -384,22 +341,12 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
         if (!confirm("Confirmar fim de turno / saída?")) return;
         setLoading(true);
         try {
-            const { supabase } = await import('../services/supabase');
-            const { error } = await supabase
-                .from('work_sessions')
-                .update({
-                    clock_out: new Date().toISOString(),
-                    status: 'completed'
-                })
-                .eq('id', activeSessionId);
-
-            if (!error) {
-                setIsClockedIn(false);
-                setActiveSessionId(null);
-                alert("Fim de turno registado. Ótimo trabalho!");
-            } else {
-                throw error;
-            }
+            const { hostingerService } = await import('../services/hostingerService');
+            await hostingerService.updateWorkSession(activeSessionId, 'completed');
+            
+            setIsClockedIn(false);
+            setActiveSessionId(null);
+            alert("Fim de turno registado. Ótimo trabalho!");
         } catch (e: any) {
             alert("Erro ao registar fim de turno: " + e.message);
         } finally {
@@ -410,74 +357,19 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
     // Poll for new orders every 10 seconds
     useEffect(() => {
         if (!isAuthenticated) return;
-
-        // Real-time Listeners
-        let ordersChannel: any;
-        let productsChannel: any;
-        let settingsChannel: any;
-
-        (async () => {
-            const { supabase } = await import('../services/supabase');
-
-            // Listen for any order changes
-            ordersChannel = supabase
-                .channel('kitchen-orders')
-                .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
-                    console.log('New Order!', payload.new.id);
-                    announceOrder(payload.new.id);
-                    fetchOrders();
-                })
-                .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' }, () => {
-                    fetchOrders();
-                })
-                .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'orders' }, () => {
-                    fetchOrders();
-                })
-                .subscribe();
-
-            // Listen for product changes (for manual orders)
-            productsChannel = supabase
-                .channel('kitchen-products')
-                .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => {
-                    console.log('Products changed, reloading...');
-                    fetchProducts();
-                })
-                .subscribe();
-
-            // Listen for kitchen status changes
-            settingsChannel = supabase
-                .channel('kitchen-settings')
-                .on('postgres_changes', { event: '*', schema: 'public', table: 'settings', filter: 'key=eq.kitchen_status' }, () => {
-                    console.log('Kitchen status changed, reloading...');
-                    fetchStatus();
-                })
-                .subscribe();
-        })();
-
-        // Fallback polling (less frequent now)
         const interval = setInterval(() => {
             fetchOrders();
             fetchStatus();
             fetchProducts();
         }, 30000);
-
-        return () => {
-            clearInterval(interval);
-            const cleanup = async () => {
-                const { supabase } = await import('../services/supabase');
-                if (ordersChannel) supabase.removeChannel(ordersChannel);
-                if (productsChannel) supabase.removeChannel(productsChannel);
-                if (settingsChannel) supabase.removeChannel(settingsChannel);
-            };
-            cleanup();
-        };
+        return () => clearInterval(interval);
     }, [isAuthenticated]);
 
     // --- Actions ---
     const handleAcceptClick = (order: Order) => {
         setSelectedOrder(order);
-        setPrepTime(15); // Default
-        setCustomPrepTime(''); // Reset custom
+        setPrepTime(15);
+        setCustomPrepTime('');
         setIsTimeModalOpen(true);
     };
 
@@ -487,149 +379,95 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
     };
 
     const confirmAccept = async () => {
-        if (!selectedOrder) return;
-        setIsTimeModalOpen(false);
-
-        // Optimistic Update
-        setOrders(prev => prev.map(o => o.id === selectedOrder.id ? { ...o, status: 'processing' } : o));
-
-        const { supabase } = await import('../services/supabase');
-
-        // Calculate estimated time
-        const finalTime = customPrepTime ? parseInt(customPrepTime, 10) : prepTime;
+        if (!selectedOrder || (!prepTime && !customPrepTime)) return;
+        
+        const minutes = customPrepTime ? parseInt(customPrepTime) : prepTime;
         const now = new Date();
-        now.setMinutes(now.getMinutes() + (isNaN(finalTime) ? 15 : finalTime));
+        const readyAt = new Date(now.getTime() + minutes * 60000);
 
-        await supabase
-            .from('orders')
-            .update({
+        try {
+            const { hostingerService } = await import('../services/hostingerService');
+            await hostingerService.updateOrder(selectedOrder.id, {
                 status: 'processing',
-                estimated_ready_at: now.toISOString(),
-                staff_id: (user?.id && isValidUUID(user.id)) ? user.id : null
-            })
-            .eq('id', selectedOrder.id);
+                estimated_ready_at: readyAt.toISOString()
+            });
 
-        fetchOrders(); // Sync
-
-        // Notify prep time
-        const updatedOrder = { ...selectedOrder, status: 'processing', prep_time: finalTime };
-        NotificationService.notifyOrderStatus(updatedOrder, 'processing').catch(console.error);
+            setIsTimeModalOpen(false);
+            setSelectedOrder(null);
+            fetchOrders();
+        } catch (error) {
+            console.error('Error accepting order:', error);
+            alert('Erro ao aceitar pedido. Tente novamente.');
+        }
     };
 
-    const confirmAddTime = async (minutesToAdd: number) => {
-        if (!addTimeOrder || !addTimeOrder.estimated_ready_at) return;
-        setIsAddTimeModalOpen(false);
-
-        const currentReadyAt = new Date(addTimeOrder.estimated_ready_at);
-        currentReadyAt.setMinutes(currentReadyAt.getMinutes() + minutesToAdd);
-
-        // Optimistic
-        setOrders(prev => prev.map(o => o.id === addTimeOrder.id ? { ...o, estimated_ready_at: currentReadyAt.toISOString() } : o));
-
-        const { supabase } = await import('../services/supabase');
-        await supabase
-            .from('orders')
-            .update({
-                estimated_ready_at: currentReadyAt.toISOString()
-            })
-            .eq('id', addTimeOrder.id);
-
-        const reason = window.prompt("Motivo do atraso? (Ex: excesso de pedidos). Cancele ou deixe em branco para não notificar o cliente.");
+    const confirmAddTime = async (minutes: number) => {
+        if (!addTimeOrder) return;
         
-        fetchOrders(); // Sync
+        const currentReadyAt = addTimeOrder.estimated_ready_at 
+            ? new Date(addTimeOrder.estimated_ready_at) 
+            : new Date();
+        const newReadyAt = new Date(currentReadyAt.getTime() + minutes * 60000);
 
-        if (reason && reason.trim() !== '') {
-            NotificationService.notifyOrderDelay(addTimeOrder, minutesToAdd.toString(), reason).catch(console.error);
+        try {
+            const { hostingerService } = await import('../services/hostingerService');
+            await hostingerService.updateOrder(addTimeOrder.id, { estimated_ready_at: newReadyAt.toISOString() });
+            setIsAddTimeModalOpen(false);
+            setAddTimeOrder(null);
+            fetchOrders();
+        } catch (error) {
+            console.error('Error adding time:', error);
         }
     };
 
     const handleMarkReady = async (orderId: string) => {
         if (!confirm("Confirmar pedido pronto?")) return;
-
-        const order = orders.find(o => o.id === orderId);
-        setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'ready' } : o));
-
-        const { supabase } = await import('../services/supabase');
-        await supabase.from('orders').update({ 
-            status: 'ready',
-            staff_id: (user?.id && isValidUUID(user.id)) ? user.id : null // Ensure staff_id is linked
-        }).eq('id', orderId);
-
-        if (order) {
-            const updatedOrder = { ...order, status: 'ready' };
-            NotificationService.notifyOrderStatus(updatedOrder, 'ready').catch();
-            import('../services/email').then(m => m.notifyOrderStatusUpdateEmail(updatedOrder)).catch();
-        }
+        try {
+            const { hostingerService } = await import('../services/hostingerService');
+            await hostingerService.updateOrder(orderId, { status: 'ready' });
+            fetchOrders();
+        } catch (e) { }
     };
 
     const handleArchive = async (orderId: string) => {
         if (!confirm("Confirmar entrega / arquivar?")) return;
-
-        const order = orders.find(o => o.id === orderId);
-        const { supabase } = await import('../services/supabase');
-        await supabase.from('orders').update({ status: 'completed' }).eq('id', orderId);
-        setOrders(prev => prev.filter(o => o.id !== orderId));
-
-        if (order) {
-            const updatedOrder = { ...order, status: 'completed' };
-            NotificationService.notifyOrderStatus(updatedOrder, 'completed').catch();
-            import('../services/email').then(m => m.notifyOrderStatusUpdateEmail(updatedOrder)).catch();
-        }
+        try {
+            const { hostingerService } = await import('../services/hostingerService');
+            await hostingerService.updateOrder(orderId, { status: 'completed' });
+            fetchOrders();
+        } catch (e) { }
     };
 
     // --- Manual Order ---
     const saveManualOrder = async () => {
-        if (!manualCustomer) return;
-        setIsManualModalOpen(false);
-        setLoading(true);
+        if (!manualCustomer || manualItems.some(i => !i.name)) {
+            alert("Preencha o nome do cliente e os itens!");
+            return;
+        }
+
+        const orderId = `M${Math.floor(1000 + Math.random() * 9000)}`;
+        const total = manualItems.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+        
+        const newOrder = {
+            id: crypto.randomUUID(),
+            short_id: orderId,
+            customer_name: manualCustomer,
+            customer_phone: manualPhone,
+            items: manualItems,
+            total_amount: total,
+            status: manualPrepTime ? 'processing' : 'pending',
+            delivery_type: manualOrderType,
+            created_at: new Date().toISOString(),
+            estimated_ready_at: manualPrepTime ? new Date(Date.now() + manualPrepTime * 60000).toISOString() : null
+        };
 
         try {
-            const { saveOrderToSupabase } = await import('../services/supabase');
-
-            let status = 'pending';
-            // let estimated_ready_at = null; // Removed as saveOrderToSupabase doesn't support passing this directly yet, or we need to add it to payload
-
-            if (manualPrepTime) {
-                status = 'processing';
-                // const now = new Date();
-                // now.setMinutes(now.getMinutes() + manualPrepTime);
-                // estimated_ready_at = now.toISOString();
-            }
-
-            // Calculate Total
-            const total = manualItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-
-            const timestamp = Date.now();
-            const orderPayload = {
-                short_id: `KDS-${timestamp.toString().slice(-4)}`,
-                payment_ref: `MANUAL-${timestamp}`,
-                customer_name: manualCustomer,
-                customer_phone: manualPhone || (manualOrderType === 'local' ? 'BALCAO' : '999999999'),
-                customer_address: manualOrderType === 'local' ? 'Consumo Local' : (manualOrderType === 'pickup' ? 'Para Levar' : 'Entrega'),
-                delivery_type: manualOrderType,
-                total_amount: total,
-                amount_paid: 0, // Assume pending payment or handle later
-                balance: total,
-                status: status,
-                notes: manualPrepTime ? `Tempo de preparo: ${manualPrepTime} min` : 'Pedido Manual KDS'
-            };
-
-            const result = await saveOrderToSupabase(orderPayload, manualItems);
-
-            if (!result.success) {
-                throw result.error;
-            }
-
-            fetchOrders();
-            // Reset form
-            setManualCustomer('Cliente Balcão');
+            const { hostingerService } = await import('../services/hostingerService');
+            await hostingerService.saveOrder(newOrder);
+            setIsManualModalOpen(false);
+            setManualCustomer('');
             setManualPhone('');
             setManualItems([{ name: '', quantity: 1, price: 0 }]);
-            setManualPrepTime(null);
-
-        } catch (e: any) {
-            console.error("Error creating order:", e);
-            alert(e.message || "Erro ao criar pedido. Verifique os dados.");
         } finally {
             setLoading(false);
         }
@@ -1230,27 +1068,24 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
                                 </button>
                                 <button
                                     onClick={async () => {
-                                        if (!newPassword || newPassword !== confirmPassword) {
-                                            alert("As senhas não coincidem!");
-                                            return;
-                                        }
-                                        setIsChangingPassword(true);
-                                        const { supabase } = await import('../services/supabase');
-                                        const { error } = await supabase
-                                            .from('team_members')
-                                            .update({ password: newPassword })
-                                            .eq('id', user.id);
-
-                                        if (!error) {
-                                            alert("Senha alterada com sucesso!");
-                                            setIsPasswordModalOpen(false);
-                                            setNewPassword('');
-                                            setConfirmPassword('');
-                                        } else {
-                                            alert("Erro ao alterar senha.");
-                                        }
-                                        setIsChangingPassword(false);
-                                    }}
+                                    if (!newPassword || newPassword !== confirmPassword) {
+                                        alert("As senhas não coincidem!");
+                                        return;
+                                    }
+                                    setIsChangingPassword(true);
+                                    try {
+                                        const { hostingerService } = await import('../services/hostingerService');
+                                        await hostingerService.updateTeamMember(user.id, { password: newPassword });
+                                        alert("Senha alterada com sucesso!");
+                                        setIsPasswordModalOpen(false);
+                                        setNewPassword('');
+                                        setConfirmPassword('');
+                                    } catch (error) {
+                                        console.error('Error changing password:', error);
+                                        alert("Erro ao alterar senha.");
+                                    }
+                                    setIsChangingPassword(false);
+                                }}
                                     disabled={isChangingPassword}
                                     className="flex-1 py-3 rounded-lg font-bold bg-[#3b2f2f] text-white disabled:opacity-50"
                                 >

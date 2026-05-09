@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Truck, Lock, Phone, ArrowRight, Loader, AlertTriangle, User, LogOut, Shield, Navigation, MapPin, CheckCircle, Package, Clock, ChefHat, MessageSquare } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { NotificationService } from '../services/NotificationService';
+import { hostingerService } from '../services/hostingerService';
+
 
 // ---------- Haversine Distance Helper (meters) ----------
 function getDistanceMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -93,31 +95,27 @@ export const Delivery: React.FC = () => {
         setTrackingOrderId(order.id);
         const destCoords = parseCoords(order.delivery_coordinates);
 
-        const { supabase } = await import('../services/supabase');
-
         watchIdRef.current = navigator.geolocation.watchPosition(
             async (pos) => {
                 const { latitude, longitude } = pos.coords;
 
                 // Update driver position in DB
-                await supabase
-                    .from('orders')
-                    .update({ driver_lat: latitude, driver_lng: longitude })
-                    .eq('id', order.id);
+                await hostingerService.updateOrder(order.id, { 
+                    driver_lat: latitude, 
+                    driver_lng: longitude 
+                });
 
                 // Check proximity — trigger approaching notification once
                 if (destCoords && !order.approaching_notified) {
                     const dist = getDistanceMeters(latitude, longitude, destCoords.lat, destCoords.lng);
                     if (dist <= 500) {
                         // Mark as notified to prevent double-send
-                        await supabase
-                            .from('orders')
-                            .update({ approaching_notified: true })
-                            .eq('id', order.id);
+                        await hostingerService.updateOrder(order.id, { 
+                            approaching_notified: true 
+                        });
 
                         // Auto-send notification to customer
                         await NotificationService.notifyApproaching(order, user);
-                        console.log(`[GPS] Approaching alert sent for #${order.short_id}`);
                     }
                 }
             },
@@ -134,20 +132,16 @@ export const Delivery: React.FC = () => {
         if (!activeUser) return;
         setFetchingOrders(true);
         try {
-            const { supabase } = await import('../services/supabase');
-            let query = supabase
-                .from('orders')
-                .select('*, items:order_items(*)')
-                .in('status', ['delivering', 'ready', 'arrived'])
-                .order('created_at', { ascending: false });
+            const filters: any = {
+                status: ['delivering', 'ready', 'arrived']
+            };
 
             // Driver mode: only their orders. IT mode: all active deliveries
             if (!activeUser.is_it) {
-                query = query.eq('driver_id', activeUser.id);
+                filters.driver_id = activeUser.id;
             }
 
-            const { data, error } = await query;
-            if (error) console.error('fetchOrders error:', error);
+            const data = await hostingerService.getOrders(filters);
             if (data) setAssignedOrders(data);
         } catch (e) {
             console.error('Error fetching driver orders:', e);
@@ -158,54 +152,14 @@ export const Delivery: React.FC = () => {
 
     const fetchOrders = () => fetchOrdersForUser(user);
 
-    // Real-time Sync
+    // Polling Sync (Replacement for Real-time)
     useEffect(() => {
         if (isAuthenticated && user) {
-            let channel: any;
-            (async () => {
-                const { supabase } = await import('../services/supabase');
-                const channelName = user.is_it ? 'it-all-orders' : `driver-orders-${user.id}`;
-                const filter = user.is_it ? undefined : `driver_id=eq.${user.id}`;
+            const interval = setInterval(() => {
+                fetchOrdersForUser(user);
+            }, 10000); // Poll every 10s
 
-                const channelBuilder = supabase
-                    .channel(channelName)
-                    .on(
-                        'postgres_changes',
-                        {
-                            event: '*',
-                            schema: 'public',
-                            table: 'orders',
-                            ...(filter ? { filter } : {})
-                        },
-                        (payload: any) => { 
-                            if (payload.eventType === 'UPDATE' && payload.new.driver_id === user.id && payload.new.status === 'ready' && payload.old.status !== 'ready') {
-                                // Play sound
-                                const audio = new Audio('/notification.mp3');
-                                audio.play().catch(() => {});
-                                // Native Notification
-                                if ('Notification' in window && Notification.permission === 'granted') {
-                                    new Notification('Nova Entrega Atribuída!', { body: 'Tem uma nova entrega para o cliente.' });
-                                } else if ('Notification' in window && Notification.permission !== 'denied') {
-                                    Notification.requestPermission().then(permission => {
-                                        if (permission === 'granted') {
-                                            new Notification('Nova Entrega Atribuída!', { body: 'Tem uma nova entrega.' });
-                                        }
-                                    });
-                                }
-                                alert('🔔 NOVA ENTREGA ATRIBUÍDA!\nConsulte a sua lista de pedidos.');
-                            }
-                            fetchOrdersForUser(user); 
-                        }
-                    );
-
-                channel = channelBuilder.subscribe();
-            })();
-
-            return () => {
-                if (channel) {
-                    import('../services/supabase').then(({ supabase }) => supabase.removeChannel(channel));
-                }
-            };
+            return () => clearInterval(interval);
         }
     }, [isAuthenticated, user]);
 
@@ -218,14 +172,9 @@ export const Delivery: React.FC = () => {
                     (position) => {
                         const lat = position.coords.latitude;
                         const lng = position.coords.longitude;
-                        import('../services/supabase').then(({ supabase }) => {
-                            supabase.from('logistics_drivers')
-                                .update({ lat, lng })
-                                .eq('id', user.id)
-                                .then(); // silent update
-                        });
+                        hostingerService.updateDriver(user.id, { lat, lng }).catch(); // silent update
                     },
-                    (error) => console.log("GPS Track Error:", error),
+                    (error) => console.error('[GPS Tracker] Error:', error),
                     { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 }
                 );
             }
@@ -243,26 +192,21 @@ export const Delivery: React.FC = () => {
         setError('');
         setLoading(true);
         try {
-            const { supabase } = await import('../services/supabase');
             const cleanPhone = phone.replace(/\s+/g, '');
-            const { data, error: dbError } = await supabase
-                .from('logistics_drivers')
-                .select('*')
-                .or(`phone.eq.${cleanPhone},alternative_phone.eq.${cleanPhone}`)
-                .single();
+            const data = await hostingerService.getDriverByIdentifier(cleanPhone);
 
-            if (dbError || !data) throw new Error('Número não encontrado. Contacte o Administrador.');
+            if (!data) throw new Error('Número não encontrado. Contacte o Administrador.');
 
             setUser(data);
 
-            if (data.password && data.is_first_login === false) {
+            if (data.password && data.is_first_login === 0) { // is_first_login is bit/boolean in PHP/MySQL
                 setStep('password');
                 return;
             }
 
             const code = Math.floor(1000 + Math.random() * 9000).toString();
             setGeneratedOtp(code);
-            console.log(`[DEV OTP] For ${cleanPhone}: ${code}`);
+            
             await NotificationService.sendOTP(cleanPhone, code);
             setStep('otp');
         } catch (err: any) {
@@ -277,7 +221,7 @@ export const Delivery: React.FC = () => {
         setError('');
         setLoading(true);
         if (otpInput === '0689' || otpInput === generatedOtp) {
-            if (!user.password || user.is_first_login !== false) {
+            if (!user.password || user.is_first_login !== 0) {
                 setStep('create_password');
             } else {
                 setIsAuthenticated(true);
@@ -320,28 +264,19 @@ export const Delivery: React.FC = () => {
         setError('');
         setLoading(true);
         try {
-            const { supabase } = await import('../services/supabase');
-            const { error: updateError, data } = await supabase
-                .from('logistics_drivers')
-                .update({ password: driverPassword, is_first_login: false })
-                .eq('id', user.id)
-                .select()
-                .single();
-
-            if (updateError) {
-                console.error("Database schema missing password columns:", updateError);
-                // Fallback: If the columns don't exist, we just let them log in anyway for this session.
-                // We won't block them from working just because the Admin hasn't run the SQL script yet.
-            }
+            await hostingerService.updateDriver(user.id, { 
+                password: driverPassword, 
+                is_first_login: 0 
+            });
             
-            const updatedUser = data || { ...user, password: driverPassword, is_first_login: false };
+            const updatedUser = { ...user, password: driverPassword, is_first_login: 0 };
             setIsAuthenticated(true);
             setUser(updatedUser);
             localStorage.setItem('driver_auth', 'true');
             localStorage.setItem('driver_user', JSON.stringify(updatedUser));
             fetchOrdersForUser(updatedUser);
         } catch (err: any) {
-            setError(err.message || 'Erro no banco de dados. Informe o administrador para criar colunas password/is_first_login.');
+            setError(err.message || 'Erro ao guardar palavra-passe.');
         } finally {
             setLoading(false);
         }
@@ -353,13 +288,7 @@ export const Delivery: React.FC = () => {
         setError('');
         setLoading(true);
         try {
-            const { supabase } = await import('../services/supabase');
-            const { data } = await supabase
-                .from('team_members')
-                .select('*')
-                .eq('username', username)
-                .eq('password', password)
-                .single();
+            const data = await hostingerService.authTeam(username, password);
 
             if (data) {
                 const itUser = { ...data, is_it: true };
@@ -569,14 +498,11 @@ export const Delivery: React.FC = () => {
                                             <button
                                                 onClick={async () => {
                                                     if (!confirm('Iniciar rota agora?')) return;
-                                                    const { supabase } = await import('../services/supabase');
-
-                                                    const { error } = await supabase
-                                                        .from('orders')
-                                                        .update({ status: 'delivering' })
-                                                        .eq('id', order.id);
-
-                                                    if (error) return alert('Erro: ' + error.message);
+                                                    try {
+                                                        await hostingerService.updateOrder(order.id, { status: 'delivering' });
+                                                    } catch (err: any) {
+                                                        return alert('Erro: ' + err.message);
+                                                    }
 
                                                     // Notify customer with driver phone
                                                     const customerPhone = order.customer_phone;
@@ -606,17 +532,10 @@ export const Delivery: React.FC = () => {
                                                 <div className="grid grid-cols-2 gap-2">
                                                     <button
                                                         onClick={async () => {
-                                                            const { supabase } = await import('../services/supabase');
-                                                            const { error } = await supabase
-                                                                .from('orders')
-                                                                .update({ status: 'arrived' })
-                                                                .eq('id', order.id);
-                                                            if (error) {
-                                                                if(error.message.includes('check constraint')) {
-                                                                    console.warn("DB constraint block for 'arrived'. Bypassing frontend.");
-                                                                } else {
-                                                                    return alert('Erro: ' + error.message);
-                                                                }
+                                                            try {
+                                                                await hostingerService.updateOrder(order.id, { status: 'arrived' });
+                                                            } catch (err: any) {
+                                                                return alert('Erro: ' + err.message);
                                                             }
                                                             await NotificationService.notifyOrderStatus(order, 'arrived');
                                                             import('../services/email').then(m => m.notifyOrderStatusUpdateEmail({...order, status: 'arrived'})).catch();
@@ -644,14 +563,10 @@ export const Delivery: React.FC = () => {
                                                     onClick={async () => {
                                                         const otp = prompt(`Insira o OTP fornecido pelo cliente para #${order.short_id}:`);
                                                         if (otp !== order.otp && otp !== '0689') return alert('OTP incorreto!');
-                                                        const { supabase } = await import('../services/supabase');
-                                                        const { error } = await supabase.from('orders').update({ status: 'completed' }).eq('id', order.id);
-                                                        if (error) {
-                                                            if(error.message.includes('check constraint')) {
-                                                                console.warn("Constraint bypass");
-                                                            } else {
-                                                                return alert('Erro: ' + error.message);
-                                                            }
+                                                        try {
+                                                            await hostingerService.updateOrder(order.id, { status: 'completed' });
+                                                        } catch (err: any) {
+                                                            return alert('Erro: ' + err.message);
                                                         }
                                                         await NotificationService.notifyOrderStatus(order, 'completed');
                                                         import('../services/email').then(m => m.notifyOrderStatusUpdateEmail({...order, status: 'completed'})).catch();
@@ -674,8 +589,11 @@ export const Delivery: React.FC = () => {
                                                     onClick={async () => {
                                                         const otp = prompt(`OTP do cliente para finalizar #${order.short_id}:`);
                                                         if (otp !== order.otp && otp !== '0689') return alert('OTP incorreto!');
-                                                        const { supabase } = await import('../services/supabase');
-                                                        await supabase.from('orders').update({ status: 'completed' }).eq('id', order.id);
+                                                        try {
+                                                            await hostingerService.updateOrder(order.id, { status: 'completed' });
+                                                        } catch (err: any) {
+                                                            return alert('Erro: ' + err.message);
+                                                        }
                                                         await NotificationService.notifyOrderStatus(order, 'completed');
                                                         import('../services/email').then(m => m.notifyOrderStatusUpdateEmail({...order, status: 'completed'})).catch();
                                                         stopTracking();
@@ -902,10 +820,15 @@ export const Delivery: React.FC = () => {
                                     onClick={async () => {
                                         if (!newPassword || newPassword !== confirmPassword) return alert('Senhas não coincidem!');
                                         setIsChangingPassword(true);
-                                        const { supabase } = await import('../services/supabase');
-                                        const { error } = await supabase.from('team_members').update({ password: newPassword }).eq('id', user.id);
-                                        if (!error) { alert('Senha alterada!'); setIsPasswordModalOpen(false); setNewPassword(''); setConfirmPassword(''); }
-                                        else alert('Erro ao alterar.');
+                                        try {
+                                            await hostingerService.updateTeamMember(user.id, { password: newPassword });
+                                            alert('Senha alterada!'); 
+                                            setIsPasswordModalOpen(false); 
+                                            setNewPassword(''); 
+                                            setConfirmPassword(''); 
+                                        } catch (err: any) {
+                                            alert('Erro ao alterar.');
+                                        }
                                         setIsChangingPassword(false);
                                     }}
                                     disabled={isChangingPassword}

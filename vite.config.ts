@@ -37,10 +37,7 @@ export default defineConfig(({ mode }) => {
           proxyRes.headers['access-control-allow-origin'] = '*';
           proxyRes.headers['access-control-allow-methods'] = 'GET, POST, PUT, DELETE, PATCH, OPTIONS';
           proxyRes.headers['access-control-allow-headers'] = 'X-Requested-With, content-type, Authorization, apikey, x-client-info, Prefer, Accept';
-          
-          if (proxyRes.statusCode && proxyRes.statusCode >= 400) {
-            console.log(`[Supabase Proxy Status] ${req.url} -> ${proxyRes.statusCode}`);
-          }
+
         });
       }
     }
@@ -64,7 +61,7 @@ export default defineConfig(({ mode }) => {
       VitePWA({
         selfDestroying: true,
         registerType: 'autoUpdate',
-        includeAssets: ['favicon.ico', 'robots.txt', 'images/**/*.png', 'images/**/*.jpg'],
+        includeAssets: ['favicon.ico', 'robots.txt', 'logo_on_dark.png', 'pao_caseiro_hero.png'],
         manifest: {
           name: 'Pão Caseiro - O sabor que aquece o coração',
           short_name: 'Pão Caseiro',

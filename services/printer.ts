@@ -42,7 +42,6 @@ export class PrinterService {
             const devices = await navigator.usb.getDevices();
             // Just a placeholder for now as USB requires specific implementation 
             // per OS/browser or a local agent. WebUSB is limited.
-            console.log("USB devices available:", devices);
             return true;
         } catch (error) {
             console.error('USB connection failed:', error);
@@ -62,7 +61,6 @@ export class PrinterService {
                 console.error("Failed to open cash drawer", e);
             }
         } else {
-            console.log("Cash drawer command (simulated): [0x1B, 0x70, 0x00, 0x19, 0xFA]");
         }
     }
 
@@ -113,7 +111,6 @@ export class PrinterService {
         if (this.characteristic) {
             await this.characteristic.writeValue(final);
         } else {
-            console.log("Printing to console (no printer connected):\n", new TextDecoder().decode(commands));
         }
     }
 
@@ -197,7 +194,6 @@ export class PrinterService {
         if (this.characteristic) {
             await this.characteristic.writeValue(final);
         } else {
-            console.log("Printing Ticket to console:\n", new TextDecoder().decode(commands));
         }
     }
 

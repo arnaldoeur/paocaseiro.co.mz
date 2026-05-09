@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Lock, Server, MessageSquare, CheckCircle, Clock, LayoutDashboard, Settings, Mail, ShoppingCart, Users, Trash2, Download, RefreshCw, FileText, Check, X, Smartphone, DollarSign, AlertTriangle, Send, Megaphone, Edit, Plus } from 'lucide-react';
-import { supabase } from '../services/supabase';
+import { hostingerService } from '../services/hostingerService';
 import { sendEmail } from '../services/email';
 import { sendSMS } from '../services/sms';
 
@@ -46,18 +46,17 @@ export const ITSupport: React.FC = () => {
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
-            const { data, error } = await supabase
-                .from('team_members')
-                .select('*')
-                .eq('username', username)
-                .eq('password', password)
-                .in('role', ['admin', 'support'])
-                .single();
+            const result = await hostingerService.authTeam(username, password);
 
-            if (data) {
-                setCurrentUser(data);
-                setIsAuthenticated(true);
-                fetchAllData();
+            if (result.success && result.data) {
+                const user = result.data;
+                if (['admin', 'support'].includes(user.role?.toLowerCase())) {
+                    setCurrentUser(user);
+                    setIsAuthenticated(true);
+                    fetchAllData();
+                } else {
+                    alert('Acesso negado: Nível de permissão insuficiente.');
+                }
             } else {
                 alert('Acesso negado ou credenciais inválidas.');
             }
@@ -70,55 +69,67 @@ export const ITSupport: React.FC = () => {
         setLoading(true);
         try {
             // Stats & Logs
-            const { data: logs } = await supabase.from('sms_logs').select('*').order('created_at', { ascending: false }).limit(200);
+            const logsResult = await hostingerService.getSmsLogs(200);
+            const logs = logsResult.success ? logsResult.data : [];
             if (logs) setSmsLogs(logs);
 
-            const { data: configData } = await supabase.from('system_settings').select('*').in('key', ['sms_pricing', 'maintenance_mode', 'panic_mode']);
-            if (configData) {
-                const smsP = configData.find(c => c.key === 'sms_pricing');
-                if (smsP && smsP.value) {
+            const settingsData = await hostingerService.getSystemSettings();
+            if (settingsData) {
+                const settingsMap = settingsData.reduce((acc: any, item: any) => ({ ...acc, [item.key]: item.value }), {});
+                
+                const smsPricing = settingsMap['sms_pricing'];
+                if (smsPricing) {
+                    const pricing = typeof smsPricing === 'string' ? JSON.parse(smsPricing) : smsPricing;
                     setSmsConfig({
-                        sms: smsP.value.cost_per_sms || 1.62,
-                        whatsapp: smsP.value.cost_per_whatsapp || 0.50,
-                        email: smsP.value.cost_per_email || 0
+                        sms: pricing.cost_per_sms || 1.62,
+                        whatsapp: pricing.cost_per_whatsapp || 0.50,
+                        email: pricing.cost_per_email || 0
                     });
                 }
-                const maintP = configData.find(c => c.key === 'maintenance_mode');
-                if (maintP && maintP.value) {
-                    setIsMaintenance(maintP.value.active || false);
+                
+                const maintMode = settingsMap['maintenance_mode'];
+                if (maintMode) {
+                    const mode = typeof maintMode === 'string' ? JSON.parse(maintMode) : maintMode;
+                    setIsMaintenance(mode.active || false);
                 }
-                const panicP = configData.find(c => c.key === 'panic_mode');
-                if (panicP && panicP.value) {
-                    setIsPanic(panicP.value.active || false);
+
+                const panicMode = settingsMap['panic_mode'];
+                if (panicMode) {
+                    const mode = typeof panicMode === 'string' ? JSON.parse(panicMode) : panicMode;
+                    setIsPanic(mode.active || false);
                 }
             }
 
             // Orders
-            const { data: ords } = await supabase.from('orders').select('*').order('created_at', { ascending: false }).limit(200);
+            const ordersResult = await hostingerService.getOrders({ limit: 200 });
+            const ords = ordersResult.success ? ordersResult.data : [];
             if (ords) {
                 setOrders(ords);
-                setStats(s => ({ ...s, totalOrders: ords.length, failedOrders: ords.filter(o => o.status === 'failed_payment').length }));
+                setStats(s => ({ ...s, totalOrders: ords.length, failedOrders: ords.filter((o: any) => o.status === 'failed_payment').length }));
             }
 
             // Messages
-            const { data: msgs } = await supabase.from('contact_messages').select('*').order('created_at', { ascending: false });
+            const msgsResult = await hostingerService.getContactMessages('all');
+            const msgs = msgsResult.success ? msgsResult.data : [];
             if (msgs) {
                 setMessages(msgs);
-                setStats(s => ({ ...s, activeTickets: msgs.filter(m => m.status === 'unread' || m.status === 'pending').length }));
+                setStats(s => ({ ...s, activeTickets: msgs.filter((m: any) => m.status === 'unread' || m.status === 'pending').length }));
             }
 
             // Comments
-            const { data: cmmts } = await supabase.from('blog_comments').select('*').order('created_at', { ascending: false });
+            const commentsResult = await hostingerService.getBlogComments();
+            const cmmts = commentsResult.success ? commentsResult.data : [];
             if (cmmts) setComments(cmmts);
 
             // Team
-            const { data: tm } = await supabase.from('team_members').select('*').order('name');
+            const teamResult = await hostingerService.getTeam();
+            const tm = teamResult.success ? teamResult.data : [];
             if (tm) setTeam(tm);
 
             // Calculate costs
             if (logs) {
-                const total = logs.reduce((acc, l) => acc + (Number(l.cost) || 0), 0);
-                const totalSent = logs.filter(l => l.status === 'sent').length;
+                const total = logs.reduce((acc: any, l: any) => acc + (Number(l.cost) || 0), 0);
+                const totalSent = logs.filter((l: any) => l.status === 'sent').length;
                 setStats(s => ({ ...s, totalSmsCost: total, totalSentMsgs: totalSent }));
             }
 
@@ -130,9 +141,12 @@ export const ITSupport: React.FC = () => {
 
     const updateSmsConfig = async () => {
         const payload = { cost_per_sms: smsConfig.sms, cost_per_whatsapp: smsConfig.whatsapp, cost_per_email: smsConfig.email };
-        const { error } = await supabase.from('system_settings').upsert({ key: 'sms_pricing', value: payload });
-        if (error) alert("Failed to save config");
-        else alert("Configurações de custo atualizadas!");
+        try {
+            await hostingerService.updateSystemSetting('sms_pricing', payload);
+            alert("Configurações de custo atualizadas!");
+        } catch (err) {
+            alert("Failed to save config");
+        }
     };
 
     const toggleMaintenance = async () => {
@@ -140,10 +154,12 @@ export const ITSupport: React.FC = () => {
         if (newState) {
             if (!window.confirm("ATENÇÃO: MODO MANUTENÇÃO.\nIrá colocar a loja online em manutenção, mas o painel Admin e o sistema operacional irão continuar ativos. Deseja prosseguir?")) return;
         }
-        const { error } = await supabase.from('system_settings').upsert({ key: 'maintenance_mode', value: { active: newState } });
-        if (!error) {
+        try {
+            await hostingerService.updateSystemSetting('maintenance_mode', { active: newState });
             setIsMaintenance(newState);
             alert(newState ? "Website em Manutenção!" : "Website restaurado (Online)!");
+        } catch (err) {
+            alert("Erro ao atualizar modo manutenção");
         }
     };
 
@@ -152,19 +168,23 @@ export const ITSupport: React.FC = () => {
         if (newState) {
             if (!window.confirm("🔴 ALERTA VERMELHO: BOTÃO DE PÂNICO 🔴\nIrá encerrar e bloquear TOTALMENTE o site e o Painel de Administradores instantaneamente. Apenas o IT Console ficará ativo. Tens a certeza?")) return;
         }
-        const { error } = await supabase.from('system_settings').upsert({ key: 'panic_mode', value: { active: newState } });
-        if (!error) {
+        try {
+            await hostingerService.updateSystemSetting('panic_mode', { active: newState });
             setIsPanic(newState);
             alert(newState ? "SISTEMA TOTALMENTE ENCERRADO!" : "Pânico desativado. Serviços em reativação.");
+        } catch (err) {
+            alert("Erro ao atualizar modo pânico");
         }
     };
 
     const remarcarPedido = async (id: string) => {
         if (!window.confirm("Deseja remarcar este pedido para Pendente?")) return;
-        const { error } = await supabase.from('orders').update({ status: 'pending', payment_id: null }).eq('id', id);
-        if (!error) {
+        try {
+            await hostingerService.updateOrder(id, { status: 'pending', payment_id: null });
             alert("Pedido remarcado!");
             fetchAllData();
+        } catch (err) {
+            alert("Erro ao remarcar pedido");
         }
     };
 
@@ -180,7 +200,7 @@ export const ITSupport: React.FC = () => {
     };
 
     const updateMessageStatus = async (id: string, newStatus: string) => {
-        await supabase.from('contact_messages').update({ status: newStatus }).eq('id', id);
+        await hostingerService.updateContactMessageStatus(id, newStatus);
         fetchAllData();
     };
 
@@ -234,12 +254,13 @@ export const ITSupport: React.FC = () => {
         let contacts: string[] = [];
         
         try {
-            const { data: ords } = await supabase.from('orders').select('customer_email, customer_phone');
+            const ordersResult = await hostingerService.getOrders();
+            const ords = ordersResult.success ? ordersResult.data : [];
             if (ords) {
                 if(broadcastChannel === 'email') {
-                    contacts = Array.from(new Set(ords.map(o => (o as any).customer_email as string).filter(e => e && e.includes('@'))));
+                    contacts = Array.from(new Set(ords.map((o: any) => o.customer_email).filter((e: any) => e && e.includes('@')))) as string[];
                 } else {
-                    contacts = Array.from(new Set(ords.map(o => (o as any).customer_phone as string).filter(p => p && p.length > 5)));
+                    contacts = Array.from(new Set(ords.map((o: any) => o.customer_phone).filter((p: any) => p && p.length > 5))) as string[];
                 }
             }
             
@@ -278,27 +299,34 @@ export const ITSupport: React.FC = () => {
     };
 
     const updateCommentStatus = async (id: string, newStatus: string) => {
-        await supabase.from('blog_comments').update({ status: newStatus }).eq('id', id);
-        fetchAllData();
+        const comment = comments.find(c => c.id === id);
+        if (comment) {
+            await hostingerService.saveBlogComment({ ...comment, status: newStatus });
+            fetchAllData();
+        }
     };
 
     const deleteComment = async (id: string) => {
         if (!window.confirm("Apagar comentário?")) return;
-        await supabase.from('blog_comments').delete().eq('id', id);
+        await hostingerService.deleteBlogComment(id);
         fetchAllData();
     };
 
     const saveEditedComment = async (id: string) => {
         if(!editCommentText.trim()) return;
-        await supabase.from('blog_comments').update({ content: editCommentText }).eq('id', id);
-        setEditingComment(null);
-        fetchAllData();
+        const comment = comments.find(c => c.id === id);
+        if (comment) {
+            await hostingerService.saveBlogComment({ ...comment, content: editCommentText });
+            setEditingComment(null);
+            fetchAllData();
+        }
     };
 
     const handleSaveTeam = async () => {
         if (!teamForm.name.trim() || !teamForm.username.trim()) { alert("Preenche todos os campos obrigatórios"); return; }
         
         const payload = {
+            id: editingTeam?.id,
             name: teamForm.name,
             username: teamForm.username,
             role: teamForm.role,
@@ -307,11 +335,7 @@ export const ITSupport: React.FC = () => {
             phone: teamForm.phone
         };
 
-        if (editingTeam) {
-            await supabase.from('team_members').update(payload).eq('id', editingTeam.id);
-        } else {
-            await supabase.from('team_members').insert([payload]);
-        }
+        await hostingerService.saveTeamMember(payload);
         setShowTeamModal(false);
         setEditingTeam(null);
         setTeamForm({ name: '', username: '', role: 'Admin', password: '', email: '', phone: '' });
@@ -320,7 +344,7 @@ export const ITSupport: React.FC = () => {
 
     const handleDeleteTeam = async (id: string) => {
         if (!window.confirm("Remover este membro da equipa Zyph?")) return;
-        await supabase.from('team_members').delete().eq('id', id);
+        await hostingerService.deleteTeamMember(id);
         fetchAllData();
     };
 

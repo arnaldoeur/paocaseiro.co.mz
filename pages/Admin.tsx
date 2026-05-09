@@ -37,8 +37,9 @@ import { AdminNewsletterView } from '../components/admin/AdminNewsletterView';
 import { AdminEmailPipelineView } from '../components/admin/AdminEmailPipelineView';
 import { generateMasterReport } from '../services/reportGenerator';
 import { sendSMS, sendWhatsApp, notifyCustomer } from '../services/sms';
-import { sendEmail, sendTeamWelcomeEmail } from '../services/email';
-import { supabase, getConnectionMode, setConnectionMode, refreshSupabaseClient, type ConnectionMode, getPublicUrlSafely } from '../services/supabase';
+import { sendEmail, sendTeamWelcomeEmail, sendBirthdayEmail, sendNewProductNotification, sendPasswordResetEmail } from '../services/email';
+import { hostingerService } from '../services/hostingerService';
+
 import { printerService } from '../services/printer';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -142,14 +143,9 @@ export const Admin: React.FC = () => {
     useEffect(() => {
         const fetchEmailStatus = async () => {
             try {
-                const { data } = await supabase
-                    .from('system_settings')
-                    .select('value')
-                    .eq('key', 'email_status')
-                    .maybeSingle();
-                
-                if (data?.value) {
-                    setEmailStatus(data.value);
+                const data = await hostingerService.fetch('system_settings', { key: 'email_status' });
+                if (data && data.length > 0 && data[0].value) {
+                    setEmailStatus(data[0].value);
                 }
             } catch (err) {
                 console.error("Error fetching email status:", err);
@@ -238,20 +234,16 @@ export const Admin: React.FC = () => {
             chime.volume = 0.2;
             chime.play().catch(() => {});
 
-            // Fetch full order details
-            const { data: order } = await supabase
-                .from('orders')
-                .select('*, items:order_items(product_name, quantity)')
-                .eq('id', orderIdInDB)
-                .single();
+            // Fetch full order details from Hostinger
+            const order = await hostingerService.getOrderById(orderIdInDB);
 
             if (order) {
-                const displayId = order.orderId || order.id.slice(-4);
-                const type = order.customer?.type === 'delivery' ? 'Entrega' : 
-                             order.customer?.type === 'pickup' ? 'Levantamento' : 'Cozinha';
+                const displayId = order.short_id || (typeof order.id === 'string' ? order.id.slice(-4) : order.id);
+                const type = order.delivery_type === 'delivery' ? 'Entrega' : 
+                             order.delivery_type === 'pickup' ? 'Levantamento' : 'Cozinha';
                 
                 const itemsText = (order.items || [])
-                    .map((i: any) => `${i.quantity} ${i.product_name}`)
+                    .map((i: any) => `${i.quantity} ${i.name || i.product_name}`)
                     .join(', ');
 
                 const text = `Pedido ${displayId}. ${type}. ${itemsText}`;
@@ -449,12 +441,8 @@ export const Admin: React.FC = () => {
     const fetchAuditLogs = async () => {
         setAuditLoading(true);
         try {
-            const { data, error } = await supabase
-                .from('audit_logs')
-                .select('*')
-                .order('created_at', { ascending: false })
-                .limit(200);
-            if (!error && data) setAuditLogs(data);
+            const data = await hostingerService.fetch('audit_logs');
+            if (data && Array.isArray(data)) setAuditLogs(data);
         } catch (e) {
             console.error(e);
         }
@@ -527,7 +515,7 @@ export const Admin: React.FC = () => {
     });
 
     const [dbStatus, setDbStatus] = useState<{ status: 'online' | 'error' | 'loading' | 'offline', message?: string }>({ status: 'offline' });
-    const [connectionMode, setConnectionModeState] = useState<ConnectionMode>(getConnectionMode());
+    const [connectionMode, setConnectionModeState] = useState<'direct' | 'proxy'>('direct');
     const [isAddingQuickCustomer, setIsAddingQuickCustomer] = useState(false);
     const [quickCustomerForm, setQuickCustomerForm] = useState({ name: '', phone: '', email: '', nuit: '' });
 
@@ -566,12 +554,12 @@ export const Admin: React.FC = () => {
 
     const handleExportDatabase = async () => {
         try {
-            const tables = ['products', 'customers', 'orders', 'order_items', 'receipts', 'logistics_drivers', 'audit_logs'];
-            const exportData: any = {};
-
-            for (const table of tables) {
-                const { data, error } = await supabase.from(table).select('*');
-                if (!error) exportData[table] = data;
+            let exportData: any = {};
+            const result = await hostingerService.exportDatabase();
+            if (result && result.success) {
+                exportData = result.data;
+            } else {
+                throw new Error("Failed to export database");
             }
 
             const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
@@ -587,7 +575,7 @@ export const Admin: React.FC = () => {
             await logAudit({
                 action: 'DATABASE_EXPORT',
                 entity_type: 'system',
-                details: { tables: tables }
+                details: { tables: 'all' }
             });
             
             alert('Base de dados exportada com sucesso!');
@@ -608,17 +596,12 @@ export const Admin: React.FC = () => {
 
         setIsSubmitting(true);
         try {
-            const tablesToClear = ['order_items', 'receipts', 'financial_movements', 'audit_logs', 'sms_logs', 'queue_tickets', 'orders', 'customers', 'contact_messages'];
-            
-            for (const table of tablesToClear) {
-                const { error } = await supabase.from(table).delete().neq('id', '00000000-0000-0000-0000-000000000000'); 
-                if (error) console.error(`Erro ao limpar ${table}:`, error);
-            }
+            await hostingerService.purgeDatabase();
 
             await logAudit({
                 action: 'DATABASE_PURGE',
                 entity_type: 'system',
-                details: { tables: tablesToClear, performed_by: username }
+                details: { tables: 'orders, receipts, audit_logs', performed_by: username }
             });
 
             alert('Limpeza de produção concluída com sucesso!');
@@ -637,8 +620,7 @@ export const Admin: React.FC = () => {
     const [isComposingEmail, setIsComposingEmail] = useState(false);
     const loadCustomerLogs = async (customerId: string) => {
         try {
-            const { data, error } = await supabase.from('orders').select('*').eq('customer_id', customerId).order('created_at', { ascending: false });
-            if (error) throw error;
+            const data = await hostingerService.getOrders({ customer_id: customerId });
             if (data) setCustomerLogs(data);
         } catch (e) {
             console.error("Failed to load customer logs", e);
@@ -647,8 +629,7 @@ export const Admin: React.FC = () => {
 
     const loadReceipts = async () => {
         try {
-            const { data, error } = await supabase.from('receipts').select('*').order('created_at', { ascending: false });
-            if (error) throw error;
+            const data = await hostingerService.getReceipts();
             if (data) setReceipts(data);
         } catch (e) {
             console.error("Failed to load receipts", e);
@@ -676,11 +657,9 @@ export const Admin: React.FC = () => {
         }
 
         // Verify if user exists in team_members to avoid foreign key violation
-        const { data: userData, error: userError } = await supabase
-            .from('team_members')
-            .select('id')
-            .eq('id', effectiveUserId)
-            .single();
+        const allMembers = await hostingerService.fetch('team_members');
+        const userData = allMembers?.find((m: any) => m.id === effectiveUserId);
+        const userError = !userData ? new Error('User not found') : null;
 
         if (userError || !userData) {
             console.error('Invalid admin user ID:', effectiveUserId, userError);
@@ -702,21 +681,18 @@ export const Admin: React.FC = () => {
             }
         }
 
-        const { data, error } = await supabase.from('cash_sessions').insert([{
-            opened_by: effectiveUserId,
-            opening_balance: parseFloat(initialBalance) || 0,
-            status: 'open'
-        }]).select();
-
-        if (error) {
+        try {
+            const result = await hostingerService.openCashSession(userId || 'admin', parseFloat(initialBalance) || 0);
+            if (result.success) {
+                setCurrentSession(result.session);
+                setIsOpeningSession(false);
+                setInitialBalance('');
+            } else {
+                throw new Error(result.error || 'Falha ao abrir sessão.');
+            }
+        } catch (error: any) {
             console.error('Error opening session:', error);
             alert('Erro ao abrir sessão: ' + error.message);
-        } else {
-            setCurrentSession(data[0]);
-            setIsOpeningSession(false);
-            setInitialBalance('');
-            // Ensure state and localStorage are in sync
-            if (!userId) setUserId(effectiveUserId);
         }
     };
 
@@ -727,22 +703,27 @@ export const Admin: React.FC = () => {
     };
 
     const handleConfirmCloseSession = async () => {
-        const { error } = await supabase
-            .from('cash_sessions')
-            .update({
-                closed_at: new Date().toISOString(),
-                closing_balance: currentBalance,
-                status: 'closed',
-                notes: closeNotes
-            })
-            .eq('id', currentSession.id);
-
-        if (error) {
+        if (!currentSession) return;
+        
+        try {
+            const result = await hostingerService.closeCashSession(
+                currentSession.id, 
+                parseFloat(currentBalance.toString()) || 0, 
+                closeNotes
+            );
+            
+            if (result.success) {
+                setCurrentSession(null);
+                setShowCloseSessionModal(false);
+                setCurrentBalance(0);
+                setCloseNotes('');
+                alert('Sessão fechada com sucesso!');
+            } else {
+                throw new Error(result.error || 'Falha ao fechar sessão.');
+            }
+        } catch (error: any) {
+            console.error('Error closing session:', error);
             alert('Erro ao fechar sessão: ' + error.message);
-        } else {
-            setShowCloseSessionModal(false);
-            setCloseNotes('');
-            setCurrentSession(null);
         }
     };
 
@@ -782,7 +763,8 @@ export const Admin: React.FC = () => {
         setIsSubmitting(true);
         try {
             const shortId = Math.random().toString(36).substring(7).toUpperCase();
-            const orderData = {
+            const orderPayload: any = {
+                id: `ord_${Date.now()}`,
                 short_id: shortId,
                 customer_name: posCustomer?.name || 'Venda Local (Balcão)',
                 customer_phone: posCustomer?.contact_no || '',
@@ -800,11 +782,20 @@ export const Admin: React.FC = () => {
                 change_given: changeDue,
                 balance: 0,
                 cash_session_id: currentSession?.id,
-                staff_id: (userId && isValidUUID(userId)) ? userId : null
+                staff_id: userId,
+                items: posCart.map(i => ({
+                    product_id: i.id,
+                    product_name: i.name,
+                    price: i.price,
+                    quantity: i.quantity,
+                    subtotal: i.price * i.quantity
+                }))
             };
 
-            const { data: orderResult, error: orderError } = await supabase.from('orders').insert([orderData]).select().single();
-            if (orderError) throw orderError;
+            const result = await hostingerService.saveOrder(orderPayload);
+            if (!result.success) throw new Error(result.error || 'Falha ao salvar pedido no Hostinger');
+
+            const orderId = result.id;
 
             // NEW: Log System Event with actionable link
             try {
@@ -812,31 +803,19 @@ export const Admin: React.FC = () => {
                 await NotificationService.createNotification({
                     type: 'order',
                     title: '🛒 Venda POS',
-                    message: `Pedido #${orderResult.short_id || orderResult.id.slice(0,6)} — ${orderData.customer_name} — ${orderData.total_amount} MT (${finalMethodStr})`,
-                    entity_id: orderResult.id,
+                    message: `Pedido #${shortId} — ${orderPayload.customer_name} — ${orderPayload.total_amount} MT (${finalMethodStr})`,
+                    entity_id: orderId,
                     link: `/admin?view=encomendas`
                 });
             } catch (logErr) {
                 console.error("Manual order system logging failed:", logErr);
             }
 
-            // Insert items
-            const itemsToInsert = posCart.map(i => ({
-                order_id: orderResult.id,
-                product_id: i.id,
-                product_name: i.name,
-                price: i.price,
-                quantity: i.quantity,
-                subtotal: i.price * i.quantity
-            }));
-            const { error: itemsError } = await supabase.from('order_items').insert(itemsToInsert);
-            if (itemsError) throw itemsError;
-
             // Audit Log
             await logAudit({
                 action: 'ORDER_PLACED',
                 entity_type: 'order',
-                entity_id: orderResult.id,
+                entity_id: orderId,
                 details: { total: total, method: paymentMethod, source: 'pos_admin' },
                 customer_phone: posCustomer?.contact_no
             });
@@ -854,15 +833,15 @@ export const Admin: React.FC = () => {
             // Handle SMS notification if customer exists
             if (posCustomer?.contact_no && posCustomer.contact_no !== 'N/A') {
                 const { notifyPaymentConfirmed } = await import('../services/sms');
-                await notifyPaymentConfirmed(orderResult.id, posCustomer.contact_no, shortId);
+                await notifyPaymentConfirmed(orderId, posCustomer.contact_no, shortId);
 
                 try {
                     const { notifyCustomerNewOrderWhatsApp } = await import('../services/whatsapp');
                     const fullOrderForWA = {
-                        ...orderData,
-                        id: orderResult.id
+                        ...orderPayload,
+                        id: orderId
                     };
-                    notifyCustomerNewOrderWhatsApp(fullOrderForWA, itemsToInsert).catch(e => console.error("WA error", e));
+                    notifyCustomerNewOrderWhatsApp(fullOrderForWA, orderPayload.items).catch(e => console.error("WA error", e));
                 } catch (e) {}
             }
 
@@ -875,13 +854,13 @@ export const Admin: React.FC = () => {
 
             if (printerConfig.autoPrint) {
                 try {
-                    await printerService.printReceipt(orderData, printItems, printerConfig.paperSize);
+                    await printerService.printReceipt(orderPayload, printItems, printerConfig.paperSize);
                 } catch (pe) {
                     console.error("Printing failed", pe);
                 }
             }
 
-            setLastOrderData(orderData);
+            setLastOrderData(orderPayload);
             setLastOrderItems(printItems);
             setShowReceiptConfirmation(true);
 
@@ -1050,29 +1029,10 @@ export const Admin: React.FC = () => {
     // --- Logistics Data ---
     const loadMessages = async () => {
         try {
-            let query = supabase.from('contact_messages').select('*');
-
-            if (messageFolder === 'trash') {
-                query = query.eq('status', 'trash');
-            } else if (messageFolder === 'sent') {
-                query = query.eq('status', 'replied');
-            } else {
-                // Inbox status: typically 'unread' or 'read', but NOT 'trash' and NOT 'replied'
-                query = query.not('status', 'in', '("trash", "replied")');
-            }
-
-            const { data, error } = await query.order('created_at', { ascending: false });
-            if (error) {
-                console.error("Messages Error:", error);
-                throw error;
-            }
-            if (data) {
-                console.log(`Loaded ${data.length} messages`);
-                setMessages(data);
-            }
+            const hData = await hostingerService.getContactMessages(messageFolder);
+            if (hData) setMessages(hData);
         } catch (e) {
             console.error("Error loading messages:", e);
-            throw e;
         }
     };
     // Poll driver locations when looking at deliveries tab
@@ -1089,18 +1049,16 @@ export const Admin: React.FC = () => {
 
     const loadDrivers = async () => {
         try {
-            const { data, error } = await supabase.from('logistics_drivers').select('*').order('name');
-            if (error) throw error;
-            if (data) {
-                const mapped = data.map((d: any) => ({
+            const hData = await hostingerService.getDrivers();
+            if (hData) {
+                const mapped = hData.map((d: any) => ({
                     ...d,
-                    vehicle: d.vehicle_type // Map vehicle_type from DB to vehicle used in UI
+                    vehicle: d.vehicle_type
                 }));
                 setDrivers(mapped);
             }
-        } catch (e) {
-            console.error("Failed to load drivers", e);
-            throw e;
+        } catch (err) {
+            console.error("Failed to load drivers:", err);
         }
     };
 
@@ -1120,12 +1078,10 @@ export const Admin: React.FC = () => {
         // Deferred upload for Driver photo
         if (selectedDriverFile) {
             try {
-                const fileExt = selectedDriverFile.name.split('.').pop();
-                const fileName = `driver_${Date.now()}.${fileExt}`;
-                const { error: uploadErr } = await supabase.storage.from('products').upload(fileName, selectedDriverFile);
-                if (uploadErr) throw uploadErr;
-                
-                finalAvatarUrl = getPublicUrlSafely('products', fileName);
+                const res = await hostingerService.uploadDriveFile(selectedDriverFile);
+                if (res.path) {
+                    finalAvatarUrl = hostingerService.getPublicUrl(res.path);
+                }
             } catch (err: any) {
                 alert('Erro ao carregar foto do motorista: ' + err.message);
                 return;
@@ -1133,6 +1089,7 @@ export const Admin: React.FC = () => {
         }
 
         const driverData = {
+            id: selectedDriver?.id || `dr_${Date.now()}`,
             name: driverForm.name,
             phone: driverForm.phone,
             vehicle_type: driverForm.vehicle,
@@ -1144,19 +1101,14 @@ export const Admin: React.FC = () => {
         };
 
         try {
-            if (selectedDriver) {
-                const { error } = await supabase.from('logistics_drivers').update(driverData).eq('id', selectedDriver.id);
-                if (error) throw error;
-            } else {
-                const { error } = await supabase.from('logistics_drivers').insert([driverData]);
-                if (error) throw error;
-            }
+            await hostingerService.saveDriver(driverData);
             
             setIsAddingDriver(false);
             setSelectedDriverFile(null);
             setSelectedDriver(null);
             setDriverForm({ name: '', phone: '', vehicle: '', base_location: '', email: '', alternative_phone: '', avatar_url: '' });
             loadDrivers();
+            alert('Motorista guardado com sucesso!');
         } catch (err: any) {
             console.error('Error saving driver:', err);
             alert('Erro ao salvar motorista: ' + (err.message || 'Desconhecido'));
@@ -1165,15 +1117,22 @@ export const Admin: React.FC = () => {
 
     const handleDeleteDriver = async (id: string) => {
         if (!confirm('Remover Motorista?')) return;
-        await supabase.from('logistics_drivers').delete().eq('id', id);
-        loadDrivers();
+        try {
+            await hostingerService.deleteDriver(id);
+            loadDrivers();
+        } catch (err: any) {
+            alert("Erro ao remover motorista: " + err.message);
+        }
     };
 
     const handleDriverStatusChange = async (driverId: string, newStatus: string) => {
         // Optimistic update
         setDrivers(drivers.map(d => d.id === driverId ? { ...d, status: newStatus as any } : d));
-
-        await supabase.from('logistics_drivers').update({ status: newStatus }).eq('id', driverId);
+        try {
+            await hostingerService.updateDriver(driverId, { status: newStatus });
+        } catch (err) {
+            console.error("Failed to update driver status", err);
+        }
     };
 
     // Assign Order to Driver
@@ -1183,13 +1142,16 @@ export const Admin: React.FC = () => {
         // 1. Generate OTP
         const otp = Math.floor(1000 + Math.random() * 9000).toString();
 
-        // 2. Update Order in Supabase
-        const { error } = await supabase
-            .from('orders')
-            .update({ status: 'ready', driver_id: selectedDriver.id, otp: otp })
-            .eq('short_id', orderToAssign.orderId);
-
-        if (error) return alert("Erro ao atribuir pedido: " + error.message);
+        // 2. Update Order in Hostinger
+        try {
+            await hostingerService.updateOrder(orderToAssign.orderId, { 
+                status: 'ready', 
+                driver_id: selectedDriver.id, 
+                otp: otp 
+            });
+        } catch (error: any) {
+            return alert("Erro ao atribuir pedido: " + error.message);
+        }
 
         // 3. Notify Driver — rich SMS + WhatsApp link
         const { notifyDriverAssigned } = await import('../services/sms');
@@ -1214,7 +1176,8 @@ export const Admin: React.FC = () => {
         const inputOtp = prompt(`Para finalizar a entrega #${order.orderId}, peça o OTP ao cliente:`);
         if (inputOtp === order.otp) {
             (async () => {
-                await supabase.from('orders').update({ status: 'completed' }).eq('short_id', order.orderId);
+                await hostingerService.updateOrderStatus(order.orderId, 'completed');
+
 
                 const updatedOrder = { ...order, status: 'completed' as const };
                 loadOrders();
@@ -1238,12 +1201,8 @@ export const Admin: React.FC = () => {
     const handleVerifyAdmin = async (e: React.FormEvent) => {
         e.preventDefault();
         // Verify current admin password
-        const { data } = await supabase
-            .from('team_members')
-            .select('id')
-            .eq('id', userId)
-            .eq('password', adminPasswordInput)
-            .single();
+        const members = await hostingerService.fetch('team_members');
+        const data = members?.find((m: any) => m.id === userId && m.password === adminPasswordInput);
 
         if (data) {
             setIsAdminPasswordPromptOpen(false);
@@ -1256,15 +1215,27 @@ export const Admin: React.FC = () => {
     const handleUpdateCustomer = async (e: React.FormEvent) => {
         e.preventDefault();
         requestAdminAuth(async () => {
-            await supabase.from('customers').update({
+            const updates = {
                 name: customerForm.name,
                 contact_no: customerForm.contact_no,
                 email: customerForm.email,
                 nuit: customerForm.nuit,
                 date_of_birth: customerForm.date_of_birth,
                 whatsapp: customerForm.whatsapp,
+                address: customerForm.address,
+                phone: customerForm.contact_no,
                 updated_at: new Date().toISOString()
-            }).eq('id', selectedCustomer.id);
+            };
+
+            // 1. Hostinger
+            try {
+                await hostingerService.saveCustomer({ ...updates, id: selectedCustomer.id });
+            } catch (hErr: any) {
+                console.error("Hostinger customer save failed:", hErr);
+                alert("Erro ao atualizar cliente: " + hErr.message);
+                return;
+            }
+
             alert('Cliente atualizado com sucesso!');
             setIsEditingCustomer(false);
             loadCustomers();
@@ -1275,10 +1246,14 @@ export const Admin: React.FC = () => {
     const handleDeleteCustomer = (id: string) => {
         if (!confirm('ATENÇÃO: Deseja apagar permanentemente este cliente e o seu histórico?')) return;
         requestAdminAuth(async () => {
-            await supabase.from('customers').delete().eq('id', id);
-            alert('Cliente removido!');
-            setSelectedCustomer(null);
-            loadCustomers();
+            try {
+                await hostingerService.deleteCustomer(id);
+                alert('Cliente removido!');
+                setSelectedCustomer(null);
+                loadCustomers();
+            } catch (err: any) {
+                alert("Erro ao remover cliente: " + err.message);
+            }
         });
     };
 
@@ -1292,28 +1267,10 @@ export const Admin: React.FC = () => {
         requestAdminAuth(async () => {
             const newPassword = Math.random().toString(36).slice(-8);
             try {
-                const { error: updateError } = await supabase
-                    .from('customers')
-                    .update({ password: newPassword })
-                    .eq('id', customer.id);
-
-                if (updateError) throw updateError;
+                await hostingerService.saveCustomer({ id: customer.id, password: newPassword });
 
                 if (method === 'email' && customer.email) {
-                    const emailHtml = `
-                        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
-                            <h2 style="color: #3b2f2f;">Reset de Senha - Pão Caseiro</h2>
-                            <p>Olá <strong>${customer.name}</strong>,</p>
-                            <p>A sua palavra-passe foi redefinida com sucesso.</p>
-                            <div style="background: #fcfbf9; padding: 15px; border-radius: 8px; border: 1px solid #d9a65a; margin: 20px 0; text-align: center;">
-                                <p style="margin: 0; color: #888; font-size: 12px; text-transform: uppercase; font-weight: bold;">Nova Palavra-passe</p>
-                                <h3 style="margin: 5px 0; color: #3b2f2f; font-size: 24px; letter-spacing: 2px;">${newPassword}</h3>
-                            </div>
-                            <p>Recomendamos que altere a sua senha após o entrar.</p>
-                            <p style="color: #888; font-size: 12px; margin-top: 30px;">Zyph Tech Security Team</p>
-                        </div>
-                    `;
-                    await sendEmail([customer.email], 'Nova Palavra-passe - Pão Caseiro', emailHtml);
+                    await sendPasswordResetEmail(customer.email, customer.name, newPassword);
                     alert(`Sucesso! Nova senha enviada para o email ${customer.email}.`);
                 } else {
                     const msg = `Pao Caseiro: A sua senha foi redefinida pela administracao. Nova senha: ${newPassword}`;
@@ -1336,28 +1293,10 @@ export const Admin: React.FC = () => {
         requestAdminAuth(async () => {
             const newPassword = Math.random().toString(36).slice(-8);
             try {
-                const { error: updateError } = await supabase
-                    .from('team_members')
-                    .update({ password: newPassword })
-                    .eq('id', member.id);
-
-                if (updateError) throw updateError;
+                await hostingerService.updateTeamMember(member.id, { password: newPassword });
 
                 if (method === 'email' && member.email) {
-                    const emailHtml = `
-                        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
-                            <h2 style="color: #3b2f2f;">Acesso Equipa - Pão Caseiro</h2>
-                            <p>Olá <strong>${member.name}</strong>,</p>
-                            <p>A tua palavra-passe de acesso ao painel admin foi redefinida.</p>
-                            <div style="background: #fcfbf9; padding: 15px; border-radius: 8px; border: 1px solid #d9a65a; margin: 20px 0; text-align: center;">
-                                <p style="margin: 0; color: #888; font-size: 12px; text-transform: uppercase; font-weight: bold;">Nova Palavra-passe</p>
-                                <h3 style="margin: 5px 0; color: #3b2f2f; font-size: 24px; letter-spacing: 2px;">${newPassword}</h3>
-                            </div>
-                            <p>Utilizador: <strong>${member.username}</strong></p>
-                            <p style="color: #888; font-size: 12px; margin-top: 30px;">Zyph Tech Security Team</p>
-                        </div>
-                    `;
-                    await sendEmail([member.email], 'Redefinição de Senha Equipa', emailHtml);
+                    await sendPasswordResetEmail(member.email, member.name, newPassword);
                     alert(`Sucesso! Nova senha enviada para ${member.email}.`);
                 } else {
                     alert(`Nova palavra-passe para ${member.name}: ${newPassword}\nUsername: ${member.username}`);
@@ -1369,29 +1308,52 @@ export const Admin: React.FC = () => {
         });
     };
 
+    const handleSendBirthdayEmail = async (customer: any) => {
+        if (!customer.email) return alert("Este cliente não tem email associado.");
+        if (!confirm(`Deseja enviar um email de parabéns com cupão de desconto para ${customer.name}?`)) return;
+
+        setIsSubmitting(true);
+        try {
+            await sendBirthdayEmail(customer.email, customer.name);
+            await logAudit({
+                action: 'SEND_BIRTHDAY_EMAIL',
+                entity_type: 'customer',
+                entity_id: customer.id,
+                details: { name: customer.name, email: customer.email }
+            });
+            alert("Email de aniversário enviado com sucesso!");
+        } catch (error: any) {
+            alert("Erro ao enviar email: " + error.message);
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
     const handleToggleBlockCustomer = (customer: any) => {
-        const isCurrentlyBlocked = customer.is_blocked;
+        const isCurrentlyBlocked = customer.is_blocked === 1 || customer.is_blocked === true;
         const actionText = isCurrentlyBlocked ? 'Desbloquear' : 'Bloquear';
         if (!confirm(`Deseja ${actionText} o cliente ${customer.name}?`)) return;
 
         requestAdminAuth(async () => {
-            await supabase.from('customers').update({ is_blocked: !isCurrentlyBlocked }).eq('id', customer.id);
-            alert(`Cliente ${actionText.toLowerCase()} com sucesso!`);
-            loadCustomers();
-            setSelectedCustomer({ ...customer, is_blocked: !isCurrentlyBlocked });
+            try {
+                await hostingerService.saveCustomer({ id: customer.id, is_blocked: !isCurrentlyBlocked ? 1 : 0 });
+                alert(`Cliente ${actionText.toLowerCase()} com sucesso!`);
+                loadCustomers();
+                setSelectedCustomer({ ...customer, is_blocked: !isCurrentlyBlocked });
+            } catch (err: any) {
+                alert("Erro ao alterar bloqueio: " + err.message);
+            }
         });
     };
 
     const handleOpenCustomerDetails = async (customer: any) => {
         setSelectedCustomer(customer);
-        // Fetch all order logs linking to this customer by their phone
-        const { data } = await supabase
-            .from('orders')
-            .select('*')
-            .eq('customer_phone', customer.contact_no)
-            .order('created_at', { ascending: false });
-
-        if (data) setCustomerLogs(data);
+        try {
+            const data = await hostingerService.getOrders({ customer_phone: customer.contact_no });
+            if (data) setCustomerLogs(data);
+        } catch (err) {
+            console.error("Failed to load customer logs", err);
+        }
     };
 
     // Dashboard States
@@ -1404,15 +1366,14 @@ export const Admin: React.FC = () => {
         const file = e.target.files?.[0];
         if (!file) return;
 
-        const fileExt = file.name.split('.').pop();
-        const fileName = `avatars/${Date.now()}.${fileExt}`;
-        const { error } = await supabase.storage.from('products').upload(fileName, file); // Using products bucket as generic storage for now
-
-        if (error) {
-            alert('Erro ao enviar foto: ' + error.message);
-        } else {
-            const publicUrl = getPublicUrlSafely('products', fileName);
-            setUserForm(prev => ({ ...prev, photo: publicUrl }));
+        try {
+            const res = await hostingerService.uploadDriveFile(file);
+            if (res.path) {
+                const publicUrl = hostingerService.getPublicUrl(res.path);
+                setUserForm(prev => ({ ...prev, photo: publicUrl }));
+            }
+        } catch (err: any) {
+            alert('Erro ao enviar foto: ' + err.message);
         }
     };
 
@@ -1428,11 +1389,6 @@ export const Admin: React.FC = () => {
 
         try {
             let uid = userId;
-            if (!uid) {
-                // Try to find by username map if we don't have ID (Legacy session)
-                const { data: userProps } = await supabase.from('team_members').select('id').eq('username', username).single();
-                if (userProps) uid = userProps.id;
-            }
 
             if (!uid) {
                 throw new Error("SESSÃO INVÁLIDA: Por favor faça LOGOUT e LOGIN novamente.");
@@ -1444,8 +1400,7 @@ export const Admin: React.FC = () => {
             if (userForm.phone) updates.phone = userForm.phone;
             if (userForm.password) updates.password = userForm.password;
 
-            const { error: updateError } = await supabase.from('team_members').update(updates).eq('id', uid);
-            if (updateError) throw updateError;
+            await hostingerService.updateTeamMember(uid, updates);
 
             // Sync with LocalStorage and State
             if (userForm.name) {
@@ -1465,11 +1420,10 @@ export const Admin: React.FC = () => {
                 await sendSMS(userForm.phone, `Zyph Security: Sua senha de Admin foi alterada com sucesso.`);
             }
 
-            setShowUserModal(false);
             alert('Perfil atualizado com sucesso!');
-        } catch (err: any) {
-            console.error("Update Error", err);
-            alert('Erro: ' + (err.message || 'Falha ao atualizar perfil.'));
+            setShowUserModal(false);
+        } catch (error: any) {
+            alert('Erro ao atualizar perfil: ' + error.message);
         } finally {
             setIsSubmitting(false);
         }
@@ -1477,8 +1431,7 @@ export const Admin: React.FC = () => {
 
     // --- Persistence Init ---
     useEffect(() => {
-        let ordersChannel: any;
-        let productsChannel: any;
+        let pollInterval: any;
 
         if (localStorage.getItem('admin_auth') === 'true') {
             setIsAuthenticated(true);
@@ -1488,42 +1441,10 @@ export const Admin: React.FC = () => {
             setAdminUser(localStorage.getItem('admin_user') || '');
             refreshAllData();
 
-            // Setup Real-time Listeners
-            (async () => {
-                // Orders Listener
-                ordersChannel = supabase
-                    .channel('orders-changes')
-                    .on(
-                        'postgres_changes',
-                        { event: '*', schema: 'public', table: 'orders' },
-                        (payload: any) => {
-                            console.log('Order Updated!', payload);
-                            refreshAllData();
-                            if (payload.eventType === 'INSERT') {
-                                alert(`NOVO PEDIDO RECEBIDO! #${payload.new.short_id}`);
-                            }
-                            if (payload.eventType === 'UPDATE' && payload.old.payment_status !== 'paid' && payload.new.payment_status === 'paid') {
-                                import('../services/sms').then(({ notifyPaymentConfirmed }) => {
-                                    notifyPaymentConfirmed(payload.new.orderId || payload.new.id, payload.new.customer_phone, payload.new.short_id);
-                                });
-                            }
-                        }
-                    )
-                    .subscribe();
-
-                // Products Listener
-                productsChannel = supabase
-                    .channel('products-changes')
-                    .on(
-                        'postgres_changes',
-                        { event: '*', schema: 'public', table: 'products' },
-                        () => {
-                            console.log('Products changed, reloading...');
-                            refreshAllData();
-                        }
-                    )
-                    .subscribe();
-            })();
+            // Set up Polling for Hostinger (Legacy Real-time alternative)
+            pollInterval = setInterval(() => {
+                refreshAllData();
+            }, 60000); // Poll every 60 seconds
 
             // Redirect Driver
             if (localStorage.getItem('admin_role') === 'driver') {
@@ -1532,8 +1453,7 @@ export const Admin: React.FC = () => {
         }
 
         return () => {
-            if (ordersChannel) ordersChannel.unsubscribe();
-            if (productsChannel) productsChannel.unsubscribe();
+            if (pollInterval) clearInterval(pollInterval);
         };
     }, [isAuthenticated]); // Re-run when authenticated status changes
 
@@ -1592,40 +1512,37 @@ export const Admin: React.FC = () => {
         // Local fallback credentials (mirrors team_members table in Supabase)
         // Used when network blocks Supabase access
         const localCredentials = [
-            { id: '9f4b4a2d-2303-44db-9695-3cd8c5e4be00', username: 'nazir', name: 'Nazir', role: 'admin', password: 'pao123' },
+            { id: '9f4b4a2d-2303-44db-9695-3cd8c5e4be00', username: 'nazir', name: 'Nazir', role: 'admin', password: '@Pcaseiro25' },
         ];
 
         try {
-            const { data, error } = await supabase
-                .from('team_members')
-                .select('*')
-                .ilike('username', username)
-                .eq('password', password)
-                .single();
+            // 1. Hostinger Primary Auth
+            const data = await hostingerService.authTeam(username, password);
 
-            if (data) {
+            if (data && data.success !== false) {
+                const user = data.user || data;
                 setIsAuthenticated(true);
-                setCurrentUserRole(data.role);
-                setUserId(data.id);
-                setUsername(data.name);
-                setAdminUser(data.name);
-                setAdminPhoto(data.avatar_url || '');
+                setCurrentUserRole(user.role);
+                setUserId(user.id);
+                setUsername(user.name);
+                setAdminUser(user.name);
+                setAdminPhoto(user.avatar_url || '');
 
                 localStorage.setItem('admin_auth', 'true');
-                localStorage.setItem('admin_role', data.role);
-                localStorage.setItem('admin_id', data.id);
-                localStorage.setItem('admin_user', data.name);
-                if (data.avatar_url) localStorage.setItem('admin_photo', data.avatar_url);
+                localStorage.setItem('admin_role', user.role);
+                localStorage.setItem('admin_id', user.id);
+                localStorage.setItem('admin_user', user.name);
+                if (user.avatar_url) localStorage.setItem('admin_photo', user.avatar_url);
 
                 await logAudit({
                     action: 'ADMIN_LOGIN',
                     entity_type: 'auth',
-                    entity_id: data.id,
-                    details: { method: 'password', admin_name: data.name }
+                    entity_id: user.id,
+                    details: { method: 'hostinger', admin_name: user.name }
                 });
                 refreshAllData();
             } else {
-                // Try local fallback if Supabase returned no match
+                // Try local fallback
                 const localMatch = localCredentials.find(
                     c => c.username === username.toLowerCase() && c.password === password
                 );
@@ -1635,12 +1552,11 @@ export const Admin: React.FC = () => {
                     setUserId(localMatch.id);
                     setUsername(localMatch.name);
                     setAdminUser(localMatch.name);
-                    setAdminPhoto('');
                     localStorage.setItem('admin_auth', 'true');
                     localStorage.setItem('admin_role', localMatch.role);
                     localStorage.setItem('admin_id', localMatch.id);
                     localStorage.setItem('admin_user', localMatch.name);
-                    localStorage.setItem('admin_photo', '');
+                    
                     await logAudit({
                         action: 'ADMIN_LOGIN',
                         entity_type: 'auth',
@@ -1650,16 +1566,11 @@ export const Admin: React.FC = () => {
                     refreshAllData();
                 } else {
                     setError('Credenciais incorretas');
-                    await logAudit({
-                        action: 'ADMIN_LOGIN_FAILED',
-                        entity_type: 'auth',
-                        details: { method: 'password', username, reason: 'Invalid credentials' }
-                    });
                 }
             }
         } catch (err: any) {
-            console.error(err);
-            // Network error - try local fallback
+            console.error("Login Error:", err);
+            // Local fallback on network error
             const localMatch = localCredentials.find(
                 c => c.username === username.toLowerCase() && c.password === password
             );
@@ -1674,12 +1585,7 @@ export const Admin: React.FC = () => {
                 localStorage.setItem('admin_user', localMatch.name);
                 refreshAllData();
             } else {
-                setError('Erro ao conectar. Verifique as credenciais.');
-                await logAudit({
-                    action: 'ADMIN_LOGIN_FAILED',
-                    entity_type: 'auth',
-                    details: { method: 'password', username, reason: 'Network/Supabase error: ' + (err?.message || 'Unknown') }
-                });
+                setError('Erro de conexão ou credenciais inválidas.');
             }
         }
     };
@@ -1704,98 +1610,108 @@ export const Admin: React.FC = () => {
         setUsername('');
     };
 
-    // Orders (Supabase)
+    // Orders (Hostinger-Native)
     const loadOrders = async () => {
         try {
-            const { data, error } = await supabase
-                .from('orders')
-                .select(`
-                    *,
-                    items:order_items(*),
-                    customers ( internal_id )
-                `)
-                .order('created_at', { ascending: false });
-
-            if (error) throw error;
-
-            if (data) {
-                const mapped: Order[] = data.map((o: any) => ({
-                    id: o.id || '',
-                    customer_id: o.customer_id || '',
-                    orderId: o.short_id || 'N/A',
-                    paymentRef: o.payment_ref || '',
-                    transaction_id: o.transaction_id || '',
-                    date: o.created_at ? new Date(o.created_at).toISOString() : new Date().toISOString(),
-                    status: o.status || 'pending',
-                    staff_id: o.staff_id || '',
-                    driver_id: o.driver_id || '',
-                    otp: o.otp || '',
-                    total: Number(o.total_amount || 0),
-                    amountPaid: Number(o.amount_paid || 0),
-                    amount_received: Number(o.amount_received || o.amount_paid || 0),
-                    balance: Number(o.balance || 0),
-                    payment_method: o.payment_method || 'cash',
-                    customer: {
-                        name: o.customer_name || 'Consumidor Final',
-                        phone: o.customer_phone || '',
-                        type: o.delivery_type || 'takeaway',
-                        address: o.delivery_address || '',
-                        tableZone: o.table_zone || '',
-                        tablePeople: Number(o.table_people || 0),
-                        notes: o.notes || '',
-                        internal_id: o.customers?.internal_id || ''
-                    },
-                    items: (o.items || []).map((i: any) => ({
-                        name: i.product_name || 'Produto s/ nome',
-                        price: Number(i.price || 0),
-                        quantity: Number(i.quantity || 0)
-                    }))
-                }));
-                // setOrders is now managed by useRealtimeOrders hook
-                refreshOrders(); 
+            const hData = await hostingerService.getOrders();
+            if (hData) {
+                // The refreshOrders already handles state via hook, but we keep this for direct use if needed
+                refreshOrders();
             }
-        } catch (e) {
-            console.error("Failed to load orders", e);
-            throw e;
+        } catch (err) {
+            console.error("Failed to load orders from Hostinger:", err);
         }
     };
 
-    // Products (Supabase)
+    // Products (Hostinger-Native)
     const loadProducts = async () => {
-        const { data, error } = await supabase
-            .from('products')
-            .select('*')
-            .order('name');
-
-        if (!error && data) {
-            const mapped = data.map((p: any) => ({
-                id: p.id,
-                name: p.name,
-                price: Number(p.price),
-                category: p.category,
-                inStock: p.is_available,
-                stockQuantity: Number(p.stock_quantity) || 0, // Fixed: UI uses stockQuantity
-                taxType: p.tax_type || 'incluso',
-                prepTime: p.prep_time,
-                deliveryTime: p.delivery_time,
-                image: p.image,
-                description: p.description,
-                show_in_menu: p.show_in_menu !== false, // default true if null
-                availability: p.is_available ? 'available' : 'unavailable',
-                variations: p.variations || [],
-                complements: p.complements || [],
-                unit: p.unit || 'un',
-                name_en: p.name_en,
-                description_en: p.description_en,
-                purchasePrice: Number(p.purchase_price) || 0,
-                otherCost: Number(p.other_cost) || 0,
-                marginPercentage: Number(p.margin_percentage) || 0
-            }));
-            setProducts(mapped);
-        } else if (error) {
-            console.error("Failed to load products", error);
-            throw error;
+        try {
+            const hostingerData = await hostingerService.getProducts();
+            if (hostingerData) {
+                const mapped = hostingerData.map((p: any) => ({
+                    id: p.id,
+                    name: p.name,
+                    price: Number(p.price),
+                    category: p.category,
+                    inStock: p.is_available === 1 || p.is_available === true,
+                    stockQuantity: Number(p.stock_quantity) || 0,
+                    taxType: p.tax_type || 'incluso',
+                    prepTime: p.prep_time,
+                    deliveryTime: p.delivery_time,
+                    image: p.image,
+                    description: p.description,
+                    show_in_menu: p.show_in_menu !== false,
+                    availability: (p.is_available === 1 || p.is_available === true) ? 'available' : 'unavailable',
+                    variations: typeof p.variations === 'string' ? JSON.parse(p.variations) : (p.variations || []),
+                    complements: typeof p.complements === 'string' ? JSON.parse(p.complements) : (p.complements || []),
+                    unit: p.unit || 'un',
+                    name_en: p.name_en,
+                    description_en: p.description_en,
+                    purchasePrice: Number(p.purchase_price) || 0,
+                    otherCost: Number(p.other_cost) || 0,
+                    marginPercentage: Number(p.margin_percentage) || 0
+                }));
+                setProducts(mapped);
+            }
+        } catch (e) {
+            console.error("Hostinger fetch failed in Admin:", e);
         }
+    };
+
+    const [isSyncing, setIsSyncing] = useState(false);
+
+    const importFromFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setIsSyncing(true);
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+            try {
+                const json = JSON.parse(event.target?.result as string);
+                const data = Array.isArray(json) ? json : (json.data || []);
+                
+                if (data.length === 0) {
+                    alert("O ficheiro parece estar vazio ou num formato inválido.");
+                    return;
+                }
+
+                // Mapear para o formato do MySQL
+                const productsToSave = data.map((p: any) => ({
+                    id: p.id,
+                    name: p.name,
+                    price: Number(p.price),
+                    category: p.category,
+                    is_available: (p.is_available === true || p.is_available === 1) ? 1 : 0,
+                    stock_quantity: p.stock_quantity || 0,
+                    image: p.image,
+                    description: p.description,
+                    tax_type: p.tax_type,
+                    prep_time: p.prep_time,
+                    delivery_time: p.delivery_time,
+                    show_in_menu: (p.show_in_menu !== false) ? 1 : 0,
+                    variations: p.variations || [],
+                    complements: p.complements || [],
+                    unit: p.unit,
+                    name_en: p.name_en,
+                    description_en: p.description_en,
+                    purchase_price: p.purchase_price,
+                    other_cost: p.other_cost,
+                    margin_percentage: p.margin_percentage
+                }));
+
+                await hostingerService.bulkSaveProducts(productsToSave);
+                alert(`Sucesso! ${productsToSave.length} produtos importados para a Hostinger.`);
+                loadProducts();
+            } catch (err) {
+                console.error("Erro ao processar ficheiro:", err);
+                alert("Erro ao ler o ficheiro. Certifique-se que é um JSON válido.");
+            } finally {
+                setIsSyncing(false);
+                if (e.target) e.target.value = ''; // Reset input
+            }
+        };
+        reader.readAsText(file);
     };
 
     const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1817,7 +1733,8 @@ export const Admin: React.FC = () => {
             username: form.username.value,
             email: form.email.value,
             role: form.role.value,
-            avatar_url: memberAvatar || currentMember?.avatar_url || null
+            avatar_url: memberAvatar || currentMember?.avatar_url || null,
+            phone: form.phone?.value || null
         };
 
         if (passwordValue) {
@@ -1829,64 +1746,37 @@ export const Admin: React.FC = () => {
         }
 
         try {
-            if (currentMember) {
-                // Update
-                const { error } = await supabase.from('team_members').update(memberData).eq('id', currentMember.id);
-                if (error) throw error;
-                
-                try {
-                    await logAudit({ action: 'UPDATE_TEAM_MEMBER', entity_type: 'team_member', entity_id: currentMember.id, details: { name: memberData.name } });
-                } catch (auditErr) {
-                    console.warn('Audit log failed (non-critical):', auditErr);
-                }
-                
-                alert('Membro atualizado com sucesso!');
-            } else {
-                // Insert
-                memberData.created_at = new Date().toISOString();
-                const { data, error } = await supabase.from('team_members').insert([memberData]).select().single();
-                
-                if (error) {
-                    console.error('Database error creating team member:', error);
-                    throw error;
-                }
-                
-                // Background tasks (Non-blocking)
-                if (data) {
-                    // Audit
-                    logAudit({ 
-                        action: 'CREATE_TEAM_MEMBER', 
-                        entity_type: 'team_member', 
-                        entity_id: data.id, 
-                        details: { name: memberData.name, role: memberData.role } 
-                    }).catch(err => console.warn('Audit failed:', err));
+            const memberId = currentMember?.id || `tm_${Date.now()}`;
+            
+            await hostingerService.saveTeamMember({ 
+                ...memberData, 
+                id: memberId 
+            });
 
-                    // Welcome Email
-                    if (memberData.email) {
-                        sendTeamWelcomeEmail(
-                            memberData.email, 
-                            memberData.name, 
-                            memberData.username, 
-                            passwordValue || 'Contacte o Administrador'
-                        ).catch(emailErr => {
-                            console.error('Welcome email failed to send (non-critical):', emailErr);
-                        });
-                    }
-                }
-                
-                alert('Novo membro criado com sucesso!');
+            await logAudit({ 
+                action: currentMember ? 'UPDATE_TEAM_MEMBER' : 'CREATE_TEAM_MEMBER', 
+                entity_type: 'team_member', 
+                entity_id: memberId, 
+                details: { name: memberData.name, role: memberData.role } 
+            });
+
+            if (!currentMember && memberData.email) {
+                sendTeamWelcomeEmail(
+                    memberData.email, 
+                    memberData.name, 
+                    memberData.username, 
+                    passwordValue || 'Contacte o Administrador'
+                ).catch(err => console.warn('Welcome email failed:', err));
             }
 
+            alert(currentMember ? 'Membro atualizado com sucesso!' : 'Novo membro criado com sucesso!');
             setIsEditingMember(false);
             setCurrentMember(null);
             setMemberAvatar(null);
             loadTeam();
         } catch (error: any) {
             console.error('Critical error saving team member:', error);
-            const errorMessage = error.message === 'Failed to fetch' 
-                ? 'Erro de Rede: Não foi possível ligar ao servidor. Verifique a sua internet ou se o projeto está ativo.' 
-                : error.message;
-            alert('Erro ao salvar membro da equipe: ' + errorMessage);
+            alert('Erro ao salvar membro da equipe: ' + error.message);
         } finally {
             setIsSubmitting(false);
         }
@@ -1901,7 +1791,7 @@ export const Admin: React.FC = () => {
             price: Number(form.price.value),
             tax_type: form.taxType.value,
             stock_quantity: Number(form.stockQuantity.value) || 0,
-            is_available: form.inStock.checked,
+            is_available: form.inStock.checked ? 1 : 0,
             prep_time: form.prepTime.value,
             delivery_time: form.deliveryTime.value,
             unit: form.unit.value,
@@ -1912,76 +1802,60 @@ export const Admin: React.FC = () => {
         // Deferred Image Upload
         if (selectedImageFile) {
             try {
-                const fileExt = selectedImageFile.name.split('.').pop();
-                const fileName = `product_${Date.now()}.${fileExt}`;
-                const { error: uploadError } = await supabase.storage.from('products').upload(fileName, selectedImageFile);
-                if (uploadError) throw uploadError;
-                
-                // Use safe public URL helper
-                productData.image = getPublicUrlSafely('products', fileName);
-
-                // Auto-sync with Drive module (Fotos de Produtos)
-                try {
-                    const { data: folderInfo } = await supabase.from('drive_folders').select('id').eq('name', 'Fotos de Produtos').maybeSingle();
-                    await supabase.from('drive_files').insert({
-                        name: selectedImageFile.name,
-                        path: fileName,
-                        size: selectedImageFile.size,
-                        type: selectedImageFile.type || 'image/jpeg',
-                        folder_id: folderInfo?.id || null,
-                        uploaded_by: 'admin'
-                    });
-                } catch (driveErr) {
-                    console.error("Non-critical drive sync error:", driveErr);
+                const res = await hostingerService.uploadDriveFile(selectedImageFile);
+                if (res.path) {
+                    productData.image = hostingerService.getPublicUrl(res.path);
                 }
             } catch (err: any) {
                 alert('Erro ao carregar imagem: ' + err.message);
-                setIsSubmitting(false);
                 return;
             }
         } else if (previewImage) {
-            // Keep existing image if no new file selected
             productData.image = previewImage;
         }
 
         try {
-            let productId = currentProduct?.id;
+            const productId = currentProduct?.id || `prod_${Date.now()}`;
 
-            if (currentProduct?.id) {
-                // UPDATE existing product
-                const { error } = await supabase.from('products').update(productData).eq('id', currentProduct.id);
-                if (error) throw error;
-                await logAudit({ action: 'UPDATE_PRODUCT', entity_type: 'product', entity_id: currentProduct.id, details: { name: productData.name } });
-            } else {
-                // INSERT new product
-                const { data, error } = await supabase.from('products').insert(productData).select().single();
-                if (error) throw error;
-                if (data) {
-                    productId = data.id;
-                    await logAudit({ action: 'CREATE_PRODUCT', entity_type: 'product', entity_id: productId, details: { name: productData.name } });
-                }
-            }
+            await hostingerService.saveProduct({
+                id: productId,
+                ...productData,
+                variations: productVariations,
+                complements: [] 
+            });
 
-            // Handle Variations
-            if (productId) {
-                // Delete existing (simple way to sync)
-                await supabase.from('product_variations').delete().eq('product_id', productId);
-
-                // Insert current
-                if (productVariations.length > 0) {
-                    const varsToInsert = productVariations.map(v => ({
-                        product_id: productId,
-                        name: v.name,
-                        price_adjustment: Number(v.price) // Fixed column name mismatch
-                    }));
-                    await supabase.from('product_variations').insert(varsToInsert);
-                }
-            }
+            await logAudit({ 
+                action: currentProduct ? 'UPDATE_PRODUCT' : 'CREATE_PRODUCT', 
+                entity_type: 'product', 
+                entity_id: productId, 
+                details: { name: productData.name } 
+            });
 
             loadProducts();
             setIsEditingProduct(false);
             setCurrentProduct(null);
             setProductVariations([]);
+            setSelectedImageFile(null);
+            alert("Produto guardado com sucesso!");
+
+            // 3. Trigger Broadcast for New Products
+            if (!currentProduct && confirm("Deseja notificar todos os subscritores sobre este novo produto?")) {
+                try {
+                    const subscribers = await hostingerService.getNewsletterSubscribers();
+                    if (subscribers && subscribers.length > 0) {
+                        const emails = subscribers.map((s: any) => s.email);
+                        await sendNewProductNotification(emails, { 
+                            id: productId, 
+                            ...productData 
+                        });
+                        alert(`${emails.length} subscritores foram notificados sobre a novidade!`);
+                    }
+                } catch (notifErr: any) {
+                    console.error("Failed to send product broadcast:", notifErr);
+                    // Silently fail notification but let user know
+                    alert("Produto guardado, mas houve um erro ao notificar os subscritores.");
+                }
+            }
         } catch (e: any) {
             console.error("Save Error:", e);
             alert("Erro ao salvar produto: " + (e.message || JSON.stringify(e)));
@@ -1991,12 +1865,10 @@ export const Admin: React.FC = () => {
     const handleDeleteProduct = async (id: any) => {
         if (confirm('Tem certeza?')) {
             try {
-                // First, delete any product_variations that reference this product to avoid foreign key constraint errors
-                await supabase.from('product_variations').delete().eq('product_id', id);
-                const { error } = await supabase.from('products').delete().eq('id', id);
-                if (error) throw error;
+                await hostingerService.deleteProduct(id);
                 await logAudit({ action: 'DELETE_PRODUCT', entity_type: 'product', entity_id: id });
                 loadProducts();
+                alert("Produto excluído com sucesso!");
             } catch (e: any) {
                 console.error("Delete Error:", e);
                 alert("Erro ao excluir produto: " + (e.message || JSON.stringify(e)));
@@ -2004,23 +1876,22 @@ export const Admin: React.FC = () => {
         }
     };
 
-    // Team (Supabase)
+    // Team (Hostinger-Native)
     const loadTeam = async () => {
-        const { data, error } = await supabase.from('team_members').select('*').order('name');
-        if (error) {
+        try {
+            const data = await hostingerService.getTeam();
+            if (data) setTeamMembers(data);
+        } catch (error) {
             console.error("Failed to load team members", error);
-            throw error;
         }
-        if (data) setTeamMembers(data);
     };
 
     const loadBranding = async () => {
         try {
-            const { data, error } = await supabase.from('settings').select('*');
-            if (error) throw error;
+            const data = await hostingerService.getSettings();
             if (data) {
                 const settingsMap: any = {};
-                data.forEach(s => settingsMap[s.key] = s.value);
+                data.forEach((s: any) => settingsMap[s.key] = s.value);
 
                 // Update email/message settings
                 setEmailSettings(prev => ({
@@ -2060,13 +1931,11 @@ export const Admin: React.FC = () => {
                 }));
 
                 // Fetch System Settings (Maintenance Mode)
-                const { data: sysData, error: sysError } = await supabase.from('system_settings').select('key, value').in('key', ['whatsapp_menu_mode', 'menu_login_maintenance']);
-                if (!sysError && sysData) {
-                    const waMode = sysData.find(d => d.key === 'whatsapp_menu_mode');
-                    setWhatsappMenuMode(waMode?.value?.active === true);
-                    const mlMode = sysData.find(d => d.key === 'menu_login_maintenance');
-                    setMenuLoginMaintenanceMode(mlMode?.value?.active === true);
-                }
+                const waMode = settingsMap['whatsapp_menu_mode'];
+                setWhatsappMenuMode(waMode === 'active' || waMode === true || (typeof waMode === 'object' && waMode.active === true));
+                
+                const mlMode = settingsMap['menu_login_maintenance'];
+                setMenuLoginMaintenanceMode(mlMode === 'active' || mlMode === true || (typeof mlMode === 'object' && mlMode.active === true));
             }
         } catch (e) {
             console.error("Failed to load branding", e);
@@ -2078,39 +1947,25 @@ export const Admin: React.FC = () => {
             const today = new Date();
             today.setHours(0, 0, 0, 0);
 
-            // 1. Load active sessions (check-out is null)
-            const { data: sessions, error: sessionsError } = await supabase
-                .from('employee_sessions')
-                .select('*')
-                .is('check_out', null);
-
-            if (sessionsError) throw sessionsError;
+            // 1. Load active sessions
+            const sessions = await hostingerService.getWorkSessions(undefined, 'active');
 
             // 2. Load today's completed orders
-            const { data: todayOrders, error: orderError } = await supabase
-                .from('orders')
-                .select('id, total_amount, status, staff_id')
-                .in('status', ['completed', 'paid', 'kitchen', 'shipped'])
-                .gte('created_at', today.toISOString());
-
-            if (orderError) throw orderError;
+            const todayOrders = await hostingerService.getOrders({
+                status: ['completed', 'paid', 'kitchen', 'shipped'],
+                date_from: today.toISOString()
+            });
 
             // 3. Fetch ALL sessions today to sum exact hours worked
-            const { data: allTodaySessions } = await supabase
-                .from('employee_sessions')
-                .select('*')
-                .gte('check_in', today.toISOString());
+            const allTodaySessions = await hostingerService.getWorkSessions();
             
             let totalHoursCalculated = 0;
             if (allTodaySessions) {
-                allTodaySessions.forEach(s => {
-                    if (s.total_hours) {
-                        totalHoursCalculated += parseFloat(s.total_hours.toString());
-                    } else {
-                        const start = new Date(s.check_in).getTime();
-                        const stop = s.check_out ? new Date(s.check_out).getTime() : new Date().getTime();
-                        totalHoursCalculated += (stop - start) / 3600000;
-                    }
+                const todayStr = today.toISOString().split('T')[0];
+                allTodaySessions.filter((s: any) => s.clock_in && s.clock_in.startsWith(todayStr)).forEach((s: any) => {
+                    const start = new Date(s.clock_in).getTime();
+                    const stop = s.clock_out ? new Date(s.clock_out).getTime() : new Date().getTime();
+                    totalHoursCalculated += (stop - start) / 3600000;
                 });
             }
 
@@ -2127,12 +1982,10 @@ export const Admin: React.FC = () => {
                 productivityScore: score
             });
 
-            // Map sessions to old state for backward compatibility if needed in UI
             setTeamCheckins(sessions || []);
 
-            // 4. Check if current user is checked in
             if (userId) {
-                const isUserIn = sessions?.some(s => s.employee_id === userId) || false;
+                const isUserIn = sessions?.some((s: any) => String(s.member_id) === String(userId)) || false;
                 setIsUserCheckedIn(isUserIn);
             }
 
@@ -2181,12 +2034,7 @@ export const Admin: React.FC = () => {
     const handleUpdateMenuLoginMaintenanceMode = async (enabled: boolean) => {
         setIsUpdatingMaintenance(true);
         try {
-            const { data: existing } = await supabase.from('system_settings').select('id').eq('key', 'menu_login_maintenance').maybeSingle();
-            if (!existing) {
-                await supabase.from('system_settings').insert({ key: 'menu_login_maintenance', value: { active: enabled } });
-            } else {
-                await supabase.from('system_settings').update({ value: { active: enabled }, updated_at: new Date().toISOString() }).eq('key', 'menu_login_maintenance');
-            }
+            await hostingerService.saveSetting('menu_login_maintenance', { active: enabled });
             setMenuLoginMaintenanceMode(enabled);
             
             await logAudit({
@@ -2195,7 +2043,7 @@ export const Admin: React.FC = () => {
                 details: { enabled }
             });
 
-            alert(`Modo Manutenção (Menu e Login) ${enabled ? 'ACTIVADO' : 'DESACTIVADO'} com sucesso!`);
+            alert(`Modo Manutenção (Login) ${enabled ? 'ACTIVADO' : 'DESACTIVADO'} com sucesso!`);
         } catch (err: any) {
             console.error('Error updating maintenance mode:', err);
             alert('Falha ao atualizar modo de manutenção: ' + err.message);
@@ -2207,12 +2055,7 @@ export const Admin: React.FC = () => {
     const handleUpdateMaintenanceMode = async (enabled: boolean) => {
         setIsUpdatingMaintenance(true);
         try {
-            const { error } = await supabase
-                .from('system_settings')
-                .update({ value: { active: enabled }, updated_at: new Date().toISOString() })
-                .eq('key', 'whatsapp_menu_mode');
-
-            if (error) throw error;
+            await hostingerService.saveSetting('whatsapp_menu_mode', { active: enabled });
             setWhatsappMenuMode(enabled);
             
             await logAudit({
@@ -2234,15 +2077,15 @@ export const Admin: React.FC = () => {
         if (!userId) return alert("Erro: Utilizador não identificado.");
         try {
             setIsSubmitting(true);
-            const { error } = await supabase.from('employee_sessions').insert([{
-                employee_id: userId,
-                employee_name: username || 'Admin',
-                check_in: new Date().toISOString(),
+            const sessionId = `ws_${Date.now()}`;
+            await hostingerService.saveWorkSession({
+                id: sessionId,
+                member_id: userId,
+                member_name: username || 'Admin',
+                clock_in: new Date().toISOString(),
                 status: 'active'
-            }]);
-            if (error) throw error;
+            });
             
-            // Log to Notification Center
             await NotificationService.logSystemEvent(
                 "Check-in Realizado", 
                 `${username || 'Admin'} iniciou o turno com sucesso.`, 
@@ -2266,47 +2109,27 @@ export const Admin: React.FC = () => {
             setIsSubmitting(true);
             
             // 1. Get the current active session
-            const { data: currentSession, error: fetchError } = await supabase
-                .from('employee_sessions')
-                .select('*')
-                .eq('employee_id', userId)
-                .is('check_out', null)
-                .maybeSingle();
+            const sessions = await hostingerService.getWorkSessions(userId, 'active');
+            const currentSession = sessions?.[0];
 
-            if (fetchError) throw fetchError;
             if (!currentSession) {
                 alert("Nenhuma sessão activa encontrada.");
                 setIsUserCheckedIn(false);
                 return;
             }
 
-            // 2. Calculate hours
-            const start = new Date(currentSession.check_in).getTime();
-            const end = new Date().getTime();
-            const totalHours = (end - start) / 3600000;
+            // 2. Update the session
+            await hostingerService.updateWorkSession(currentSession.id, 'completed', new Date().toISOString());
 
-            // 3. Update the session
-            const { error: updateError } = await supabase
-                .from('employee_sessions')
-                .update({ 
-                    check_out: new Date().toISOString(),
-                    status: 'completed',
-                    total_hours: totalHours.toFixed(2)
-                })
-                .eq('id', currentSession.id);
-
-            if (updateError) throw updateError;
-            
-            // Log to Notification Center
             await NotificationService.logSystemEvent(
                 "Check-out Realizado", 
-                `${username || 'Admin'} terminou o turno com sucesso.`, 
+                `${username || 'Admin'} encerrou o turno com sucesso.`, 
                 'USER', 
                 'info', 
                 userId
             );
 
-            alert("Check-out realizado. Até à próxima!");
+            alert("Check-out realizado com sucesso!");
             loadPerformanceMetrics();
         } catch (e: any) {
             alert("Erro no check-out: " + e.message);
@@ -2319,19 +2142,23 @@ export const Admin: React.FC = () => {
 
     const handleDeleteMember = async (id: string) => {
         if (confirm('Remover membro?')) {
-            await supabase.from('team_members').delete().eq('id', id);
-            loadTeam();
+            try {
+                await hostingerService.deleteTeamMember(id);
+                loadTeam();
+            } catch (error) {
+                console.error("Failed to delete member", error);
+            }
         }
     };
 
-    // Customers (Supabase)
+    // Customers (Hostinger-Native)
     const loadCustomers = async () => {
-        const { data, error } = await supabase.from('customers').select('*').order('created_at', { ascending: false });
-        if (error) {
+        try {
+            const data = await hostingerService.getCustomers();
+            if (data) setCustomers(data);
+        } catch (error) {
             console.error("Failed to load customers", error);
-            throw error;
         }
-        if (data) setCustomers(data);
     };
 
     const handleSupportSubmit = async (e: React.FormEvent) => {
@@ -2339,10 +2166,14 @@ export const Admin: React.FC = () => {
 
         let imageUrl = '';
         if (supportForm.image) {
-            const file = supportForm.image;
-            const filePath = `tickets/${Date.now()}_${file.name}`;
-            await supabase.storage.from('support-tickets').upload(filePath, file);
-            imageUrl = getPublicUrlSafely('support-tickets', filePath);
+            try {
+                const res = await hostingerService.uploadDriveFile(supportForm.image);
+                if (res.path) {
+                    imageUrl = hostingerService.getPublicUrl(res.path);
+                }
+            } catch (err) {
+                console.error("Support image upload failed", err);
+            }
         }
 
         const body = `*Novo Ticket de Suporte*\n\n*Assunto:* ${supportForm.subject}\n*Mensagem:* ${supportForm.message}\n\n*Imagem:* ${imageUrl || 'N/A'}\n\n*Enviado por:* ${localStorage.getItem('admin_user')}`;
@@ -2401,25 +2232,19 @@ export const Admin: React.FC = () => {
     };
 
     const handleToggleConnectionMode = () => {
-        const newMode: ConnectionMode = connectionMode === 'proxy' ? 'direct' : 'proxy';
-        setConnectionMode(newMode);
+        const newMode = connectionMode === 'proxy' ? 'direct' : 'proxy';
         setConnectionModeState(newMode);
-        refreshSupabaseClient();
         setTimeout(() => refreshAllData(), 500);
     };
 
     const handleTestDirectConnection = async () => {
         setDbStatus({ status: 'loading', message: "A testar ligação direta..." });
         try {
-            const directUrl = import.meta.env.VITE_SUPABASE_URL || 'https://bbvowyztvzselxphbqmt.supabase.co';
-            const res = await fetch(`${directUrl}/rest/v1/`, {
-                headers: { 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY }
-            });
-            const text = await res.text();
-            if (text.includes('Website Blocked') || text.includes('DOCTYPE')) {
-                alert("LIGAÇÃO DIRETA BLOQUEADA: O seu ISP ainda está a bloquear o Supabase. Use a VPN e mude o modo para Direto se a VPN estiver ativa.");
+            const res = await hostingerService.fetch('test');
+            if (res) {
+                alert("LIGAÇÃO DIRETA OK: Hostinger acessível.");
             } else {
-                alert("LIGAÇÃO DIRETA OK: O Supabase está acessível (VPN provavelmente ativa). Pode mudar para o modo Direto.");
+                throw new Error('Falha');
             }
         } catch (e) {
             alert("Erro ao testar ligação direta. Verifique a consola.");
@@ -2636,8 +2461,9 @@ export const Admin: React.FC = () => {
 
         if (newProds.length > 0) {
             try {
-                const { error } = await supabase.from('products').insert(newProds);
-                if (error) throw error;
+                const productsWithIds = newProds.map(p => ({ ...p, id: `prod_${Date.now()}_${Math.random().toString(36).substr(2, 5)}` }));
+                const result = await hostingerService.bulkSaveProducts(productsWithIds);
+                if (!result.success) throw new Error(result.error || 'Erro no Hostinger');
                 alert(`${newProds.length} produtos adicionados com sucesso!`);
                 setMassInput('');
                 setShowMassStockModal(false);
@@ -2673,19 +2499,22 @@ export const Admin: React.FC = () => {
             // If we want to apply a single value to all selectedMassStockIds, we need a separate UI flow or massInput parsing.
             // The user requested "colocar todos com a quantidade de stock 10".
             
-            let updates: any[] = [];
-            
             if (productIds.length > 0) {
-                updates = productIds.map(id => {
+                const productsToUpdate = productIds.map(id => {
                     const changes = editedMassStock[id];
-                    return supabase.from('products').update({
+                    return {
+                        id,
                         stock_quantity: changes.stockQuantity,
                         unit: changes.unit,
                         is_available: changes.inStock,
                         show_in_menu: changes.showInMenu,
                         sku: changes.sku
-                    }).eq('id', id);
+                    };
                 });
+                const result = await hostingerService.bulkSaveProducts(productsToUpdate);
+                if (!result.success) throw new Error(result.error || 'Erro no Hostinger');
+                
+                alert(`${productIds.length} produtos atualizados com sucesso!`);
             } else if (selectedMassStockIds.length > 0) {
                 // If user just selected items and clicked save without individual edits, 
                 // we might need a prompt or the "massInput" logic.
@@ -2694,10 +2523,6 @@ export const Admin: React.FC = () => {
                 setIsSavingMassStock(false);
                 return;
             }
-
-            await Promise.all(updates);
-            
-            alert(`${updates.length} produtos atualizados com sucesso!`);
             setEditedMassStock({});
             setSelectedMassStockIds([]);
             loadProducts();
@@ -2715,16 +2540,20 @@ export const Admin: React.FC = () => {
 
         setIsSavingMassPricing(true);
         try {
-            const updates = productIds.map(id => {
-                const changes = editedMassPricing[id];
-                return supabase.from('products').update({
-                    purchase_price: changes.purchasePrice,
-                    other_cost: changes.otherCost,
-                    margin_percentage: changes.marginPercentage,
-                    price: changes.finalPrice
-                }).eq('id', id);
-            });
-            await Promise.all(updates);
+            if (productIds.length > 0) {
+                const productsToUpdate = productIds.map(id => {
+                    const changes = editedMassPricing[id];
+                    return {
+                        id,
+                        purchase_price: changes.purchasePrice,
+                        other_cost: changes.otherCost,
+                        margin_percentage: changes.marginPercentage,
+                        price: changes.finalPrice
+                    };
+                });
+                const result = await hostingerService.bulkSaveProducts(productsToUpdate);
+                if (!result.success) throw new Error(result.error || 'Erro no Hostinger');
+            }
             
             alert(`${productIds.length} preços atualizados com sucesso!`);
             setEditedMassPricing({});
@@ -3289,6 +3118,28 @@ export const Admin: React.FC = () => {
                             </div>
                             {/* Stock Search Bar */}
                             <div className="flex gap-2">
+                                <button 
+                                    onClick={() => refreshAllData()} 
+                                    className={`bg-[#d9a65a] text-[#3b2f2f] px-4 py-2 rounded-lg font-bold text-sm shadow-sm hover:brightness-110 transition-all flex items-center gap-2`}
+                                >
+                                    <RefreshCw size={16} /> 
+                                    Recarregar Dados
+                                </button>
+                                <div className="relative">
+                                    <input 
+                                        type="file" 
+                                        accept=".json" 
+                                        className="hidden" 
+                                        id="import-backup-input" 
+                                        onChange={importFromFile}
+                                    />
+                                    <label 
+                                        htmlFor="import-backup-input"
+                                        className={`bg-white text-[#d9a65a] border border-[#d9a65a] px-4 py-2 rounded-lg font-bold text-sm shadow-sm hover:bg-[#d9a65a]/5 transition-all flex items-center gap-2 cursor-pointer ${isSyncing ? 'opacity-50 pointer-events-none' : ''}`}
+                                    >
+                                        <Upload size={16} /> Importar Backup
+                                    </label>
+                                </div>
                                 <button onClick={() => setShowMassStockModal(true)} className="bg-white text-[#d9a65a] border border-[#d9a65a]/20 px-4 py-2 rounded-lg font-bold text-sm shadow-sm hover:bg-gray-50 transition-all flex items-center gap-2">
                                     <Plus size={16} /> Adição em Massa
                                 </button>
@@ -3640,7 +3491,7 @@ export const Admin: React.FC = () => {
                                                     <button onClick={() => { setCurrentProduct(p); setProductVariations(p.variations || []); setPreviewImage(p.image || ''); setIsEditingProduct(true); }} className="text-blue-500 font-bold text-xs hover:underline">Editar</button>
                                                     <button onClick={async () => {
                                                         try {
-                                                            await supabase.from('products').update({ is_available: !p.inStock }).eq('id', p.id);
+                                                            await hostingerService.toggleProductAvailability(p.id, !p.inStock);
                                                             loadProducts();
                                                         } catch(e) {}
                                                     }} className={`${p.inStock ? 'text-orange-500' : 'text-green-500'} font-bold text-xs hover:underline`}>{p.inStock ? 'Esgotar' : 'Disponibilizar'}</button>
@@ -4087,20 +3938,25 @@ export const Admin: React.FC = () => {
                                         e.preventDefault();
                                         setIsSubmitting(true);
                                         try {
-                                            const { data, error } = await supabase.from('customers').insert({
+                                            const customerData = {
+                                                id: `cust_${Date.now()}`,
                                                 name: quickCustomerForm.name,
                                                 contact_no: quickCustomerForm.phone,
+                                                phone: quickCustomerForm.phone,
                                                 email: quickCustomerForm.email,
                                                 nuit: quickCustomerForm.nuit
-                                            }).select().single();
-                                            
-                                            if (error) throw error;
-                                            
-                                            alert('Cliente registado com sucesso!');
-                                            setIsAddingCustomer(false);
-                                            loadCustomers();
+                                            };
+
+                                            const result = await hostingerService.saveCustomer(customerData);
+                                            if (result.success) {
+                                                alert('Cliente registado com sucesso!');
+                                                setIsAddingCustomer(false);
+                                                loadCustomers();
+                                            } else {
+                                                throw new Error(result.error || 'Falha ao registar cliente.');
+                                            }
                                         } catch (err: any) {
-                                            alert('Erro ao registar cliente: ' + (err.code === '23505' ? 'Este número de telefone já existe.' : err.message));
+                                            alert('Erro ao registar cliente: ' + err.message);
                                         } finally {
                                             setIsSubmitting(false);
                                         }
@@ -4233,6 +4089,11 @@ export const Admin: React.FC = () => {
                                             <div className="flex flex-wrap gap-2">
                                                 <button onClick={() => { setCustomerForm(selectedCustomer); setIsEditingCustomer(true); }} className="bg-white text-blue-600 border border-blue-200 px-4 py-2 rounded-lg text-xs font-bold hover:bg-blue-50 transition-colors">Editar Perfil</button>
                                                 <button onClick={() => handleResetCustomerPassword(selectedCustomer)} className="bg-white text-orange-600 border border-orange-200 px-4 py-2 rounded-lg text-xs font-bold hover:bg-orange-50 transition-colors">Reset de Senha (SMS)</button>
+                                                {selectedCustomer.email && (
+                                                    <button onClick={() => handleSendBirthdayEmail(selectedCustomer)} className="bg-white text-[#d9a65a] border border-[#d9a65a]/20 px-4 py-2 rounded-lg text-xs font-bold hover:bg-[#fcfbf9] transition-colors flex items-center gap-2">
+                                                        <Sparkles size={12} /> Parabéns (Email)
+                                                    </button>
+                                                )}
                                                 <button onClick={() => handleToggleBlockCustomer(selectedCustomer)} className="bg-white text-red-600 border border-red-200 px-4 py-2 rounded-lg text-xs font-bold hover:bg-red-50 transition-colors">
                                                     {selectedCustomer.is_blocked ? 'Desbloquear Acesso' : 'Bloquear Cliente'}
                                                 </button>
@@ -4348,14 +4209,14 @@ export const Admin: React.FC = () => {
                                                 className="hidden"
                                                 accept="image/*"
                                                 title="Carregar nova foto"
-                                                onChange={async (e) => {
+                                                onChange={(e) => {
                                                     const file = e.target.files?.[0];
                                                     if (!file) return;
-                                                    const fileName = `avatars/${Date.now()}_${file.name}`;
-                                                    const { error } = await supabase.storage.from('products').upload(fileName, file);
-                                                    if (error) return alert('Erro: ' + error.message);
-                                                    const url = getPublicUrlSafely('products', fileName);
-                                                    setMemberAvatar(url);
+                                                    const reader = new FileReader();
+                                                    reader.onload = (ev) => {
+                                                        if (ev.target?.result) setMemberAvatar(ev.target.result as string);
+                                                    };
+                                                    reader.readAsDataURL(file);
                                                 }}
                                             />
                                         </label>
@@ -4450,7 +4311,7 @@ export const Admin: React.FC = () => {
                                                         setSelectedMessage(msg);
                                                         setIsComposingEmail(false);
                                                         if (msg.status === 'unread') {
-                                                            await supabase.from('contact_messages').update({ status: 'read' }).eq('id', msg.id);
+                                                            await hostingerService.updateContactMessageStatus(msg.id, 'read');
                                                             // Update local state instead of full reload for smoother UX
                                                             setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, status: 'read' } : m));
                                                         }
@@ -4593,7 +4454,7 @@ export const Admin: React.FC = () => {
                                                 <button
                                                     onClick={async () => {
                                                         const newStatus = selectedMessage.status === 'unread' ? 'read' : 'unread';
-                                                        await supabase.from('contact_messages').update({ status: newStatus }).eq('id', selectedMessage.id);
+                                                        await hostingerService.updateContactMessageStatus(selectedMessage.id, newStatus);
                                                         loadMessages();
                                                         setSelectedMessage({ ...selectedMessage, status: newStatus });
                                                     }}
@@ -4605,7 +4466,7 @@ export const Admin: React.FC = () => {
                                                 <button
                                                     onClick={async () => {
                                                         if (!confirm('Deseja mover esta mensagem para o lixo?')) return;
-                                                        await supabase.from('contact_messages').update({ status: 'trash' }).eq('id', selectedMessage.id);
+                                                        await hostingerService.updateContactMessageStatus(selectedMessage.id, 'trash');
                                                         loadMessages();
                                                         setSelectedMessage(null);
                                                     }}
@@ -4668,7 +4529,7 @@ export const Admin: React.FC = () => {
                                                             const result = await sendEmail([selectedMessage.email], 'Resposta: Contacto Pão Caseiro', emailHtml, undefined, 'admin@paocaseiro.co.mz');
 
                                                             if (result.success) {
-                                                                await supabase.from('contact_messages').update({ status: 'replied', reply_content: response }).eq('id', selectedMessage.id);
+                                                                await hostingerService.updateContactMessageStatus(selectedMessage.id, 'replied', response);
                                                                 alert('Mensagem enviada com sucesso!');
                                                                 (e.target as any).reset();
                                                                 loadMessages();
@@ -5601,33 +5462,27 @@ export const Admin: React.FC = () => {
                                                                 onClick={async () => {
                                                                     if (!quickCustomerForm.name || !quickCustomerForm.phone) return alert('Preencha nome e telefone!');
                                                                     
-                                                                    // Use upsert to handle existing customers by contact_no
-                                                                    const { data, error } = await supabase.from('customers').upsert([
-                                                                        {
+                                                                    try {
+                                                                        const customerData = {
+                                                                            id: `cust_${Date.now()}`,
                                                                             name: quickCustomerForm.name,
                                                                             contact_no: quickCustomerForm.phone,
                                                                             phone: quickCustomerForm.phone,
                                                                             email: quickCustomerForm.email,
                                                                             nuit: quickCustomerForm.nuit,
                                                                             updated_at: new Date().toISOString()
-                                                                        }
-                                                                    ], { onConflict: 'contact_no' }).select().single();
+                                                                        };
 
-                                                                    if (error) {
-                                                                        console.error('Customer upsert error:', error);
-                                                                        return alert('Erro ao processar cliente: ' + error.message);
+                                                                        const result = await hostingerService.saveCustomer(customerData);
+                                                                        if (result.success) {
+                                                                            loadCustomers();
+                                                                            setPosCustomer(customerData);
+                                                                            setQuickCustomerForm({ name: '', phone: '', email: '', nuit: '' });
+                                                                            setIsAddingQuickCustomer(false);
+                                                                        }
+                                                                    } catch (err: any) {
+                                                                        alert('Erro ao processar cliente: ' + err.message);
                                                                     }
-                                                                    
-                                                                    // Update local customers list if it doesn't have this one
-                                                                    if (!customers.find(c => c.id === data.id)) {
-                                                                        setCustomers([...customers, data]);
-                                                                    } else {
-                                                                        setCustomers(customers.map(c => c.id === data.id ? data : c));
-                                                                    }
-                                                                    
-                                                                    setPosCustomer(data);
-                                                                    setQuickCustomerForm({ name: '', phone: '', email: '', nuit: '' });
-                                                                    setIsAddingQuickCustomer(false);
                                                                 }}
                                                                 className="w-full py-2 bg-[#d9a65a] text-[#3b2f2f] font-bold rounded-lg text-xs uppercase"
                                                             >
@@ -6244,17 +6099,14 @@ export const Admin: React.FC = () => {
                                                                     className="hidden"
                                                                     accept="image/*"
                                                                     title="Carregar logo"
-                                                                    onChange={async (e) => {
+                                                                    onChange={(e) => {
                                                                         const file = e.target.files?.[0];
                                                                         if (!file) return;
-                                                                        const fileName = `branding/company_${Date.now()}_${file.name}`;
-                                                                        const { error } = await supabase.storage.from('products').upload(fileName, file);
-                                                                        if (error) return alert('Erro: ' + error.message);
-                                                                        const { data } = supabase.storage.from('products').getPublicUrl(fileName);
-    if (typeof data !== 'undefined' && data && data.publicUrl && data.publicUrl.includes('/supabase-proxy')) {
-        data.publicUrl = data.publicUrl.replace(window.location.origin + '/supabase-proxy', import.meta.env.VITE_SUPABASE_URL || 'https://bbvowyztvzselxphbqmt.supabase.co');
-    }
-                                                                        setCompanyInfo(prev => ({ ...prev, logo: data.publicUrl }));
+                                                                        const reader = new FileReader();
+                                                                        reader.onload = (ev) => {
+                                                                            if (ev.target?.result) setCompanyInfo(prev => ({ ...prev, logo: ev.target.result as string }));
+                                                                        };
+                                                                        reader.readAsDataURL(file);
                                                                     }}
                                                                 />
                                                             </label>
@@ -6439,8 +6291,8 @@ export const Admin: React.FC = () => {
                                                                     doc: companyInfo.docPrefix
                                                                 }));
 
-                                                                    const { error } = await supabase.from('settings').upsert(settingsToSave);
-                                                                    if (error) throw error;
+                                                                    const result = await hostingerService.saveSystemSettings(settingsToSave);
+                                                                    if (!result.success) throw new Error('Falha ao guardar algumas definições.');
 
                                                                     alert('Dados da Empresa guardados com sucesso!');
                                                                     loadBranding();
@@ -6850,8 +6702,8 @@ export const Admin: React.FC = () => {
                                                         ];
                                                         try {
                                                             setIsSubmitting(true);
-                                                            const { error } = await supabase.from('settings').upsert(settingsToSave);
-                                                            if (error) throw error;
+                                                            const result = await hostingerService.saveSystemSettings(settingsToSave);
+                                                            if (!result.success) throw new Error('Falha ao guardar algumas definições.');
                                                             
                                                             alert('Branding guardado com sucesso!');
                                                             loadBranding();
@@ -7194,14 +7046,14 @@ export const Admin: React.FC = () => {
                                             alert("Erro: ID do pedido ausente. Recarregue a página.");
                                             return;
                                         }
-                                        const { generateReceipt } = await import('../services/supabase');
+                                        const { generateAndUploadReceipt } = await import('../services/billingService');
                                         const { notifyPaymentConfirmed } = await import('../services/sms');
 
                                         const customerName = selectedOrder.customer?.name || selectedOrder.customer_name || 'Venda Local (Balcão)';
                                         const customerPhone = selectedOrder.customer?.phone || selectedOrder.customer_phone || '';
                                         const deliveryType = selectedOrder.customer?.type || selectedOrder.delivery_type || 'takeaway';
 
-                                        const receiptRes = await generateReceipt(
+                                        const receiptRes = await generateAndUploadReceipt(
                                             selectedOrder.id,
                                             selectedOrder.orderId,
                                             selectedOrder.customer_id,
@@ -7267,11 +7119,11 @@ export const Admin: React.FC = () => {
                                     <h3 className="font-bold text-gray-400 text-xs uppercase mb-3">Fluxo de Trabalho</h3>
                                     <div className="grid grid-cols-2 gap-2 mb-2">
                                         <button onClick={async () => {
-                                            const { supabase } = await import('../services/supabase');
                                             const { notifyCustomer } = await import('../services/sms');
                                             const { notifyOrderStatusUpdateEmail } = await import('../services/email');
 
-                                            await supabase.from('orders').update({ status: 'kitchen' }).eq('short_id', selectedOrder.orderId);
+                                            await hostingerService.updateOrderStatus(selectedOrder.orderId, 'kitchen');
+
                                             loadOrders();
                                             const updatedOrder = { ...selectedOrder, status: 'kitchen' };
                                             setSelectedOrder(null); // Fechar a aba
@@ -7285,11 +7137,11 @@ export const Admin: React.FC = () => {
                                             Enviar p/ Cozinha
                                         </button>
                                         <button onClick={async () => {
-                                            const { supabase } = await import('../services/supabase');
                                             const { notifyCustomer } = await import('../services/sms');
                                             const { notifyOrderStatusUpdateEmail } = await import('../services/email');
 
-                                            await supabase.from('orders').update({ status: 'ready' }).eq('short_id', selectedOrder.orderId);
+                                            await hostingerService.updateOrderStatus(selectedOrder.orderId, 'ready');
+
                                             loadOrders();
                                             const updatedOrder = { ...selectedOrder, status: 'ready' };
                                             setSelectedOrder(null); // Fechar a aba
@@ -7315,11 +7167,11 @@ export const Admin: React.FC = () => {
                                             </button>
                                         )}
                                         <button onClick={async () => {
-                                            const { supabase } = await import('../services/supabase');
                                             const { notifyCustomer } = await import('../services/sms');
                                             const { notifyOrderStatusUpdateEmail } = await import('../services/email');
 
-                                            await supabase.from('orders').update({ status: 'completed' }).eq('short_id', selectedOrder.orderId);
+                                            await hostingerService.updateOrderStatus(selectedOrder.orderId, 'completed');
+
                                             loadOrders();
                                             const updatedOrder = { ...selectedOrder, status: 'completed' };
                                             setSelectedOrder(null); // Fechar a aba
@@ -7334,8 +7186,8 @@ export const Admin: React.FC = () => {
                                     </div>
                                     <div className="mt-3">
                                         <button onClick={async () => {
-                                            const { supabase } = await import('../services/supabase');
-                                            await supabase.from('orders').update({ status: 'cancelled' }).eq('short_id', selectedOrder.orderId);
+                                            await hostingerService.updateOrderStatus(selectedOrder.orderId, 'cancelled');
+
                                             loadOrders();
                                             const updatedOrder = { ...selectedOrder, status: 'cancelled' };
                                             setSelectedOrder(updatedOrder);

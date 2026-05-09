@@ -27,7 +27,7 @@ import { useRealtimeTickets } from '../../hooks/useRealtimeTickets';
 import { queueService, QueueTicket } from '../../services/queue';
 import { NotificationService } from '../../services/NotificationService';
 import { motion, AnimatePresence } from 'framer-motion';
-import { getConnectionMode, setConnectionMode, refreshSupabaseClient, type ConnectionMode } from '../../services/supabase';
+
 
 export const QueueManager: React.FC = () => {
     const { tickets, loading, error, status, refresh } = useRealtimeTickets();
@@ -40,7 +40,6 @@ export const QueueManager: React.FC = () => {
     const [actionLoading, setActionLoading] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<'panel' | 'history' | 'config'>('panel');
     const [stats, setStats] = useState<any>(null);
-    const [connectionMode, setConnectionModeState] = useState<ConnectionMode>(getConnectionMode());
 
     // Local Stats Calculation (Meticulous & Instant)
     const derivedStats = useMemo(() => {
@@ -208,13 +207,7 @@ export const QueueManager: React.FC = () => {
 
     const kioskUrl = typeof window !== 'undefined' ? `${window.location.origin}/get-ticket` : '';
 
-    const handleConnectionToggle = (mode: ConnectionMode) => {
-        setConnectionMode(mode);
-        setConnectionModeState(mode);
-        refreshSupabaseClient();
-        alert(`Modo de conexão alterado para: ${mode.toUpperCase()}. A recarregar...`);
-        refresh();
-    };
+
 
     const getFriendlyError = (err: any) => {
         if (!err) return null;
@@ -702,31 +695,7 @@ export const QueueManager: React.FC = () => {
                                     </button>
                                 </div>
 
-                                {/* Connection Mode Toggle */}
-                                <div className="p-8 bg-blue-50 rounded-3xl border border-blue-100 flex items-center justify-between gap-8">
-                                    <div className="flex items-center gap-6">
-                                        <div className="bg-blue-500/10 p-4 rounded-2xl">
-                                            <Wifi className="text-blue-500" size={24} />
-                                        </div>
-                                        <div>
-                                            <h4 className="text-[11px] font-black uppercase tracking-widest text-[#3b2f2f] mb-1">Modo de Conexão</h4>
-                                            <p className="text-[10px] text-gray-400 font-bold leading-normal">Se estiver a ter erros de rede (Failed to fetch), experimente o Modo PROXY.</p>
-                                        </div>
-                                    </div>
-                                    <div className="flex gap-2">
-                                        {(['direct', 'proxy'] as ConnectionMode[]).map((mode) => (
-                                            <button 
-                                                key={mode}
-                                                onClick={() => handleConnectionToggle(mode)}
-                                                className={`px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                                                    connectionMode === mode ? 'bg-blue-600 text-white shadow-lg' : 'bg-white text-gray-400 border border-gray-100'
-                                                }`}
-                                            >
-                                                {mode === 'direct' ? 'Direto' : 'Proxy'}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
+
                             </div>
 
                             <div className="pt-6 border-t border-gray-50">
