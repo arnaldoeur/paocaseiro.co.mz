@@ -320,7 +320,8 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
             const { hostingerService } = await import('../services/hostingerService');
             const newSession = await hostingerService.saveWorkSession({
                 member_id: user.id,
-                clock_in: new Date().toISOString(),
+                clock_in: new Date().toISOString().slice(0, 19).replace('T', ' '),
+                start_time: new Date().toISOString().slice(0, 19).replace('T', ' '),
                 status: 'active'
             });
 
@@ -411,7 +412,9 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
 
         try {
             const { hostingerService } = await import('../services/hostingerService');
-            await hostingerService.updateOrder(addTimeOrder.id, { estimated_ready_at: newReadyAt.toISOString() });
+            await hostingerService.updateOrder(addTimeOrder.id, { 
+                estimated_ready_at: newReadyAt.toISOString().slice(0, 19).replace('T', ' ') 
+            });
             setIsAddTimeModalOpen(false);
             setAddTimeOrder(null);
             fetchOrders();

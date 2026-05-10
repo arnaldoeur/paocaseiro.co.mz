@@ -153,22 +153,10 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
 
                 
                 
-                let waSent = false;
-                try {
-                    const waMsg = `Pão Caseiro: O seu código de acesso é *${code}*. Não partilhe com ninguém.`;
-                    const res = await sendWhatsAppMessage(formattedIdentifier, waMsg);
-                    waSent = !!res?.success;
-                    if (!waSent) console.warn('[AUTH] Registration WA failed, trying SMS...');
-                } catch (e) {
-                    console.error('[AUTH] Registration WA exception:', e);
-                }
-
-                if (!waSent) {
-                    const smsMsg = `Pao Caseiro: O seu codigo de acesso e ${code}.`;
-                    
-                    const smsRes = await sendSMS(formattedIdentifier.replace('+', ''), smsMsg);
-                    
-                }
+                // Use centralized NotificationService for OTP (handles WhatsApp-to-SMS fallback)
+                NotificationService.sendOTP(formattedIdentifier, code).catch(err => {
+                    console.error('[AUTH] Failed to send OTP:', err);
+                });
 
                 if (existingCustomerData) {
                     setSuccessMsg(language === 'en' ? 'Number already registered! We sent a login code.' : 'Número já registado! Enviámos um código para fazer login.');

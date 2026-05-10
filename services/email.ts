@@ -5,6 +5,7 @@ import { formatProductName } from './stringUtils';
  */
 
 const DEFAULT_FROM = 'Pão Caseiro <sistema@paocaseiro.co.mz>';
+const PRODUCTION_URL = 'https://paocaseiro.co.mz';
 const FALLBACK_LOGO_URL = 'https://paocaseiro.co.mz/logo_on_dark.png';
 
 /**
@@ -91,7 +92,7 @@ export const sendOrderConfirmationEmail = async (order: any, items: any[]) => {
     const customerEmail = order.customer_email || order.email;
     if (!customerEmail) return { success: false, error: 'No email provided by customer' };
 
-    const domain = window.location.origin;
+    const domain = PRODUCTION_URL;
     const receiptLink = `${domain}/order-receipt/${order.short_id || order.id}`;
 
     const itemsHtml = items.map(item => `
@@ -382,7 +383,7 @@ export const notifyOrderStatusUpdateEmail = async (order: any) => {
  * Welcome Email for new user registrations
  */
 export const sendWelcomeEmail = async (userEmail: string, userName: string) => {
-    const domain = window.location.origin;
+    const domain = PRODUCTION_URL;
     const html = `
         <h2 style="color: #3b2f2f; text-align: center;">Bem-vindo(a) à Pão Caseiro!</h2>
         <p>Olá, <strong>${userName || 'Cliente'}</strong>!</p>
@@ -412,7 +413,7 @@ export const sendWelcomeEmail = async (userEmail: string, userName: string) => {
  * Welcome Email for new Team Members (Staff)
  */
 export const sendTeamWelcomeEmail = async (email: string, name: string, username: string, password?: string) => {
-    const domain = window.location.origin;
+    const domain = PRODUCTION_URL;
     const html = `
         <h2 style="color: #3b2f2f; text-align: center;">Bem-vindo(a) à Equipa Pão Caseiro!</h2>
         <p>Olá, <strong>${name}</strong>!</p>
@@ -492,7 +493,7 @@ export const sendAdminNewUserNotification = async (userEmail: string, userName: 
  * Newsletter Subscription Email
  */
 export const sendNewsletterEmail = async (name: string, userEmail: string) => {
-    const domain = window.location.origin;
+    const domain = PRODUCTION_URL;
     const html = `
         <h2 style="color: #3b2f2f; text-align: center;">Obrigado por se inscrever!</h2>
         <p>Olá, <strong>${name}</strong>!</p>
@@ -513,7 +514,7 @@ export const sendNewsletterEmail = async (name: string, userEmail: string) => {
  * Newsletter Presentation Email (Triggered by n8n or external scheduler 30-min later)
  */
 export const sendPresentationEmail = async (name: string, userEmail: string) => {
-    const domain = window.location.origin;
+    const domain = PRODUCTION_URL;
     const html = `
         <h2 style="color: #3b2f2f; text-align: center;">Conheça a Pão Caseiro</h2>
         <p>Olá, <strong>${name}</strong>!</p>
@@ -554,7 +555,7 @@ export const sendBirthdayEmail = async (email: string, name: string) => {
             <p>Esperamos que o seu dia seja repleto de doçura e momentos inesquecíveis.</p>
             
             <div style="text-align: center; margin-top: 30px;">
-                <a href="${window.location.origin}/menu" style="background-color: #d9a65a; color: #3b2f2f; padding: 15px 30px; text-decoration: none; border-radius: 30px; font-weight: bold; display: inline-block;">ESCOLHER O MEU BOLO</a>
+                <a href="${PRODUCTION_URL}/menu" style="background-color: #d9a65a; color: #3b2f2f; padding: 15px 30px; text-decoration: none; border-radius: 30px; font-weight: bold; display: inline-block;">ESCOLHER O MEU BOLO</a>
             </div>
         </div>
     `;
@@ -582,7 +583,7 @@ export const sendNewProductNotification = async (emails: string[], product: any)
         </div>
 
         <div style="text-align: center; margin: 30px 0;">
-            <a href="${window.location.origin}/menu" style="background-color: #3b2f2f; color: #d9a65a; padding: 15px 30px; text-decoration: none; border-radius: 30px; font-weight: bold; display: inline-block;">ENCOMENDAR AGORA</a>
+            <a href="${PRODUCTION_URL}/menu" style="background-color: #3b2f2f; color: #d9a65a; padding: 15px 30px; text-decoration: none; border-radius: 30px; font-weight: bold; display: inline-block;">ENCOMENDAR AGORA</a>
         </div>
 
         <p style="text-align: center; color: #999; font-size: 12px;">Fique atento às nossas novidades semanais!</p>

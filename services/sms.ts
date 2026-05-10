@@ -67,7 +67,7 @@ export const notifyTeam = async (order: any, type: 'new_order' | 'delivery_updat
     const recipients = (Object.values(TEAM_NUMBERS) as string[]).filter(n => n !== '');
     if (recipients.length === 0) return;
 
-    const domain = window.location.origin;
+    const domain = 'https://paocaseiro.co.mz';
     let message = '';
     if (type === 'new_order') {
         const itemsList = order.items.map((i: any) => `- ${i.quantity}x ${formatProductName(i.name)}`).join('\n');
@@ -113,10 +113,7 @@ export const notifyCustomer = async (order: any, type: 'order_confirmed' | 'stat
     if (!order.customer_phone && (!order.customer || !order.customer.phone)) return;
     const phone = order.customer_phone || order.customer.phone;
 
-    let baseUrl = 'https://paocaseiro.co.mz';
-    if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1' && !window.location.hostname.startsWith('192.168.')) {
-        baseUrl = window.location.origin;
-    }
+    const baseUrl = 'https://paocaseiro.co.mz';
     const receiptLink = `${baseUrl}/order-receipt/${order.short_id || order.orderId || order.id}`;
     let message = '';
     
@@ -174,7 +171,7 @@ export const notifyCustomerDelay = async (order: any, delayMinutes: string, reas
 };
 
 export const notifyPaymentConfirmed = async (orderId: string, phone: string, shortId?: string) => {
-    const domain = window.location.host;
+    const domain = 'paocaseiro.co.mz';
     const receiptLink = `${domain}/order-receipt/${shortId || orderId}`;
     const message = `🍞 *Pão Caseiro — Pagamento Confirmado!*\n\nPedido: *#${shortId || orderId}*\n\nObrigado por escolher a nossa qualidade. O seu pedido será processado de imediato.\n\nRecibo: ${receiptLink}\n\n_O sabor que aquece o seu coração!_ 🤎`;
     
@@ -223,7 +220,7 @@ export const notifyDriverAssigned = async (driver: any, order: any) => {
     }
 
     // Rich WhatsApp message with full details
-    const domain = typeof window !== 'undefined' ? window.location.origin : 'https://paocaseiro.co.mz';
+    const domain = 'https://paocaseiro.co.mz';
     const portalLink = `${domain}/delivery`;
     const waMsg = `🍞 *Pão Caseiro — Nova Entrega Atribuída*\n\n📦 Pedido: *#${orderId}*\n👤 Cliente: ${customerName}\n📞 Tel: ${customerPhone}\n📍 Endereço: ${address}${coords ? `\n🗺️ Mapa: https://maps.google.com/?q=${coords}` : ''}\n\n🛒 *Itens:*\n${itemsList}\n\n🔑 *OTP de Entrega: ${order.otp}*\n\n➡️ Acesse o portal: ${portalLink}\n\n_O sabor que aquece o seu coração!_ 🤎`;
 

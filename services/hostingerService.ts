@@ -106,8 +106,8 @@ export const hostingerService = {
 
 
     // --- DEFINIÇÕES ---
-    async getSettings() {
-        return this.fetch('get_system_settings');
+    async getSettings(key?: string) {
+        return this.fetch('get_system_settings', key ? { key } : {});
     },
 
     async saveSystemSettings(settings: { key: string, value: any }[]) {
@@ -496,8 +496,14 @@ export const hostingerService = {
         if (path.startsWith('http')) return path;
         
         // Hostinger path is usually relative to public/
-        // If the path already contains 'uploads/', we use it.
-        const cleanPath = path.replace('public/', '');
+        // Remove leading slash and 'public/' if present
+        const cleanPath = path.replace(/^(\/|public\/)/, '');
+        
+        // If it's a simple filename (no slashes) and looks like an image, assume it's in images/products/
+        if (!cleanPath.includes('/') && /\.(jpg|jpeg|png|webp|gif|svg)$/i.test(cleanPath)) {
+             return `${IS_PROD ? 'https://paocaseiro.co.mz' : 'http://localhost:8000'}/images/products/${cleanPath}`;
+        }
+
         return `${IS_PROD ? 'https://paocaseiro.co.mz' : 'http://localhost:8000'}/${cleanPath}`;
     }
 };

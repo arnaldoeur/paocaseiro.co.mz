@@ -15,16 +15,24 @@ if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
 // Ensure error reporting is off for clean JSON output
 error_reporting(0);
 
-// Get the actual requested path, e.g. /whatsapp_proxy.php/message/sendText/...
+// Get the actual requested path
 $request_uri = $_SERVER['REQUEST_URI'];
-$base_path = '/whatsapp_proxy.php';
+$script_name = $_SERVER['SCRIPT_NAME'];
 $path_info = '';
 
-if (strpos($request_uri, $base_path) !== false) {
-    $path_info = substr($request_uri, strpos($request_uri, $base_path) + strlen($base_path));
+// Try PATH_INFO first
+if (isset($_SERVER['PATH_INFO'])) {
+    $path_info = $_SERVER['PATH_INFO'];
+} elseif (strpos($request_uri, $script_name) !== false) {
+    $path_info = substr($request_uri, strpos($request_uri, $script_name) + strlen($script_name));
 }
 
-// Fallback to query param if rewrite fails
+// Strip query string from path_info if present
+if (($pos = strpos($path_info, '?')) !== false) {
+    $path_info = substr($path_info, 0, $pos);
+}
+
+// Fallback to query param if still empty
 if (empty($path_info) && isset($_GET['path'])) {
     $path_info = '/' . ltrim($_GET['path'], '/');
 }
@@ -39,12 +47,22 @@ curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
 $headers = [
     "Content-Type: application/json"
 ];
-// Pass apikey header if present
-$headersList = getallheaders();
-foreach ($headersList as $key => $value) {
-    if (strtolower($key) == 'apikey') {
-        $headers[] = "apikey: $value";
+// Pass apikey header if present (trying multiple ways to get it)
+$apikey = '';
+if (isset($_SERVER['HTTP_APIKEY'])) {
+    $apikey = $_SERVER['HTTP_APIKEY'];
+} elseif (function_exists('getallheaders')) {
+    $all_headers = getallheaders();
+    foreach ($all_headers as $key => $value) {
+        if (strtolower($key) == 'apikey') {
+            $apikey = $value;
+            break;
+        }
     }
+}
+
+if ($apikey) {
+    $headers[] = "apikey: $apikey";
 }
 curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
 

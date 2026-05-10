@@ -71,7 +71,8 @@ function verify_jwt($jwt, $secret) {
 $input = json_decode(file_get_contents('php://input'), true);
 $action = $input['action'] ?? $_GET['action'] ?? '';
 
-switch ($action) {
+try {
+    switch ($action) {
     // --- PRODUCTS ---
     case 'get_products':
         $stmt = $pdo->query("SELECT * FROM products ORDER BY category, name");
@@ -82,75 +83,121 @@ switch ($action) {
         try {
             $pdo->beginTransaction();
             $products = $input['products'] ?? [];
+            
+            // Get actual columns from DB to avoid errors if schema is missing some fields
+            $stmt = $pdo->query("DESCRIBE products");
+            $dbColumns = $stmt->fetchAll(PDO::FETCH_COLUMN);
+            
             foreach ($products as $p) {
-                $id = $p['id'] ?? uniqid();
-                // Map frontend names to DB names if needed
-                $name = $p['name'] ?? null;
-                $category = $p['category'] ?? null;
-                $price = $p['price'] ?? null;
-                $stock = $p['stock_quantity'] ?? $p['stockQuantity'] ?? 0;
-                $available = isset($p['is_available']) ? $p['is_available'] : (isset($p['inStock']) ? $p['inStock'] : 1);
+                $id = $p['id'] ?? uniqid('prod_');
                 
-                $sql = "INSERT INTO products (id, name, category, price, stock_quantity, is_available) 
-                        VALUES (?, ?, ?, ?, ?, ?) 
-                        ON DUPLICATE KEY UPDATE 
-                            name=COALESCE(?, name), 
-                            category=COALESCE(?, category), 
-                            price=COALESCE(?, price), 
-                            stock_quantity=VALUES(stock_quantity), 
-                            is_available=VALUES(is_available)";
+                // Prepare data based on what frontend sends and what DB supports
+                $data = [
+                    'id' => $id,
+                    'name' => $p['name'] ?? null,
+                    'name_en' => $p['name_en'] ?? null,
+                    'category' => $p['category'] ?? null,
+                    'price' => $p['price'] ?? 0,
+                    'stock_quantity' => $p['stock_quantity'] ?? $p['stockQuantity'] ?? 0,
+                    'is_available' => isset($p['is_available']) ? ($p['is_available'] ? 1 : 0) : (isset($p['inStock']) ? ($p['inStock'] ? 1 : 0) : 1),
+                    'image' => $p['image'] ?? null,
+                    'unit' => $p['unit'] ?? 'un',
+                    'description' => $p['description'] ?? null,
+                    'description_en' => $p['description_en'] ?? null,
+                    'prep_time' => $p['prep_time'] ?? null,
+                    'delivery_time' => $p['delivery_time'] ?? null,
+                    'tax_type' => $p['tax_type'] ?? 'standard',
+                    'show_in_menu' => isset($p['show_in_menu']) ? ($p['show_in_menu'] ? 1 : 0) : 1,
+                    'purchase_price' => $p['purchase_price'] ?? 0,
+                    'other_cost' => $p['other_cost'] ?? 0,
+                    'margin_percentage' => $p['margin_percentage'] ?? 0,
+                    'variations' => isset($p['variations']) ? (is_array($p['variations']) ? json_encode($p['variations']) : $p['variations']) : '[]',
+                    'complements' => isset($p['complements']) ? (is_array($p['complements']) ? json_encode($p['complements']) : $p['complements']) : '[]'
+                ];
+
+                // Filter data to only include columns that actually exist in the DB
+                $finalData = [];
+                foreach ($data as $key => $value) {
+                    if (in_array($key, $dbColumns)) {
+                        $finalData[$key] = $value;
+                    }
+                }
+
+                $cols = array_keys($finalData);
+                $placeholders = array_fill(0, count($cols), "?");
+                $updates = [];
+                foreach ($cols as $col) {
+                    if ($col === 'id') continue;
+                    $updates[] = "`$col` = VALUES(`$col`)";
+                }
+
+                $sql = "INSERT INTO products (" . implode(', ', $cols) . ") 
+                        VALUES (" . implode(', ', $placeholders) . ") 
+                        ON DUPLICATE KEY UPDATE " . implode(', ', $updates);
+                
                 $stmt = $pdo->prepare($sql);
-                $stmt->execute([$id, $name, $category, $price, $stock, $available, $name, $category, $price]);
+                $stmt->execute(array_values($finalData));
             }
             $pdo->commit();
-            echo json_encode(["success" => true]);
+            echo json_encode(["success" => true, "count" => count($products)]);
         } catch (Exception $e) {
             if ($pdo->inTransaction()) $pdo->rollBack();
-            http_response_code(500);
-            echo json_encode(["error" => $e->getMessage()]);
+            throw $e;
         }
         break;
 
     case 'save_product':
-        $data = $input['product_data'] ?? $input;
-        $id = $data['id'];
-        $variations = isset($data['variations']) ? (is_array($data['variations']) ? json_encode($data['variations']) : $data['variations']) : '[]';
-        $complements = isset($data['complements']) ? (is_array($data['complements']) ? json_encode($data['complements']) : $data['complements']) : '[]';
+        $dataInput = $input['product_data'] ?? $input;
+        $id = $dataInput['id'];
+        
+        $stmt = $pdo->query("DESCRIBE products");
+        $dbColumns = $stmt->fetchAll(PDO::FETCH_COLUMN);
 
-        $sql = "INSERT INTO products (id, name, name_en, price, image, category, description, description_en, prep_time, delivery_time, unit, stock_quantity, is_available, variations, complements, tax_type, show_in_menu, purchase_price, other_cost, margin_percentage) 
-                VALUES (:id, :name, :name_en, :price, :image, :category, :description, :description_en, :prep_time, :delivery_time, :unit, :stock_quantity, :is_available, :variations, :complements, :tax_type, :show_in_menu, :purchase_price, :other_cost, :margin_percentage)
-                ON DUPLICATE KEY UPDATE 
-                name=VALUES(name), name_en=VALUES(name_en), price=VALUES(price), image=VALUES(image), category=VALUES(category), 
-                description=VALUES(description), description_en=VALUES(description_en), prep_time=VALUES(prep_time), 
-                delivery_time=VALUES(delivery_time), unit=VALUES(unit), stock_quantity=VALUES(stock_quantity), 
-                is_available=VALUES(is_available), variations=VALUES(variations), complements=VALUES(complements),
-                tax_type=VALUES(tax_type), show_in_menu=VALUES(show_in_menu), purchase_price=VALUES(purchase_price),
-                other_cost=VALUES(other_cost), margin_percentage=VALUES(margin_percentage)";
+        $mappedData = [
+            'id' => $id,
+            'name' => $dataInput['name'],
+            'name_en' => $dataInput['name_en'] ?? null,
+            'price' => $dataInput['price'],
+            'image' => $dataInput['image'] ?? null,
+            'category' => $dataInput['category'] ?? null,
+            'description' => $dataInput['description'] ?? null,
+            'description_en' => $dataInput['description_en'] ?? null,
+            'prep_time' => $dataInput['prep_time'] ?? null,
+            'delivery_time' => $dataInput['delivery_time'] ?? null,
+            'unit' => $dataInput['unit'] ?? 'un',
+            'stock_quantity' => $dataInput['stock_quantity'] ?? $dataInput['stockQuantity'] ?? 0,
+            'is_available' => isset($dataInput['is_available']) ? ($dataInput['is_available'] ? 1 : 0) : 1,
+            'variations' => isset($dataInput['variations']) ? (is_array($dataInput['variations']) ? json_encode($dataInput['variations']) : $dataInput['variations']) : '[]',
+            'complements' => isset($dataInput['complements']) ? (is_array($dataInput['complements']) ? json_encode($dataInput['complements']) : $dataInput['complements']) : '[]',
+            'tax_type' => $dataInput['tax_type'] ?? 'standard',
+            'show_in_menu' => isset($dataInput['show_in_menu']) ? ($dataInput['show_in_menu'] ? 1 : 0) : 1,
+            'purchase_price' => $dataInput['purchase_price'] ?? 0,
+            'other_cost' => $dataInput['other_cost'] ?? 0,
+            'margin_percentage' => $dataInput['margin_percentage'] ?? 0
+        ];
+
+        $finalData = [];
+        foreach ($mappedData as $key => $value) {
+            if (in_array($key, $dbColumns)) {
+                $finalData[$key] = $value;
+            }
+        }
+
+        $cols = array_keys($finalData);
+        $placeholders = array_fill(0, count($cols), "?");
+        $updates = [];
+        foreach ($cols as $col) {
+            if ($col === 'id') continue;
+            $updates[] = "`$col` = VALUES(`$col`)";
+        }
+
+        $sql = "INSERT INTO products (" . implode(', ', $cols) . ") 
+                VALUES (" . implode(', ', $placeholders) . ") 
+                ON DUPLICATE KEY UPDATE " . implode(', ', $updates);
         
         $stmt = $pdo->prepare($sql);
-        $stmt->execute([
-            ':id' => $id,
-            ':name' => $data['name'],
-            ':name_en' => $data['name_en'] ?? null,
-            ':price' => $data['price'],
-            ':image' => $data['image'] ?? null,
-            ':category' => $data['category'] ?? null,
-            ':description' => $data['description'] ?? null,
-            ':description_en' => $data['description_en'] ?? null,
-            ':prep_time' => $data['prep_time'] ?? null,
-            ':delivery_time' => $data['delivery_time'] ?? null,
-            ':unit' => $data['unit'] ?? 'un',
-            ':stock_quantity' => $data['stock_quantity'] ?? 0,
-            ':is_available' => (isset($data['is_available']) && $data['is_available']) ? 1 : 0,
-            ':variations' => $variations,
-            ':complements' => $complements,
-            ':tax_type' => $data['tax_type'] ?? 'standard',
-            ':show_in_menu' => $data['show_in_menu'] ?? 1,
-            ':purchase_price' => $data['purchase_price'] ?? 0,
-            ':other_cost' => $data['other_cost'] ?? 0,
-            ':margin_percentage' => $data['margin_percentage'] ?? 0
-        ]);
-        echo json_encode(["success" => true]);
+        $stmt->execute(array_values($finalData));
+        echo json_encode(['success' => true]);
         break;
 
     case 'update_product_status':
@@ -477,16 +524,55 @@ switch ($action) {
 
     case 'save_team_member':
         $t = $input['member'] ?? $input;
-        $password = $t['password'];
-        if (strpos($password, '$2y$') !== 0) {
-            $password = password_hash($password, PASSWORD_BCRYPT);
+        $id = $t['id'] ?? uniqid('tm_');
+        
+        // Dynamic column detection
+        $stmt = $pdo->query("DESCRIBE team_members");
+        $dbColumns = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        
+        // Prepare data
+        $data = [
+            'id' => $id,
+            'name' => $t['name'] ?? null,
+            'username' => $t['username'] ?? null,
+            'email' => $t['email'] ?? null,
+            'phone' => $t['phone'] ?? null,
+            'role' => $t['role'] ?? 'staff',
+            'avatar_url' => $t['avatar_url'] ?? null,
+            'is_active' => isset($t['is_active']) ? ($t['is_active'] ? 1 : 0) : 1
+        ];
+
+        // Only handle password if provided
+        if (!empty($t['password'])) {
+            $password = $t['password'];
+            if (strpos($password, '$2y$') !== 0) {
+                $password = password_hash($password, PASSWORD_BCRYPT);
+            }
+            $data['password'] = $password;
         }
-        $sql = "INSERT INTO team_members (id, name, username, email, phone, role, password, avatar_url, is_active) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON DUPLICATE KEY UPDATE name=VALUES(name), username=VALUES(username), email=VALUES(email), 
-                phone=VALUES(phone), role=VALUES(role), password=VALUES(password), avatar_url=VALUES(avatar_url), is_active=VALUES(is_active)";
+
+        // Filter data
+        $finalData = [];
+        foreach ($data as $key => $value) {
+            if (in_array($key, $dbColumns)) {
+                $finalData[$key] = $value;
+            }
+        }
+
+        $cols = array_keys($finalData);
+        $placeholders = array_fill(0, count($cols), "?");
+        $updates = [];
+        foreach ($cols as $col) {
+            if ($col === 'id') continue;
+            $updates[] = "`$col` = VALUES(`$col`)";
+        }
+
+        $sql = "INSERT INTO team_members (" . implode(', ', $cols) . ") 
+                VALUES (" . implode(', ', $placeholders) . ") 
+                ON DUPLICATE KEY UPDATE " . implode(', ', $updates);
+        
         $stmt = $pdo->prepare($sql);
-        $stmt->execute([$t['id'] ?? uniqid(), $t['name'], $t['username'], $t['email'], $t['phone'], $t['role'], $password, $t['avatar_url'] ?? null, $t['is_active'] ?? 1]);
+        $stmt->execute(array_values($finalData));
         echo json_encode(['success' => true]);
         break;
 
@@ -530,13 +616,6 @@ switch ($action) {
         $stmt = $pdo->prepare("SELECT * FROM blog_comments WHERE id = ?");
         $stmt->execute([$id]);
         echo json_encode($stmt->fetch());
-        break;
-
-    case 'delete_blog_comment':
-        $id = $input['id'];
-        $stmt = $pdo->prepare("DELETE FROM blog_comments WHERE id = ?");
-        $stmt->execute([$id]);
-        echo json_encode(['success' => true]);
         break;
 
     // --- QUEUE / TICKETS ---
@@ -596,42 +675,6 @@ switch ($action) {
         $stmt = $pdo->prepare("SELECT * FROM queue_tickets WHERE DATE(created_at) = CURDATE() ORDER BY created_at ASC");
         $stmt->execute();
         echo json_encode($stmt->fetchAll());
-        break;
-
-    case 'generate_ticket':
-        $isPriority = $input['is_priority'] ?? 0;
-        $phone = $input['phone'] ?? null;
-        $category = $input['category'] ?? 'Geral';
-        $userId = $input['user_id'] ?? null;
-        
-        try {
-            $pdo->beginTransaction();
-            
-            // Get today's ticket count for the ticket number
-            $stmt = $pdo->prepare("SELECT COUNT(*) as cnt FROM queue_tickets WHERE DATE(created_at) = CURDATE()");
-            $stmt->execute();
-            $count = $stmt->fetch()['cnt'] + 1;
-            
-            $prefix = $isPriority ? 'P' : 'N';
-            $ticketNumber = $prefix . str_pad($count, 3, '0', STR_PAD_LEFT);
-            $id = uniqid();
-            
-            $sql = "INSERT INTO queue_tickets (id, ticket_number, is_priority, category, status, customer_phone, user_id, created_at) 
-                    VALUES (?, ?, ?, ?, 'waiting', ?, ?, NOW())";
-            $stmt = $pdo->prepare($sql);
-            $stmt->execute([$id, $ticketNumber, $isPriority, $category, $phone, $userId]);
-            
-            $stmt = $pdo->prepare("SELECT * FROM queue_tickets WHERE id = ?");
-            $stmt->execute([$id]);
-            $ticket = $stmt->fetch();
-            
-            $pdo->commit();
-            echo json_encode($ticket);
-        } catch (Exception $e) {
-            if ($pdo->inTransaction()) $pdo->rollBack();
-            http_response_code(500);
-            echo json_encode(["error" => $e->getMessage()]);
-        }
         break;
 
     case 'update_ticket_status':
@@ -727,23 +770,33 @@ switch ($action) {
 
     case 'save_work_session':
         $s = $input['session'] ?? $input;
-        $id = $s['id'] ?? uniqid();
-        $member_id = $s['member_id'];
-        $member_name = $s['member_name'] ?? '';
-        $role = $s['role'] ?? 'staff';
-        $clock_in = $s['clock_in'] ?? date('Y-m-d H:i:s');
-        $status = $s['status'] ?? 'active';
+        $id = $s['id'] ?? uniqid('ws_');
+        
+        $stmt = $pdo->query("DESCRIBE work_sessions");
+        $dbColumns = $stmt->fetchAll(PDO::FETCH_COLUMN);
 
-        try {
-            $sql = "INSERT INTO work_sessions (id, member_id, member_name, role, clock_in, status) VALUES (?, ?, ?, ?, ?, ?)";
-            $stmt = $pdo->prepare($sql);
-            $stmt->execute([$id, $member_id, $member_name, $role, $clock_in, $status]);
-        } catch (PDOException $e) {
-            // Fallback for older schema
-            $sql = "INSERT INTO work_sessions (id, member_id, clock_in, status) VALUES (?, ?, ?, ?)";
-            $stmt = $pdo->prepare($sql);
-            $stmt->execute([$id, $member_id, $clock_in, $status]);
+        $data = [
+            'id' => $id,
+            'member_id' => $s['member_id'] ?? null,
+            'member_name' => $s['member_name'] ?? '',
+            'role' => $s['role'] ?? 'staff',
+            'clock_in' => $s['clock_in'] ?? date('Y-m-d H:i:s'),
+            'status' => $s['status'] ?? 'active'
+        ];
+
+        $finalData = [];
+        foreach ($data as $key => $value) {
+            if (in_array($key, $dbColumns)) {
+                $finalData[$key] = $value;
+            }
         }
+
+        $cols = array_keys($finalData);
+        $placeholders = array_fill(0, count($cols), "?");
+        $sql = "INSERT INTO work_sessions (" . implode(', ', $cols) . ") VALUES (" . implode(', ', $placeholders) . ")";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute(array_values($finalData));
+        
         echo json_encode(['success' => true, 'id' => $id]);
         break;
 
@@ -763,30 +816,48 @@ switch ($action) {
     case 'update_work_session':
         $id = $input['id'] ?? '';
         $status = $input['status'] ?? 'completed';
-        $clock_out = $input['clock_out'] ?? date('Y-m-d H:i:s');
+        $clock_out = $input['clock_out'] ?? $input['end_time'] ?? date('Y-m-d H:i:s');
         $stmt = $pdo->prepare("UPDATE work_sessions SET status = ?, clock_out = ? WHERE id = ?");
         $stmt->execute([$status, $clock_out, $id]);
         echo json_encode(['success' => true]);
         break;
 
     // --- SYSTEM & AUDIT ---
+    case 'system_settings':
     case 'get_system_settings':
-        $stmt = $pdo->query("SELECT `key`, `value` FROM system_settings");
-        $settings = $stmt->fetchAll();
-        $response = [];
-        foreach ($settings as $s) {
-            $decoded = json_decode($s['value'], true);
-            $response[] = [
-                'key' => $s['key'],
-                'value' => (json_last_error() === JSON_ERROR_NONE) ? $decoded : $s['value']
-            ];
+        $key = $input['key'] ?? $_GET['key'] ?? null;
+        if ($key) {
+            $stmt = $pdo->prepare("SELECT `key`, `value` FROM system_settings WHERE `key` = ?");
+            $stmt->execute([$key]);
+            $s = $stmt->fetch();
+            if ($s) {
+                $decoded = json_decode($s['value'], true);
+                echo json_encode([['key' => $s['key'], 'value' => (json_last_error() === JSON_ERROR_NONE) ? $decoded : $s['value']]]);
+            } else {
+                echo json_encode([]);
+            }
+        } else {
+            $stmt = $pdo->query("SELECT `key`, `value` FROM system_settings");
+            $settings = $stmt->fetchAll();
+            $response = [];
+            foreach ($settings as $s) {
+                $decoded = json_decode($s['value'], true);
+                $response[] = [
+                    'key' => $s['key'],
+                    'value' => (json_last_error() === JSON_ERROR_NONE) ? $decoded : $s['value']
+                ];
+            }
+            echo json_encode($response);
         }
-        echo json_encode($response);
         break;
 
     case 'save_setting':
-        $stmt = $pdo->prepare("INSERT INTO system_settings (`key`, `value`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)");
-        $stmt->execute([$input['key'], is_array($input['value']) ? json_encode($input['value']) : $input['value']]);
+        $k = $input['key'] ?? null;
+        $v = $input['value'] ?? null;
+        if (!$k) throw new Exception("Setting key required");
+        $v_str = (is_array($v) || is_object($v)) ? json_encode($v) : $v;
+        $stmt = $pdo->prepare("INSERT INTO system_settings (`key`, `value`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `value` = ?");
+        $stmt->execute([$k, $v_str, $v_str]);
         echo json_encode(["success" => true]);
         break;
 
@@ -887,15 +958,36 @@ switch ($action) {
         break;
 
     case 'update_team_member':
-        $d = $input['member'] ?? $input;
-        $id = $d['id'];
+        $d = $input['member'] ?? $input['data'] ?? $input;
+        $id = $input['id'] ?? $d['id'] ?? null;
+        if (!$id) throw new Exception("Member ID required");
+        
+        // Dynamic column detection
+        $stmt = $pdo->query("DESCRIBE team_members");
+        $dbColumns = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        
         $set = [];
         $params = [];
+        
         foreach ($d as $key => $val) {
             if ($key === 'id') continue;
-            $set[] = "`$key` = ?";
-            $params[] = $val;
+            if (in_array($key, $dbColumns)) {
+                if ($key === 'password') {
+                    if (empty($val)) continue; // Don't update password if empty
+                    if (strlen($val) < 60) {
+                        $val = password_hash($val, PASSWORD_BCRYPT);
+                    }
+                }
+                $set[] = "`$key` = ?";
+                $params[] = (is_array($val) || is_object($val)) ? json_encode($val) : $val;
+            }
         }
+        
+        if (empty($set)) {
+            echo json_encode(["success" => true, "message" => "No changes"]);
+            break;
+        }
+        
         $params[] = $id;
         $sql = "UPDATE team_members SET " . implode(', ', $set) . " WHERE id = ?";
         $stmt = $pdo->prepare($sql);
@@ -1006,22 +1098,45 @@ switch ($action) {
 
     case 'save_receipt':
         $r = $input['receipt'] ?? $input;
-        $sql = "INSERT INTO receipts (id, receipt_no, order_id, customer_id, amount, payment_method, cashier_id, items, tax_amount, status) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON DUPLICATE KEY UPDATE amount=VALUES(amount), payment_method=VALUES(payment_method), status=VALUES(status)";
+        $id = $r['id'] ?? uniqid('rcpt_');
+        
+        $stmt = $pdo->query("DESCRIBE receipts");
+        $dbColumns = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+        $data = [
+            'id' => $id,
+            'receipt_no' => $r['receipt_no'] ?? ('PC-'.date('Ymd').'-'.rand(100,999)),
+            'order_id' => $r['order_id'] ?? null,
+            'customer_id' => $r['customer_id'] ?? null,
+            'amount' => $r['amount'] ?? 0,
+            'payment_method' => $r['payment_method'] ?? 'cash',
+            'cashier_id' => $r['cashier_id'] ?? null,
+            'items' => (is_array($r['items'] ?? null) || is_object($r['items'] ?? null)) ? json_encode($r['items']) : ($r['items'] ?? '[]'),
+            'tax_amount' => $r['tax_amount'] ?? 0,
+            'status' => $r['status'] ?? 'paid'
+        ];
+
+        $finalData = [];
+        foreach ($data as $key => $value) {
+            if (in_array($key, $dbColumns)) {
+                $finalData[$key] = $value;
+            }
+        }
+
+        $cols = array_keys($finalData);
+        $placeholders = array_fill(0, count($cols), "?");
+        $updates = [];
+        foreach ($cols as $col) {
+            if ($col === 'id') continue;
+            $updates[] = "`$col` = VALUES(`$col`)";
+        }
+
+        $sql = "INSERT INTO receipts (" . implode(', ', $cols) . ") 
+                VALUES (" . implode(', ', $placeholders) . ") 
+                ON DUPLICATE KEY UPDATE " . implode(', ', $updates);
+        
         $stmt = $pdo->prepare($sql);
-        $stmt->execute([
-            $r['id'] ?? uniqid(),
-            $r['receipt_no'] ?? ('PC-'.date('Ymd').'-'.rand(100,999)),
-            $r['order_id'] ?? null,
-            $r['customer_id'] ?? null,
-            $r['amount'] ?? 0,
-            $r['payment_method'] ?? 'cash',
-            $r['cashier_id'] ?? null,
-            is_array($r['items'] ?? null) ? json_encode($r['items']) : ($r['items'] ?? '[]'),
-            $r['tax_amount'] ?? 0,
-            $r['status'] ?? 'paid'
-        ]);
+        $stmt->execute(array_values($finalData));
         echo json_encode(['success' => true]);
         break;
 
@@ -1031,16 +1146,72 @@ switch ($action) {
         break;
 
     case 'save_cash_session':
-        $sql = "INSERT INTO cash_sessions (id, opened_by, opening_balance, status) VALUES (?, ?, ?, 'open')";
-        $stmt = $pdo->prepare($sql);
-        $id = uniqid();
-        $stmt->execute([$id, $input['opened_by'], $input['opening_balance']]);
-        echo json_encode(['success' => true, 'id' => $id]);
+        try {
+            $openedBy = $input['opened_by'] ?? null;
+            $balance = $input['opening_balance'] ?? 0;
+            if (!$openedBy) throw new Exception("Admin ID (opened_by) required");
+            
+            $stmt = $pdo->query("DESCRIBE cash_sessions");
+            $dbColumns = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+            $id = uniqid('cs_');
+            $data = [
+                'id' => $id,
+                'opened_by' => $openedBy,
+                'opening_balance' => $balance,
+                'status' => 'open',
+                'opened_at' => date('Y-m-d H:i:s')
+            ];
+
+            $finalData = [];
+            foreach ($data as $key => $value) {
+                if (in_array($key, $dbColumns)) {
+                    $finalData[$key] = $value;
+                }
+            }
+
+            $cols = array_keys($finalData);
+            $placeholders = array_fill(0, count($cols), "?");
+            $sql = "INSERT INTO cash_sessions (" . implode(', ', $cols) . ") VALUES (" . implode(', ', $placeholders) . ")";
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute(array_values($finalData));
+            echo json_encode(['success' => true, 'id' => $id]);
+        } catch (Exception $e) {
+            throw $e;
+        }
         break;
 
     case 'update_cash_session':
-        $stmt = $pdo->prepare("UPDATE cash_sessions SET closing_balance = ?, closed_at = NOW(), status = 'closed', notes = ? WHERE id = ?");
-        $stmt->execute([$input['closing_balance'], $input['notes'] ?? '', $input['id']]);
+        $id = $input['id'];
+        $stmt = $pdo->query("DESCRIBE cash_sessions");
+        $dbColumns = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+        $updates = [];
+        $params = [];
+        
+        $data = [
+            'closing_balance' => $input['closing_balance'],
+            'closed_at' => date('Y-m-d H:i:s'),
+            'status' => 'closed',
+            'notes' => $input['notes'] ?? ''
+        ];
+
+        foreach ($data as $key => $val) {
+            if (in_array($key, $dbColumns)) {
+                $updates[] = "`$key` = ?";
+                $params[] = $val;
+            }
+        }
+
+        if (empty($updates)) {
+            echo json_encode(['success' => true]);
+            break;
+        }
+
+        $params[] = $id;
+        $sql = "UPDATE cash_sessions SET " . implode(', ', $updates) . " WHERE id = ?";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
         echo json_encode(['success' => true]);
         break;
 
@@ -1125,6 +1296,7 @@ switch ($action) {
         $turbo_token = "WTJlMzZpeDNNb25WR3hZK0NhcG1DUT09";
         $payload = [
             "user_token" => $turbo_token,
+            "sender_id" => "PAOCASEIRO",
             "number" => $input['number'],
             "message" => $input['message']
         ];
@@ -1133,216 +1305,84 @@ switch ($action) {
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ["Content-Type: application/json"]);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+        
+        $response = curl_exec($ch);
+        $err = curl_error($ch);
+        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        
+        if ($err) {
+            echo json_encode(["success" => false, "error" => "SMS cURL Error: $err"]);
+        } else {
+            echo json_encode([
+                "success" => ($http_code == 200),
+                "response" => json_decode($response, true) ?: $response,
+                "http_code" => $http_code
+            ]);
+        }
+        break;
+
+    case 'send_whatsapp':
+        $wa_instance = $input['instance'] ?? "Pao caseiro";
+        $wa_apikey = "84E61FAAB9AB-47FD-8F42-EAFE4DAB9C49";
+        $wa_url = "https://wa.zyphtech.com";
+        
+        $number = $input['number'];
+        $text = $input['text'] ?? '';
+        $media = $input['media'] ?? null;
+        
+        // Use rawurlencode for instance name to get %20 instead of +
+        $encoded_instance = rawurlencode($wa_instance);
+        
+        if ($media) {
+            $endpoint = "/message/sendMedia/" . $encoded_instance;
+            $payload = [
+                "number" => $number,
+                "mediatype" => $input['mediatype'] ?? 'document',
+                "media" => $media,
+                "fileName" => $input['fileName'] ?? 'document.pdf',
+                "caption" => $input['caption'] ?? ''
+            ];
+        } else {
+            $endpoint = "/message/sendText/" . $encoded_instance;
+            $payload = [
+                "number" => $number,
+                "text" => $text,
+                "options" => [
+                    "delay" => 1200,
+                    "presence" => "composing",
+                    "linkPreview" => false
+                ]
+            ];
+        }
+        
+        $ch = curl_init($wa_url . $endpoint);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch, CURLOPT_HTTPHEADER, [
-            "Content-Type: application/json"
+            "Content-Type: application/json",
+            "apikey: $wa_apikey"
         ]);
         
         $response = curl_exec($ch);
+        $err = curl_error($ch);
+        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
-        echo $response;
-        break;
-
-    case 'generate_ticket':
-        $phone = $input['phone'] ?? null;
-        $userId = $input['user_id'] ?? null;
-        $priority = $input['is_priority'] ?? false;
-        $category = $input['category'] ?? 'Geral';
         
-        // Get next ticket number for today
-        $stmt = $pdo->query("SELECT MAX(ticket_number) as last_num FROM queue_tickets WHERE DATE(created_at) = CURDATE()");
-        $last = $stmt->fetch();
-        $nextNum = ($last['last_num'] ?? 0) + 1;
-        
-        $sql = "INSERT INTO queue_tickets (ticket_number, phone, user_id, is_priority, category, status) VALUES (?, ?, ?, ?, ?, 'waiting')";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([$nextNum, $phone, $userId, $priority ? 1 : 0, $category]);
-        
-        $newId = $pdo->lastInsertId();
-        $stmt = $pdo->prepare("SELECT * FROM queue_tickets WHERE id = ?");
-        $stmt->execute([$newId]);
-        echo json_encode(['success' => true, 'data' => $stmt->fetch()]);
-        break;
-
-    case 'get_active_ticket':
-        $idnt = $input['identifier'] ?? '';
-        $stmt = $pdo->prepare("SELECT * FROM queue_tickets WHERE (phone = ? OR user_id = ?) AND status = 'waiting' ORDER BY created_at DESC LIMIT 1");
-        $stmt->execute([$idnt, $idnt]);
-        echo json_encode(['success' => true, 'data' => $stmt->fetch()]);
-        break;
-
-    case 'get_queue_count':
-        $createdAt = $input['created_at'] ?? date('Y-m-d H:i:s');
-        $stmt = $pdo->prepare("SELECT COUNT(*) as count FROM queue_tickets WHERE status = 'waiting' AND created_at < ?");
-        $stmt->execute([$createdAt]);
-        echo json_encode(['success' => true, 'data' => $stmt->fetch()]);
-        break;
-
-    case 'get_tickets_today':
-        $stmt = $pdo->query("SELECT * FROM queue_tickets WHERE DATE(created_at) = CURDATE() ORDER BY created_at DESC");
-        echo json_encode(['success' => true, 'data' => $stmt->fetchAll()]);
-        break;
-
-    case 'update_ticket_status':
-        $id = $input['id'] ?? '';
-        $status = $input['status'] ?? 'called';
-        $counter = $input['counter'] ?? null;
-        $stmt = $pdo->prepare("UPDATE queue_tickets SET status = ?, counter = ?, called_at = NOW() WHERE id = ?");
-        $stmt->execute([$status, $counter, $id]);
-        echo json_encode(['success' => true]);
-        break;
-
-    case 'reset_today_queue':
-        $stmt = $pdo->query("UPDATE queue_tickets SET status = 'cancelled' WHERE DATE(created_at) = CURDATE() AND status = 'waiting'");
-        echo json_encode(['success' => true]);
-        break;
-
-    case 'save_contact_message':
-        $stmt = $pdo->prepare("INSERT INTO contact_messages (name, phone, email, message, status) VALUES (?, ?, ?, ?, 'unread')");
-        $stmt->execute([
-            $input['name'] ?? '',
-            $input['phone'] ?? '',
-            $input['email'] ?? '',
-            $input['message'] ?? ''
-        ]);
-        echo json_encode(['success' => true, 'id' => $pdo->lastInsertId()]);
-        break;
-
-    case 'subscribe_newsletter':
-        $stmt = $pdo->prepare("INSERT INTO newsletter_subscribers (id, name, email) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE name=VALUES(name)");
-        $stmt->execute([$input['id'] ?? uniqid(), $input['name'], $input['email']]);
-        echo json_encode(['success' => true]);
-        break;
-    
-    case 'get_newsletter_subscribers':
-        $stmt = $pdo->query("SELECT * FROM newsletter_subscribers ORDER BY created_at DESC");
-        echo json_encode($stmt->fetchAll());
-        break;
-
-    case 'delete_newsletter_subscriber':
-        $stmt = $pdo->prepare("DELETE FROM newsletter_subscribers WHERE id = ?");
-        $stmt->execute([$input['id']]);
-        echo json_encode(['success' => true]);
-        break;
-
-    // --- BLOG ---
-    case 'get_blog_posts':
-        $stmt = $pdo->query("SELECT * FROM blog_posts ORDER BY created_at DESC");
-        echo json_encode($stmt->fetchAll());
-        break;
-
-    case 'save_blog_post':
-        $p = $input['post'] ?? $input;
-        $sql = "INSERT INTO blog_posts (id, title, excerpt, content, image_url, author_name, category, read_time, tags, status) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON DUPLICATE KEY UPDATE title=VALUES(title), excerpt=VALUES(excerpt), content=VALUES(content), 
-                image_url=VALUES(image_url), author_name=VALUES(author_name), category=VALUES(category), 
-                read_time=VALUES(read_time), tags=VALUES(tags), status=VALUES(status)";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([
-            $p['id'] ?? uniqid(), $p['title'], $p['excerpt'] ?? '', $p['content'], 
-            $p['image_url'] ?? '', $p['author_name'] ?? 'Pão Caseiro', $p['category'] ?? 'Geral', 
-            $p['read_time'] ?? '5 min', is_array($p['tags'] ?? null) ? json_encode($p['tags']) : ($p['tags'] ?? '[]'),
-            $p['status'] ?? 'published'
-        ]);
-        echo json_encode(['success' => true]);
-        break;
-
-    case 'delete_blog_post':
-        $stmt = $pdo->prepare("DELETE FROM blog_posts WHERE id = ?");
-        $stmt->execute([$input['id']]);
-        echo json_encode(['success' => true]);
-        break;
-
-    case 'get_blog_comments':
-        $postId = $input['post_id'] ?? null;
-        if ($postId) {
-            $stmt = $pdo->prepare("SELECT * FROM blog_comments WHERE post_id = ? ORDER BY created_at DESC");
-            $stmt->execute([$postId]);
+        if ($err) {
+            echo json_encode(["error" => "WA cURL Error: $err"]);
         } else {
-            $stmt = $pdo->query("SELECT * FROM blog_comments ORDER BY created_at DESC");
+            // Log the attempt for debugging
+            if ($http_code >= 400) {
+                error_log("WA Send Failed ($http_code): " . $response);
+            }
+            echo $response;
         }
-        echo json_encode($stmt->fetchAll());
-        break;
-
-    case 'save_blog_comment':
-        $c = $input['comment'] ?? $input;
-        $sql = "INSERT INTO blog_comments (id, post_id, author_name, author_email, content, status) VALUES (?, ?, ?, ?, ?, ?)";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([
-            $c['id'] ?? uniqid(), $c['post_id'], $c['author_name'], $c['author_email'], $c['content'], $c['status'] ?? 'approved'
-        ]);
-        echo json_encode(['success' => true]);
-        break;
-
-    case 'delete_blog_comment':
-        $stmt = $pdo->prepare("DELETE FROM blog_comments WHERE id = ?");
-        $stmt->execute([$input['id']]);
-        echo json_encode(['success' => true]);
-        break;
-
-    case 'get_email_campaigns':
-        $stmt = $pdo->query("SELECT * FROM email_campaigns ORDER BY created_at DESC");
-        echo json_encode($stmt->fetchAll());
-        break;
-
-    case 'save_email_campaign':
-        $cam = $input['campaign'] ?? $input;
-        $id = $cam['id'] ?? uniqid();
-        $sql = "INSERT INTO email_campaigns (id, subject, title, content, status, target_count, sent_at) 
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                ON DUPLICATE KEY UPDATE 
-                subject = VALUES(subject), title = VALUES(title), content = VALUES(content), 
-                status = VALUES(status), target_count = VALUES(target_count), sent_at = VALUES(sent_at)";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([
-            $id, $cam['subject'], $cam['title'], $cam['content'], 
-            $cam['status'] ?? 'draft', $cam['target_count'] ?? 0, $cam['sent_at'] ?? null
-        ]);
-        
-        $stmt = $pdo->prepare("SELECT * FROM email_campaigns WHERE id = ?");
-        $stmt->execute([$id]);
-        echo json_encode($stmt->fetch());
-        break;
-
-    case 'delete_email_campaign':
-        $stmt = $pdo->prepare("DELETE FROM email_campaigns WHERE id = ?");
-        $stmt->execute([$input['id']]);
-        echo json_encode(['success' => true]);
-        break;
-
-    // --- GALLERY ---
-    case 'save_gallery_item':
-        $item = $input['item'] ?? $input;
-        $sql = "INSERT INTO gallery_items (id, title, image_url, category, description) VALUES (?, ?, ?, ?, ?)";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([
-            $item['id'] ?? uniqid(), $item['title'] ?? '', $item['image_url'], $item['category'] ?? 'Geral', $item['description'] ?? ''
-        ]);
-        echo json_encode(['success' => true]);
-        break;
-
-    case 'delete_gallery_item':
-        $stmt = $pdo->prepare("DELETE FROM gallery_items WHERE id = ?");
-        $stmt->execute([$input['id']]);
-        echo json_encode(['success' => true]);
-        break;
-
-    case 'get_ai_insights':
-        $stmt = $pdo->query("SELECT * FROM ai_insights ORDER BY created_at DESC LIMIT 50");
-        echo json_encode($stmt->fetchAll());
-        break;
-
-    case 'save_ai_insight':
-        $insight = $input['insight'] ?? $input;
-        $stmt = $pdo->prepare("INSERT INTO ai_insights (title, description, category, priority, recommendation) VALUES (?, ?, ?, ?, ?)");
-        $stmt->execute([
-            $insight['title'],
-            $insight['description'],
-            $insight['category'],
-            $insight['priority'],
-            $insight['recommendation']
-        ]);
-        echo json_encode(['success' => true]);
         break;
 
     case 'test_email':
@@ -1607,23 +1647,27 @@ switch ($action) {
         }
         break;
 
-    case 'purge_database':
-        try {
-            // Need to disable foreign key checks temporarily if there are constraints, but better to clear in correct order
-            // If using Hostinger DB, let's clear them:
-            $tablesToClear = ['order_items', 'receipts', 'audit_logs', 'orders', 'customers'];
-            foreach ($tablesToClear as $table) {
-                $pdo->exec("DELETE FROM $table WHERE id != '00000000-0000-0000-0000-000000000000'");
-            }
-            echo json_encode(['success' => true]);
-        } catch (Exception $e) {
-            http_response_code(500);
-            echo json_encode(["error" => $e->getMessage()]);
-        }
+    case 'get_schema':
+        $table = $input['table'] ?? $_GET['table'] ?? null;
+        if (!$table) throw new Exception("Table name required");
+        $stmt = $pdo->query("DESCRIBE `$table`");
+        echo json_encode($stmt->fetchAll());
+        break;
+
+    case 'test':
+        echo json_encode(['success' => true, 'message' => 'Bridge OK', 'time' => date('Y-m-d H:i:s')]);
         break;
 
     default:
         http_response_code(404);
         echo json_encode(["error" => "Ação não encontrada: " . $action]);
         break;
+    } // End Switch
+} catch (Exception $e) {
+    http_response_code(500);
+    echo json_encode([
+        "success" => false, 
+        "error" => $e->getMessage(),
+        "action" => $action
+    ]);
 }

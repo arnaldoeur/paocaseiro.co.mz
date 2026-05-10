@@ -128,7 +128,10 @@ interface ManualDelivery { // For non-order based deliveries if needed
 }
 
 const isValidUUID = (id: string) => {
-    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    if (!id || id === 'undefined' || id === 'null') return false;
+    // Allow UUIDs or simple alphanumeric IDs (for Hostinger/MySQL compatibility)
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    return uuidRegex.test(id) || id.length >= 1;
 };
 
 export const Admin: React.FC = () => {
@@ -143,12 +146,19 @@ export const Admin: React.FC = () => {
     useEffect(() => {
         const fetchEmailStatus = async () => {
             try {
-                const data = await hostingerService.fetch('system_settings', { key: 'email_status' });
-                if (data && data.length > 0 && data[0].value) {
-                    setEmailStatus(data[0].value);
+                const result = await hostingerService.getSettings('email_service');
+                // result is an array of settings [{key, value}, ...]
+                const setting = result && Array.isArray(result) ? result.find((s: any) => s.key === 'email_service') : null;
+                
+                if (setting && setting.value) {
+                    setEmailStatus(typeof setting.value === 'string' ? JSON.parse(setting.value) : setting.value);
+                } else {
+                    // Default if not found
+                    setEmailStatus({ mode: 'production', last_checked: new Date().toISOString() });
                 }
             } catch (err) {
                 console.error("Error fetching email status:", err);
+                setEmailStatus({ mode: 'production' }); // Fallback to avoid "A verificar..."
             }
         };
 
@@ -160,6 +170,7 @@ export const Admin: React.FC = () => {
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [userId, setUserId] = useState('');
     const [username, setUsername] = useState('');
+    const [loginUsername, setLoginUsername] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [currentUserRole, setCurrentUserRole] = useState<string>('');
@@ -657,7 +668,7 @@ export const Admin: React.FC = () => {
         }
 
         // Verify if user exists in team_members to avoid foreign key violation
-        const allMembers = await hostingerService.fetch('team_members');
+        const allMembers = await hostingerService.fetch('get_team');
         const userData = allMembers?.find((m: any) => m.id === effectiveUserId);
         const userError = !userData ? new Error('User not found') : null;
 
@@ -682,7 +693,7 @@ export const Admin: React.FC = () => {
         }
 
         try {
-            const result = await hostingerService.openCashSession(userId || 'admin', parseFloat(initialBalance) || 0);
+            const result = await hostingerService.openCashSession(effectiveUserId, parseFloat(initialBalance) || 0);
             if (result.success) {
                 setCurrentSession(result.session);
                 setIsOpeningSession(false);
@@ -1200,15 +1211,28 @@ export const Admin: React.FC = () => {
 
     const handleVerifyAdmin = async (e: React.FormEvent) => {
         e.preventDefault();
-        // Verify current admin password
-        const members = await hostingerService.fetch('team_members');
-        const data = members?.find((m: any) => m.id === userId && m.password === adminPasswordInput);
+        
+        try {
+            // Verify current admin password via backend
+            const user = await hostingerService.fetch('auth_team', {
+                username: loginUsername || localStorage.getItem('admin_login_user'),
+                password: adminPasswordInput
+            });
 
-        if (data) {
-            setIsAdminPasswordPromptOpen(false);
-            if (pendingAdminAction) pendingAdminAction();
-        } else {
-            alert('Palavra-passe de Administrador Incorreta!');
+            if (user && user.id) {
+                setIsAdminPasswordPromptOpen(false);
+                setAdminPasswordInput('');
+                if (pendingAdminAction) {
+                    const action = pendingAdminAction;
+                    setPendingAdminAction(null);
+                    action();
+                }
+            } else {
+                alert('Palavra-passe de Administrador Incorreta!');
+            }
+        } catch (error) {
+            console.error('Error verifying admin:', error);
+            alert('Erro ao verificar administrador. Tente novamente.');
         }
     };
 
@@ -1439,6 +1463,7 @@ export const Admin: React.FC = () => {
             const storedId = localStorage.getItem('admin_id');
             setUserId(storedId && storedId !== 'undefined' && storedId !== 'null' ? storedId : '');
             setAdminUser(localStorage.getItem('admin_user') || '');
+            setLoginUsername(localStorage.getItem('admin_login_user') || '');
             refreshAllData();
 
             // Set up Polling for Hostinger (Legacy Real-time alternative)
@@ -1524,6 +1549,7 @@ export const Admin: React.FC = () => {
                 setIsAuthenticated(true);
                 setCurrentUserRole(user.role);
                 setUserId(user.id);
+                setLoginUsername(user.username || username);
                 setUsername(user.name);
                 setAdminUser(user.name);
                 setAdminPhoto(user.avatar_url || '');
@@ -1532,6 +1558,7 @@ export const Admin: React.FC = () => {
                 localStorage.setItem('admin_role', user.role);
                 localStorage.setItem('admin_id', user.id);
                 localStorage.setItem('admin_user', user.name);
+                localStorage.setItem('admin_login_user', user.username || username);
                 if (user.avatar_url) localStorage.setItem('admin_photo', user.avatar_url);
 
                 await logAudit({
@@ -1550,12 +1577,14 @@ export const Admin: React.FC = () => {
                     setIsAuthenticated(true);
                     setCurrentUserRole(localMatch.role);
                     setUserId(localMatch.id);
+                    setLoginUsername(localMatch.username);
                     setUsername(localMatch.name);
                     setAdminUser(localMatch.name);
                     localStorage.setItem('admin_auth', 'true');
                     localStorage.setItem('admin_role', localMatch.role);
                     localStorage.setItem('admin_id', localMatch.id);
                     localStorage.setItem('admin_user', localMatch.name);
+                    localStorage.setItem('admin_login_user', localMatch.username);
                     
                     await logAudit({
                         action: 'ADMIN_LOGIN',
@@ -1578,11 +1607,13 @@ export const Admin: React.FC = () => {
                 setIsAuthenticated(true);
                 setCurrentUserRole(localMatch.role);
                 setUserId(localMatch.id);
+                setLoginUsername(localMatch.username);
                 setUsername(localMatch.name);
                 localStorage.setItem('admin_auth', 'true');
                 localStorage.setItem('admin_role', localMatch.role);
                 localStorage.setItem('admin_id', localMatch.id);
                 localStorage.setItem('admin_user', localMatch.name);
+                localStorage.setItem('admin_login_user', localMatch.username);
                 refreshAllData();
             } else {
                 setError('Erro de conexão ou credenciais inválidas.');
@@ -1606,8 +1637,10 @@ export const Admin: React.FC = () => {
         localStorage.removeItem('admin_role');
         localStorage.removeItem('admin_user');
         localStorage.removeItem('admin_id');
+        localStorage.removeItem('admin_login_user');
         setUserId('');
         setUsername('');
+        setLoginUsername('');
     };
 
     // Orders (Hostinger-Native)

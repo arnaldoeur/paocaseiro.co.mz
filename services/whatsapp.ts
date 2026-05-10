@@ -1,7 +1,11 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { hostingerService } from './hostingerService';
 
-const API_URL = import.meta.env.VITE_WHATSAPP_API_URL || 'https://wa.zyphtech.com';
+const IS_PROD = typeof window !== 'undefined' && !window.location.hostname.includes('localhost');
+const API_URL = IS_PROD 
+    ? `${window.location.origin}/whatsapp_proxy.php`
+    : (import.meta.env.VITE_WHATSAPP_API_URL || 'https://wa.zyphtech.com');
 const INSTANCE_NAME = import.meta.env.VITE_WHATSAPP_INSTANCE_NAME || 'Pao caseiro';
 const API_KEY = import.meta.env.VITE_WHATSAPP_API_KEY || '84E61FAAB9AB-47FD-8F42-EAFE4DAB9C49';
 
@@ -20,8 +24,6 @@ const formatPhone = (phone: string) => {
     return clean;
 };
 
-import { hostingerService } from './hostingerService';
-
 /**
  * Send a Text Message via WhatsApp
  */
@@ -31,8 +33,20 @@ export const sendWhatsAppMessage = async (to: string, text: string) => {
     const formattedNumber = formatPhone(to);
     
     try {
-        // Direct call to Evolution API
-        const response = await fetch(`${API_URL}/message/sendText/${encodeURIComponent(INSTANCE_NAME)}`, {
+        // Use Hostinger Bridge in production for better reliability and bypassing CORS
+        if (IS_PROD) {
+            return await hostingerService.fetch('send_whatsapp', {
+                number: formattedNumber,
+                text: text,
+                instance: INSTANCE_NAME
+            });
+        }
+
+        // Dev/Local fallback
+        const endpoint = `/message/sendText/${encodeURIComponent(INSTANCE_NAME)}`;
+        const url = `${API_URL}${endpoint}`;
+
+        const response = await fetch(url, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -86,8 +100,23 @@ export const sendWhatsAppMedia = async (to: string, mediatype: string, fileName:
     const formattedNumber = formatPhone(to);
     
     try {
-        // Direct call to Evolution API
-        const response = await fetch(`${API_URL}/message/sendMedia/${encodeURIComponent(INSTANCE_NAME)}`, {
+        // Use Hostinger Bridge in production
+        if (IS_PROD) {
+            return await hostingerService.fetch('send_whatsapp', {
+                number: formattedNumber,
+                media: media,
+                mediatype: mediatype,
+                fileName: fileName,
+                caption: caption,
+                instance: INSTANCE_NAME
+            });
+        }
+
+        // Dev/Local fallback
+        const endpoint = `/message/sendMedia/${encodeURIComponent(INSTANCE_NAME)}`;
+        const url = `${API_URL}${endpoint}`;
+
+        const response = await fetch(url, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -125,6 +154,8 @@ export const sendWhatsAppMedia = async (to: string, mediatype: string, fileName:
             });
             return { success: true, data };
         } catch (fallbackError) {
+            hostingerService.logNotification('whatsapp', formattedNumber, error.message, 'error')
+                .catch(e => console.error('[WhatsApp Log Error]', e));
             throw error;
         }
     }
@@ -226,11 +257,7 @@ export const notifyCustomerNewOrderWhatsApp = async (order: any, items: any[], c
     const itemsText = items.map(i => `${i.quantity}x ${i.name || i.product_name} - ${i.price} MT`).join('\n');
     const total = order.total_amount || order.total || 0;
     
-    // Ensure the URL is always a public domain so WhatsApp makes it clickable (blue link).
-    let baseUrl = 'https://paocaseiro.co.mz';
-    if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1' && !window.location.hostname.startsWith('192.168.')) {
-        baseUrl = window.location.origin;
-    }
+    const baseUrl = 'https://paocaseiro.co.mz';
     const url = `${baseUrl}/order-receipt/${order.short_id || order.orderId || order.id}`;
 
     const firstName = getFirstName(order);

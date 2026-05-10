@@ -148,9 +148,9 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
                             name: product.name,
                             price: product.price,
                             image: product.image 
-                                ? (product.image.startsWith('http') || product.image.startsWith('/')) 
+                                ? (product.image.startsWith('http')) 
                                     ? product.image 
-                                    : `/images/${product.image}`
+                                    : hostingerService.getPublicUrl(`images/${product.image.replace(/^\//, '')}`)
                                 : '',
                             desc: product.description,
                             description_en: product.description_en,

@@ -100,6 +100,11 @@ export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
     };
   }, []);
 
+  // Force close mobile menu on route change
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location.pathname]);
+
     const handleNavigation = (id: string) => {
       setMobileMenuOpen(false);
 
@@ -257,7 +262,7 @@ export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
           >
             <button
               id="mobile-menu-close"
-              className="absolute top-6 right-6 p-2 bg-white/10 rounded-full"
+              className="absolute top-8 right-8 p-3 bg-white/20 text-white rounded-full z-[70] hover:bg-white/30 active:scale-95 transition-all shadow-lg"
               onClick={() => setMobileMenuOpen(false)}
               title={t.nav.closeMenu}
               aria-label={t.nav.closeMenu}
