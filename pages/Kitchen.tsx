@@ -4,9 +4,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { formatProductName } from '../services/stringUtils';
 import { NotificationService } from '../services/NotificationService';
 
-// Types (Mirrors Admin/Supabase structure)
+// Types (Mirrors Admin structure)
 interface Order {
-    id: string; // Supabase UUID
+    id: string; // Database ID
     short_id: string; // PC-1234 or KDS-1234
     orderId?: string; // Compatibility alias
     customer_name: string;

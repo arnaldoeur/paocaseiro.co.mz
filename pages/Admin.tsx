@@ -972,7 +972,7 @@ export const Admin: React.FC = () => {
         loadReceipts();
 
         // Legacy persistent local state removed - handled by reactive hooks.
-        // Notifications and other real-time data now sync via Supabase.
+        // Notifications and other real-time data now sync via Hostinger bridge polling.
 
         const savedMembers = localStorage.getItem('bakery_members');
         if (savedMembers) setTeamMembers(JSON.parse(savedMembers));
@@ -1534,8 +1534,8 @@ export const Admin: React.FC = () => {
         e.preventDefault();
         setError('');
 
-        // Local fallback credentials (mirrors team_members table in Supabase)
-        // Used when network blocks Supabase access
+        // Local fallback credentials (mirrors team_members table in Hostinger DB)
+        // Used when network blocks bridge access
         const localCredentials = [
             { id: '9f4b4a2d-2303-44db-9695-3cd8c5e4be00', username: 'nazir', name: 'Nazir', role: 'admin', password: '@Pcaseiro25' },
         ];
@@ -2255,7 +2255,7 @@ export const Admin: React.FC = () => {
 
             // Helpful detection for ISP/Network blocks (Supabase returning HTML)
             if (errorMsg.includes('Unexpected token <') || errorMsg.includes('DOCTYPE') || errorMsg.includes('Website Blocked')) {
-                errorMsg = "CONEXÃO BLOQUEADA (ISP/VPN necessária). O Supabase está inacessível na sua rede.";
+                errorMsg = "CONEXÃO BLOQUEADA (ISP/VPN necessária). O servidor está inacessível na sua rede.";
             } else if (errorMsg.includes('Failed to fetch')) {
                 errorMsg = "Sem Internet ou Erro de DNS no Backend.";
             }

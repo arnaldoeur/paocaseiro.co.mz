@@ -27,7 +27,6 @@
     "noEmit": true
   },
   "exclude": [
-    "supabase/functions/**/*",
     "dist",
     "test_extract"
   ],

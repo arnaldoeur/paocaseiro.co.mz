@@ -5,43 +5,7 @@ import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
-  const proxyConfig = {
-    '/supabase-proxy': {
-      target: env.VITE_SUPABASE_URL || 'https://bbvowyztvzselxphbqmt.supabase.co',
-      changeOrigin: true,
-      ws: true,
-      rewrite: (path: string) => path.replace(/^\/supabase-proxy/, ''),
-      secure: false,
-      configure: (proxy: any, _options: any) => {
-        proxy.on('proxyReq', (proxyReq: any, req: any, _res: any) => {
-          const targetUrl = env.VITE_SUPABASE_URL || 'https://bbvowyztvzselxphbqmt.supabase.co';
-          proxyReq.setHeader('Origin', targetUrl);
-          proxyReq.setHeader('Referer', targetUrl);
-          
-          if (!req.headers['accept']) {
-              proxyReq.setHeader('Accept', 'application/json');
-          }
-
-          if (req.headers['authorization']) {
-            proxyReq.setHeader('Authorization', req.headers['authorization']);
-          }
-          if (req.headers['apikey']) {
-            proxyReq.setHeader('apikey', req.headers['apikey']);
-          }
-        });
-        proxy.on('error', (err: any, _req: any, _res: any) => {
-          console.error('[Supabase Proxy ERROR]', err.message);
-        });
-        proxy.on('proxyRes', (proxyRes: any, req: any, res: any) => {
-          // Force CORS headers on the response to prevent browser blocks
-          proxyRes.headers['access-control-allow-origin'] = '*';
-          proxyRes.headers['access-control-allow-methods'] = 'GET, POST, PUT, DELETE, PATCH, OPTIONS';
-          proxyRes.headers['access-control-allow-headers'] = 'X-Requested-With, content-type, Authorization, apikey, x-client-info, Prefer, Accept';
-
-        });
-      }
-    }
-  };
+  const proxyConfig = {};
 
   return {
     server: {
@@ -85,29 +49,13 @@ export default defineConfig(({ mode }) => {
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,json}'],
           maximumFileSizeToCacheInBytes: 5242880, // 5 MiB
-          runtimeCaching: [
-            {
-              urlPattern: /^https:\/\/bbvowyztvzselxphbqmt\.supabase\.co\/.*/i,
-              handler: 'NetworkFirst',
-              method: 'GET',
-              options: {
-                cacheName: 'supabase-api-cache',
-                expiration: {
-                  maxEntries: 100,
-                  maxAgeSeconds: 60 * 60 * 24 // 24 hours
-                },
-                cacheableResponse: {
-                  statuses: [0, 200]
-                }
-              }
-            }
-          ]
+          runtimeCaching: []
         }
       })
     ],
     define: {
-      'process.env.VITE_SUPABASE_URL': JSON.stringify(env.VITE_SUPABASE_URL || ''),
-      'process.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(env.VITE_SUPABASE_ANON_KEY || ''),
+      'process.env.VITE_SUPABASE_URL': '""',
+      'process.env.VITE_SUPABASE_ANON_KEY': '""',
       'process.env.GEMINI_API_KEY': JSON.stringify(env.VITE_GEMINI_API_KEY || env.GEMINI_API_KEY || '')
     },
     resolve: {

@@ -14,7 +14,6 @@ import { sendEmail } from '../services/email';
 import { sendSMS } from '../services/sms';
 import { notifyAdminSystemsAlert } from '../services/whatsapp';
 
-// client imported from services/supabase
 
 interface HomeProps {
     language: Language;
@@ -112,7 +111,7 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
     useEffect(() => {
         const prefetchMenu = async () => {
             try {
-                // Use Hostinger instead of Supabase
+                // Use Hostinger instead of legacy systems
                 await hostingerService.getProducts();
                 
                 

@@ -34,7 +34,7 @@ import { hostingerService } from './hostingerService';
 /**
  * Send an email using the Resend API via Hostinger Bridge.
  */
-export const sendEmail = async (to: string[], subject: string, html: string, replyTo?: string, fromOverride?: string, bcc: string[] = [], attachments: any[] = []) => {
+export const sendEmail = async (to: string[], subject: string, html: string, replyTo?: string, fromOverride?: string, bcc: string[] = [], attachments: any[] = []): Promise<{ success: boolean; data?: any; error?: string }> => {
     try {
         const payload: any = {
             to,
@@ -61,8 +61,8 @@ export const sendEmail = async (to: string[], subject: string, html: string, rep
         hostingerService.logNotification('email', to.join(', '), error.message, 'error')
             .catch(e => console.error('[Email Log Error]', e));
 
-        // Re-throw to allow callers (like UI components) to handle the error
-        throw error;
+        // Return error object instead of throwing to avoid breaking UI components
+        return { success: false, error: error.message || 'Falha desconhecida ao enviar email' };
     }
 };
 
@@ -87,7 +87,7 @@ export const sendOTPEmail = async (toEmail: string, otpCode: string) => {
 /**
  * Order Receipt / Confirmation email for Customers
  */
-export const sendOrderConfirmationEmail = async (order: any, items: any[]) => {
+export const sendOrderConfirmationEmail = async (order: any, items: any[]): Promise<{ success: boolean; data?: any; error?: string }> => {
     // If there is no customer email, do not send the customer receipt
     const customerEmail = order.customer_email || order.email;
     if (!customerEmail) return { success: false, error: 'No email provided by customer' };
