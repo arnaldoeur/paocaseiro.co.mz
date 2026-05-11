@@ -2517,8 +2517,10 @@ export const Admin: React.FC = () => {
             
             if (productIds.length > 0) {
                 const productsToUpdate = productIds.map(id => {
+                    const originalProduct = products.find(prod => String(prod.id) === String(id));
                     const changes = editedMassStock[id];
                     return {
+                        ...originalProduct,
                         id,
                         stock_quantity: changes.stockQuantity,
                         unit: changes.unit,
@@ -2558,8 +2560,10 @@ export const Admin: React.FC = () => {
         try {
             if (productIds.length > 0) {
                 const productsToUpdate = productIds.map(id => {
+                    const originalProduct = products.find(prod => String(prod.id) === String(id));
                     const changes = editedMassPricing[id];
                     return {
+                        ...originalProduct,
                         id,
                         purchase_price: changes.purchasePrice,
                         other_cost: changes.otherCost,

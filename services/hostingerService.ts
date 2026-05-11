@@ -36,13 +36,14 @@ export const hostingerService = {
                 body: JSON.stringify({ action, ...body })
             });
 
+            const data = await response.json().catch(() => null);
+
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+                const errorMessage = data?.error || data?.message || `HTTP error! status: ${response.status}`;
+                throw new Error(errorMessage);
             }
 
-            const data = await response.json();
-            
-            // Check for generic error
+            // Check for generic error in successful response
             if (data && data.error) {
                 throw new Error(data.error);
             }
@@ -53,7 +54,7 @@ export const hostingerService = {
             }
 
             return data;
-        } catch (error) {
+        } catch (error: any) {
             console.error(`Hostinger Service Error [${action}]:`, error);
             throw error;
         }
