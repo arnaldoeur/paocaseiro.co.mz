@@ -148,9 +148,10 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
                         if (!acc[cat]) acc[cat] = [];
 
                         acc[cat].push({
+                            id: product.id,
                             name: product.name,
                             price: Number(product.price),
-                            image: hostingerService.resolveProductImage(product.name, product.image),
+                            image: hostingerService.resolveProductImage(product.name, product.image_url || product.image),
                             desc: product.description,
                             description_en: product.description_en,
                             name_en: product.name_en,
@@ -163,8 +164,9 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
                                 try { return typeof product.complements === 'string' ? JSON.parse(product.complements) : (product.complements || []); } catch(e) { return []; }
                             })(),
                             unit: product.unit || 'un',
-                            stock: product.stock_quantity || 0,
-                            isAvailable: product.is_available === false ? false : (Number(product.stock_quantity) > 0 || product.stock_quantity === null || product.stock_quantity === undefined)
+                            stock: product.stock !== undefined ? parseInt(product.stock) : (product.stock_quantity || 0),
+                            isAvailable: product.status === 'AVAILABLE' || product.is_available === true || (product.status !== 'UNAVAILABLE' && product.is_available !== false),
+                            isSpecial: false
                         });
                         return acc;
                     }, {});
