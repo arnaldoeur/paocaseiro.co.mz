@@ -1,6 +1,7 @@
 import path from 'path';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig(({ mode }) => {
@@ -21,11 +22,12 @@ export default defineConfig(({ mode }) => {
       allowedHosts: true
     },
     plugins: [
+      tailwindcss(),
       react(),
       VitePWA({
         selfDestroying: true,
         registerType: 'autoUpdate',
-        includeAssets: ['favicon.ico', 'robots.txt', 'logo_on_dark.png', 'pao_caseiro_hero.png'],
+        includeAssets: ['robots.txt', 'assets/ui/logo.png'],
         manifest: {
           name: 'Pão Caseiro - O sabor que aquece o coração',
           short_name: 'Pão Caseiro',
@@ -35,12 +37,12 @@ export default defineConfig(({ mode }) => {
           display: 'standalone',
           icons: [
             {
-              src: '/pao_caseiro_hero.png',
+              src: '/assets/ui/logo.png',
               sizes: '192x192',
               type: 'image/png'
             },
             {
-              src: '/pao_caseiro_hero.png',
+              src: '/assets/ui/logo.png',
               sizes: '512x512',
               type: 'image/png'
             }

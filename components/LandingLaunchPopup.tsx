@@ -54,7 +54,7 @@ export const LandingLaunchPopup: React.FC<LandingLaunchPopupProps> = ({ language
                     >
                         {/* Header Image/Gradient */}
                         <div className="h-32 bg-gradient-to-r from-[#3b2f2f] to-[#4b3a2f] relative flex items-center justify-center">
-                            <div className="absolute inset-0 opacity-20" style={{ backgroundImage: "url('/images/pattern-bread.png')", backgroundSize: '100px' }} />
+                            <div className="absolute inset-0 opacity-20" style={{ backgroundImage: "url('/assets/ui/pattern-bread.png')", backgroundSize: '100px' }} />
                             <div className="w-20 h-20 bg-[#d9a65a] rounded-2xl flex items-center justify-center shadow-lg transform rotate-3 relative z-10">
                                 <Calendar className="w-10 h-10 text-[#3b2f2f]" />
                             </div>

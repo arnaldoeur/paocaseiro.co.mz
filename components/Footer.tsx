@@ -2,6 +2,7 @@ import React from 'react';
 import { MapPin, Phone, MessageCircle, Instagram, Facebook, Mail } from 'lucide-react';
 import { translations, Language } from '../translations';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { hostingerService } from '../services/hostingerService';
 
 interface FooterProps {
     language: Language;
@@ -38,7 +39,7 @@ export const Footer: React.FC<FooterProps> = ({ language }) => {
                     {/* 1. Brand & Description */}
                     <div className="lg:col-span-2 space-y-4 flex flex-col items-center text-center md:items-start md:text-left">
                         <img
-                            src="/logo_on_dark.png"
+                            src="/assets/ui/logo.png"
                             alt="Pão Caseiro"
                             className="h-24 object-contain drop-shadow-lg"
                         />

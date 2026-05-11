@@ -7,38 +7,10 @@ import { Language } from '../translations';
 import { formatProductName } from '../services/stringUtils';
 import { hostingerService } from '../services/hostingerService';
 
-// --- Static Data from Home ---
-const CLASSICS = [
-    {
-        title: 'Trança Caramelizada com Coco',
-        price: 0,
-        image: '/images/arrofadas.png'
-    },
-    {
-        title: 'Bolas de Berlim Tradicionais',
-        price: 0,
-        image: '/images/bola_berlim.png'
-    },
-    {
-        title: 'Pastéis de Nata Artesanais',
-        price: 0,
-        image: '/images/pastel_nata.png'
-    },
-    {
-        title: 'Mini Folhados Doces & Salgados',
-        price: 0,
-        image: '/images/mini_folhados.png'
-    }
-];
-
-const STATIC_GALLERY = [
-    { src: '/images/about-bread.jpeg', caption: 'Ambiente Acolhedor' },
-    { src: '/images/broa_milho.png', caption: 'Pães Frescos Todas as Manhãs' },
-    { src: '/images/pao_caseiro.png', caption: 'Processo 100% Artesanal' },
-    { src: '/images/bola_berlim.png', caption: 'Qualidade em Cada Detalhe' },
-    { src: '/images/arrofadas.png', caption: 'Ingredientes de Primeira' },
-    { src: '/images/coxinhas.png', caption: 'Sortido de Doces & Salgados' },
-    { src: '/images/pao_portugues.png', caption: 'Receitas com Tradição' }
+// Imagens institucionais que não são produtos específicos
+const UI_IMAGES = [
+    { src: '/assets/ui/about-bread.jpeg', caption: 'Ambiente Acolhedor' },
+    { src: '/assets/ui/hero-bg.png', caption: 'Nossa Produção Diária' }
 ];
 
 interface GalleryItem {
@@ -91,64 +63,36 @@ export const Gallery: React.FC<{ language: Language }> = ({ language }) => {
     const loadData = async () => {
         let allItems: GalleryItem[] = [];
 
-        // 1. Add Static Classics
-        const classics: GalleryItem[] = CLASSICS.map((c, i) => ({
-            id: `classic-${i}`,
-            name: c.title,
-            price: 0,
-            inStock: true,
-            image: c.image,
-            type: 'static'
-        }));
-        allItems = [...allItems, ...classics];
-
-        // 2. Add Static Gallery Items
-        const statics: GalleryItem[] = STATIC_GALLERY.map((s, i) => ({
-            id: `static-${i}`,
+        // 1. Adicionar Imagens de Branding/UI (Ambiente, etc)
+        const uiItems: GalleryItem[] = UI_IMAGES.map((s, i) => ({
+            id: `ui-${i}`,
             name: s.caption,
             price: 0,
             inStock: true,
             image: s.src,
             type: 'static'
         }));
-        allItems = [...allItems, ...statics];
+        allItems = [...allItems, ...uiItems];
 
-        // 3. Fetch DB Products (Hostinger)
+        // 2. Procurar Produtos na Base de Dados (Hostinger)
         try {
             const data = await hostingerService.getProducts();
 
             if (data) {
-                const dbProducts: GalleryItem[] = data.map((p: any) => ({
-                    id: p.id,
-                    name: p.name,
-                    price: parseFloat(p.price) || 0,
-                    inStock: p.is_available === 1 || p.is_available === true || p.is_available === '1',
-                    image: p.image,
-                    type: 'product'
-                }));
+                const dbProducts: GalleryItem[] = data
+                    .filter((p: any) => p.image) // Só produtos com imagem
+                    .map((p: any) => ({
+                        id: p.id,
+                        name: p.name,
+                        price: parseFloat(p.price) || 0,
+                        inStock: p.is_available === 1 || p.is_available === true || p.is_available === '1',
+                        image: p.image.startsWith('http') ? p.image : hostingerService.getPublicUrl(p.image),
+                        type: 'product'
+                    }));
                 allItems = [...allItems, ...dbProducts];
             }
         } catch (err) {
-            console.error('Error loading products:', err);
-        }
-
-        // 4. Fetch Heavy Gallery (Hostinger - Large Files)
-        try {
-            const data = await hostingerService.fetchGallery();
-
-            if (data) {
-                const hostingerItems: GalleryItem[] = data.map((p: any) => ({
-                    id: `h-${p.id}`,
-                    name: p.title,
-                    price: 0,
-                    inStock: true,
-                    image: p.image_url,
-                    type: 'static'
-                }));
-                allItems = [...allItems, ...hostingerItems];
-            }
-        } catch (err) {
-            console.error('Error loading Hostinger gallery:', err);
+            console.error('Error loading products for gallery:', err);
         }
 
         // Remove duplicates based on Image URL

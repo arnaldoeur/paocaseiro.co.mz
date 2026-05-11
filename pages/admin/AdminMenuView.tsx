@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Download, Eye, EyeOff, ChevronDown, Loader, BookOpen, Package, Filter, RefreshCw } from 'lucide-react';
 import { jsPDF } from 'jspdf';
+import { hostingerService } from '../../services/hostingerService';
 
 interface Product {
     id: string;
@@ -159,9 +160,9 @@ async function buildMenuPDF(
     doc.setFillColor(255, 248, 235);
     doc.circle(cx, cy, 59, 'F');
 
-    // Logo image — try absolute URL based on window.location
-    const logoAbsUrl = `${window.location.origin}/logo_white.png`;
-    const logoData = await toBase64PNG(logoAbsUrl);
+    // Logo image — try the brand logo if available, else fallback to hardcoded
+    const logoUrl = brand.logo ? hostingerService.getPublicUrl(brand.logo) : '/assets/ui/logo.png';
+    const logoData = await toBase64PNG(logoUrl);
     if (logoData) {
         try {
             doc.addImage(logoData, 'PNG', cx - 48, cy - 48, 96, 96, undefined, 'FAST');
@@ -558,7 +559,7 @@ export const AdminMenuView: React.FC<AdminMenuViewProps> = ({ products, companyI
                     <div className="flex items-center gap-5">
                         {/* Logo circle */}
                         <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-[#d9a65a] bg-amber-50 flex-shrink-0 shadow-lg">
-                            <img src="/logo_white.png" alt="Pão Caseiro" className="w-full h-full object-cover" />
+                            <img src={brand.logo ? hostingerService.getPublicUrl(brand.logo) : '/assets/ui/logo.png'} alt="Pão Caseiro" className="w-full h-full object-cover" />
                         </div>
                         <div>
                             <div className="flex items-center gap-2 mb-1">
@@ -759,9 +760,9 @@ const MenuCard: React.FC<{
     >
         {/* Image block */}
         <div className="relative overflow-hidden bg-amber-50" style={{ height: '100px' }}>
-            {product.image_url ? (
+            {hostingerService.resolveProductImage(product.name, product.image || product.image_url) ? (
                 <img
-                    src={product.image_url}
+                    src={hostingerService.resolveProductImage(product.name, product.image || product.image_url)}
                     alt={product.name}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                 />

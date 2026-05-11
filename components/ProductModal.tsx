@@ -140,7 +140,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                                         className="w-full h-full object-contain max-h-[300px] md:max-h-[400px] drop-shadow-xl"
                                         onError={(e) => {
                                             e.currentTarget.onerror = null;
-                                            e.currentTarget.src = '/images/pao_caseiro.png';
+                                            e.currentTarget.src = '/assets/products/pao-caseiro.png';
                                         }}
                                     />
                                 ) : (

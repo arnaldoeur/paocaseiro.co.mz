@@ -41,7 +41,7 @@ export const MaintenanceMenu: React.FC<MaintenanceMenuProps> = ({ language }) =>
                     setCompanyInfo({
                         name: settingsMap['branding_name'] || 'Pão Caseiro',
                         phone: settingsMap['branding_phone'] || '+258879146662',
-                        logo: settingsMap['branding_logo'] || '/images/logo-official.png'
+                        logo: hostingerService.getPublicUrl(settingsMap['branding_logo'] || 'assets/ui/logo.png')
                     });
                 }
             } catch (e) {
@@ -76,7 +76,7 @@ export const MaintenanceMenu: React.FC<MaintenanceMenuProps> = ({ language }) =>
             {/* Minimalist Header */}
             <header className="bg-white/80 backdrop-blur-md sticky top-0 z-50 border-b border-[#d9a65a]/20 shadow-sm">
                 <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
-                    <img src={companyInfo?.logo || "/images/logo-official.png"} alt="Logo" className="h-10 w-auto" />
+                    <img src={companyInfo?.logo} alt="Logo" className="h-14 w-auto" />
                     <div className="flex items-center gap-2 bg-red-50 text-red-600 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border border-red-100">
                         <ShieldAlert size={12} /> Contingência
                     </div>

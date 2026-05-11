@@ -83,7 +83,7 @@ export const BlogPost: React.FC<{ language: Language }> = ({ language }) => {
                     };
 
                     const excerpt = postData.excerpt || postData.content?.substring(0, 150).replace(/<[^>]*>?/gm, '') + '...';
-                    const image = postData.image_url || 'https://paocaseiro.co.mz/images/about-bread.jpeg';
+                    const image = postData.image_url || hostingerService.getPublicUrl('assets/ui/about-bread.jpeg');
 
                     setMetaTag('description', excerpt);
                     setMetaTag('og:title', postData.title);
@@ -270,7 +270,7 @@ export const BlogPost: React.FC<{ language: Language }> = ({ language }) => {
                             />
                         ) : (
                             <img
-                                src="/images/about-bread.jpeg"
+                                src={hostingerService.getPublicUrl('assets/ui/about-bread.jpeg')}
                                 alt={language === 'en' && post.title_en ? post.title_en : post.title}
                                 className="w-full h-full object-cover hover:scale-105 transition-transform duration-700 ease-out"
                             />

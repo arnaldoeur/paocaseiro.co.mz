@@ -180,7 +180,9 @@ export const Admin: React.FC = () => {
     const [soundEnabled, setSoundEnabled] = useState(() => localStorage.getItem('admin_sound') !== 'false');
     const [whatsappMenuMode, setWhatsappMenuMode] = useState(false);
     const [menuLoginMaintenanceMode, setMenuLoginMaintenanceMode] = useState(false);
-    const [isUpdatingMaintenance, setIsUpdatingMaintenance] = useState(false);    const [emailStatus, setEmailStatus] = useState<{ mode: 'production' | 'sandbox' | 'error' | 'unknown', last_checked?: string }>({ mode: 'unknown' });
+    const [isUpdatingMaintenance, setIsUpdatingMaintenance] = useState(false);
+    const [isLoggingIn, setIsLoggingIn] = useState(false);
+    const [emailStatus, setEmailStatus] = useState<{ mode: 'production' | 'sandbox' | 'error' | 'unknown', last_checked?: string }>({ mode: 'unknown' });
 
     // Sidebar/View State
     const [activeView, setActiveView] = useState<'dashboard' | 'orders' | 'kitchen' | 'stock' | 'pos' | 'delivery' | 'settings' | 'customers' | 'team' | 'logistics' | 'support' | 'support_ai' | 'billing' | 'documents' | 'messages' | 'blog' | 'newsletter' | 'queue' | 'notificacoes'>('dashboard');
@@ -284,7 +286,7 @@ export const Admin: React.FC = () => {
                 phone: companyInfo?.phone || '+258 87 9146 662',
                 email: 'geral@paocaseiro.co.mz',
                 website: 'www.paocaseiro.co.mz',
-                logo: companyInfo?.logo || '/images/logo_receipt.png',
+                logo: companyInfo?.logo || 'assets/ui/logo.png',
                 issuerName: adminUser || username || 'Supervisor / Admin'
             };
             
@@ -597,31 +599,7 @@ export const Admin: React.FC = () => {
     };
 
     const handlePurgeDatabase = async () => {
-        if (!confirm('AVISO CRÍTICO: Isto irá apagar TODOS os pedidos, clientes e histórico de faturamento para sempre. Os produtos e fotos serão mantidos. Deseja continuar?')) return;
-        
-        const password = prompt('Introduza a senha de administração para confirmar a limpeza total:');
-        if (password !== 'admin' && password !== '2025') { 
-            alert('Senha incorreta. Operação cancelada.');
-            return;
-        }
-
-        setIsSubmitting(true);
-        try {
-            await hostingerService.purgeDatabase();
-
-            await logAudit({
-                action: 'DATABASE_PURGE',
-                entity_type: 'system',
-                details: { tables: 'orders, receipts, audit_logs', performed_by: username }
-            });
-
-            alert('Limpeza de produção concluída com sucesso!');
-            window.location.reload(); 
-        } catch (err: any) {
-            alert('Erro durante a limpeza: ' + err.message);
-        } finally {
-            setIsSubmitting(false);
-        }
+        alert('A limpeza total da base de dados não é suportada na nova infraestrutura de produção para garantir a segurança dos dados fiscais.');
     };
 
     // --- Modal/Edit States (continued) ---
@@ -1531,45 +1509,77 @@ export const Admin: React.FC = () => {
     // --- Actions ---
 
     const handleLogin = async (e: React.FormEvent) => {
+        setIsLoggingIn(true);
         e.preventDefault();
         setError('');
-
-        // Local fallback credentials (mirrors team_members table in Hostinger DB)
-        // Used when network blocks bridge access
-        const localCredentials = [
-            { id: '9f4b4a2d-2303-44db-9695-3cd8c5e4be00', username: 'nazir', name: 'Nazir', role: 'admin', password: '@Pcaseiro25' },
-        ];
-
+        
         try {
-            // 1. Hostinger Primary Auth
-            const data = await hostingerService.authTeam(username, password);
+            // Local fallback credentials (mirrors team_members table in Hostinger DB)
+            // Used when network blocks bridge access
+            const localCredentials = [
+                { id: '9f4b4a2d-2303-44db-9695-3cd8c5e4be00', username: 'nazir', name: 'Nazir', role: 'admin', password: '@Pcaseiro25' },
+            ];
 
-            if (data && data.success !== false) {
-                const user = data.user || data;
-                setIsAuthenticated(true);
-                setCurrentUserRole(user.role);
-                setUserId(user.id);
-                setLoginUsername(user.username || username);
-                setUsername(user.name);
-                setAdminUser(user.name);
-                setAdminPhoto(user.avatar_url || '');
+            try {
+                // 1. Hostinger Primary Auth
+                const data = await hostingerService.authTeam(username, password);
 
-                localStorage.setItem('admin_auth', 'true');
-                localStorage.setItem('admin_role', user.role);
-                localStorage.setItem('admin_id', user.id);
-                localStorage.setItem('admin_user', user.name);
-                localStorage.setItem('admin_login_user', user.username || username);
-                if (user.avatar_url) localStorage.setItem('admin_photo', user.avatar_url);
+                if (data && data.success !== false) {
+                    const user = data.user || data;
+                    setIsAuthenticated(true);
+                    setCurrentUserRole(user.role);
+                    setUserId(user.id);
+                    setLoginUsername(user.username || username);
+                    setUsername(user.name);
+                    setAdminUser(user.name);
+                    setAdminPhoto(user.avatar_url || '');
 
-                await logAudit({
-                    action: 'ADMIN_LOGIN',
-                    entity_type: 'auth',
-                    entity_id: user.id,
-                    details: { method: 'hostinger', admin_name: user.name }
-                });
-                refreshAllData();
-            } else {
-                // Try local fallback
+                    localStorage.setItem('admin_auth', 'true');
+                    localStorage.setItem('admin_role', user.role);
+                    localStorage.setItem('admin_id', user.id);
+                    localStorage.setItem('admin_user', user.name);
+                    localStorage.setItem('admin_login_user', user.username || username);
+                    if (user.avatar_url) localStorage.setItem('admin_photo', user.avatar_url);
+
+                    await logAudit({
+                        action: 'ADMIN_LOGIN',
+                        entity_type: 'auth',
+                        entity_id: user.id,
+                        details: { method: 'hostinger', admin_name: user.name }
+                    });
+                    refreshAllData();
+                } else {
+                    // Try local fallback
+                    const localMatch = localCredentials.find(
+                        c => c.username === username.toLowerCase() && c.password === password
+                    );
+                    if (localMatch) {
+                        setIsAuthenticated(true);
+                        setCurrentUserRole(localMatch.role);
+                        setUserId(localMatch.id);
+                        setLoginUsername(localMatch.username);
+                        setUsername(localMatch.name);
+                        setAdminUser(localMatch.name);
+                        localStorage.setItem('admin_auth', 'true');
+                        localStorage.setItem('admin_role', localMatch.role);
+                        localStorage.setItem('admin_id', localMatch.id);
+                        localStorage.setItem('admin_user', localMatch.name);
+                        localStorage.setItem('admin_login_user', localMatch.username);
+                        
+                        await logAudit({
+                            action: 'ADMIN_LOGIN',
+                            entity_type: 'auth',
+                            entity_id: localMatch.id,
+                            details: { method: 'fallback_password', admin_name: localMatch.name }
+                        });
+                        refreshAllData();
+                    } else {
+                        setError('Credenciais incorretas');
+                    }
+                }
+            } catch (err: any) {
+                console.error("Login Error:", err);
+                // Local fallback on network error
                 const localMatch = localCredentials.find(
                     c => c.username === username.toLowerCase() && c.password === password
                 );
@@ -1579,45 +1589,18 @@ export const Admin: React.FC = () => {
                     setUserId(localMatch.id);
                     setLoginUsername(localMatch.username);
                     setUsername(localMatch.name);
-                    setAdminUser(localMatch.name);
                     localStorage.setItem('admin_auth', 'true');
                     localStorage.setItem('admin_role', localMatch.role);
                     localStorage.setItem('admin_id', localMatch.id);
                     localStorage.setItem('admin_user', localMatch.name);
                     localStorage.setItem('admin_login_user', localMatch.username);
-                    
-                    await logAudit({
-                        action: 'ADMIN_LOGIN',
-                        entity_type: 'auth',
-                        entity_id: localMatch.id,
-                        details: { method: 'fallback_password', admin_name: localMatch.name }
-                    });
                     refreshAllData();
                 } else {
-                    setError('Credenciais incorretas');
+                    setError('Erro de conexão ou credenciais inválidas.');
                 }
             }
-        } catch (err: any) {
-            console.error("Login Error:", err);
-            // Local fallback on network error
-            const localMatch = localCredentials.find(
-                c => c.username === username.toLowerCase() && c.password === password
-            );
-            if (localMatch) {
-                setIsAuthenticated(true);
-                setCurrentUserRole(localMatch.role);
-                setUserId(localMatch.id);
-                setLoginUsername(localMatch.username);
-                setUsername(localMatch.name);
-                localStorage.setItem('admin_auth', 'true');
-                localStorage.setItem('admin_role', localMatch.role);
-                localStorage.setItem('admin_id', localMatch.id);
-                localStorage.setItem('admin_user', localMatch.name);
-                localStorage.setItem('admin_login_user', localMatch.username);
-                refreshAllData();
-            } else {
-                setError('Erro de conexão ou credenciais inválidas.');
-            }
+        } finally {
+            setIsLoggingIn(false);
         }
     };
 
@@ -1675,8 +1658,8 @@ export const Admin: React.FC = () => {
                     description: p.description,
                     show_in_menu: p.show_in_menu !== false,
                     availability: (p.is_available === 1 || p.is_available === true) ? 'available' : 'unavailable',
-                    variations: typeof p.variations === 'string' ? JSON.parse(p.variations) : (p.variations || []),
-                    complements: typeof p.complements === 'string' ? JSON.parse(p.complements) : (p.complements || []),
+                    variations: (() => { try { return typeof p.variations === 'string' && p.variations ? JSON.parse(p.variations) : (p.variations || []); } catch(e) { return []; } })(),
+                    complements: (() => { try { return typeof p.complements === 'string' && p.complements ? JSON.parse(p.complements) : (p.complements || []); } catch(e) { return []; } })(),
                     unit: p.unit || 'un',
                     name_en: p.name_en,
                     description_en: p.description_en,
@@ -2662,7 +2645,17 @@ export const Admin: React.FC = () => {
             <div className="min-h-screen bg-[#f7f1eb] flex items-center justify-center p-6 bg-pattern">
                 <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md border border-[#d9a65a]/20">
                     <div className="text-center mb-8">
-                        <img src="/logo_on_light.png" alt="Pão Caseiro Logo" className="h-24 mx-auto mb-4 object-contain" />
+                        <img 
+                            src={'/assets/ui/logo.png'} 
+                            alt="Pão Caseiro Logo" 
+                            className="h-24 mx-auto mb-4 object-contain" 
+                            onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                if (!target.src.includes('LOGO_PAO_CASEIRO')) {
+                                    target.src = '/assets/ui/LOGO_PAO_CASEIRO_FUND0_(SEM_FUNDO).png';
+                                }
+                            }}
+                        />
                         <h1 className="text-2xl font-serif font-bold text-[#3b2f2f]">Admin Pão Caseiro</h1>
                         <p className="text-gray-400 text-sm mt-2">Acesso Restrito</p>
                     </div>
@@ -2670,7 +2663,18 @@ export const Admin: React.FC = () => {
                         <input type="text" title="Username" value={username} onChange={e => setUsername(e.target.value)} className="w-full p-3 border border-gray-200 rounded-lg focus:border-[#d9a65a] focus:ring-1 focus:ring-[#d9a65a] outline-none transition-all" placeholder="Username" autoFocus />
                         <input type="password" title="Senha" value={password} onChange={e => setPassword(e.target.value)} className="w-full p-3 border border-gray-200 rounded-lg focus:border-[#d9a65a] focus:ring-1 focus:ring-[#d9a65a] outline-none transition-all" placeholder="Senha" />
                         {error && <p className="text-red-500 text-sm font-bold bg-red-50 p-2 rounded">{error}</p>}
-                        <button type="submit" className="w-full bg-[#3b2f2f] text-[#d9a65a] py-3 rounded-xl font-bold uppercase tracking-wide hover:shadow-lg hover:scale-[1.02] transition-all">Entrar</button>
+                        <button 
+                            type="submit" 
+                            disabled={isLoggingIn}
+                            className="w-full bg-[#3b2f2f] text-[#d9a65a] py-3 rounded-xl font-bold uppercase tracking-wide hover:shadow-lg hover:scale-[1.02] transition-all disabled:opacity-70 disabled:scale-100"
+                        >
+                            {isLoggingIn ? (
+                                <div className="flex items-center justify-center gap-2">
+                                    <Loader className="animate-spin" size={18} />
+                                    <span>A processar...</span>
+                                </div>
+                            ) : 'Entrar'}
+                        </button>
                     </form>
                 </div>
             </div>
@@ -2682,7 +2686,17 @@ export const Admin: React.FC = () => {
             {/* Mobile Header */}
             <div className="md:hidden bg-[#3b2f2f] text-[#d9a65a] p-4 flex justify-between items-center z-30 shadow-md w-full shrink-0 h-16">
                 <div className="flex items-center gap-3">
-                    <img src="/logo_on_dark.png" alt="Logo" className="h-8 object-contain" />
+                    <img 
+                        src={'/assets/ui/logo.png'} 
+                        alt="Logo" 
+                        className="h-12 object-contain" 
+                        onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            if (!target.src.includes('LOGO_PAO_CASEIRO')) {
+                                target.src = '/assets/ui/LOGO_PAO_CASEIRO_FUND0_(SEM_FUNDO).png';
+                            }
+                        }}
+                    />
                     <span className="font-serif font-bold text-lg text-white">Admin Pão Caseiro</span>
                 </div>
                 <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="p-1">
@@ -2703,7 +2717,11 @@ export const Admin: React.FC = () => {
                 {/* Scrollable Navigation Area */}
                 <div className="flex-1 flex flex-col min-h-0 overflow-y-auto custom-scrollbar pr-1">
                     <div className={`flex items-center gap-3 mb-10 ${isSidebarCollapsed ? 'md:justify-center' : ''} relative hidden md:flex`}>
-                        <img src="/logo_on_dark.png" alt="Pão Caseiro Logo" className={`${isSidebarCollapsed ? 'h-10 w-10' : 'h-16 w-16'} object-contain`} />
+                        <img 
+                            src={'/assets/ui/logo.png'} 
+                            alt="Pão Caseiro Logo" 
+                            className={`${isSidebarCollapsed ? 'h-12 w-12' : 'h-20 w-20'} object-contain`} 
+                        />
                         {!isSidebarCollapsed && (
                             <div className="animate-fade-in">
                                 <span className="font-serif font-bold text-xl block leading-none">Admin</span>
@@ -2855,15 +2873,22 @@ export const Admin: React.FC = () => {
                     </button>
 
                     {!isSidebarCollapsed && (
-                        <div className="mt-4 pt-4 border-t border-gray-700/30 text-center flex flex-col items-center justify-center animate-fade-in">
-                            <img src="/logo_on_dark.png" alt="Pão Caseiro Logo" className="w-20 h-auto opacity-70 hover:opacity-100 transition-opacity drop-shadow-lg" />
-                            <p className="text-[9px] text-gray-500 mt-2 italic max-w-[150px] mx-auto leading-tight font-serif">"O sabor que aquece o coração"</p>
+                        <div className="p-8 border-t border-white/5 flex flex-col items-center gap-4">
+                            <img 
+                                src={'/assets/ui/logo.png'} 
+                                alt="Logo Pão Caseiro" 
+                                className="h-16 w-auto opacity-40 hover:opacity-100 transition-opacity"
+                            />
+                            <div className="text-[10px] font-black uppercase tracking-[0.3em] text-white/20 text-center">
+                                Pão Caseiro Dashboard<br/>
+                                <span className="font-sans font-medium lowercase tracking-normal">v4.0.0 Stable</span>
+                            </div>
                         </div>
                     )}
                 </div>
             </div>
 
-            <div className={`flex-1 overflow-y-auto relative flex flex-col ${activeView === 'logistics' ? 'bg-white' : 'p-6 md:p-10'} pt-20 md:pt-10 shadow-inner`}>
+            <div className={`flex-1 overflow-y-auto relative flex flex-col ${activeView === 'logistics' ? 'bg-white' : 'p-6 md:p-10'} pt-16 md:pt-10 shadow-inner`}>
                 {/* Global Header */}
                 <div className="flex justify-between items-center mb-8 gap-4 hidden md:flex shrink-0">
                     <div className="flex flex-col">
@@ -3373,14 +3398,11 @@ export const Admin: React.FC = () => {
                         <div className={stockTab === 'menu' ? 'overflow-y-auto max-h-[calc(100vh-310px)] custom-scrollbar p-4' : 'overflow-x-auto overflow-y-auto max-h-[calc(100vh-350px)] custom-scrollbar'}>
                             {stockTab === 'menu' ? (
                                 <div>
-                                    <AdminMenuView
-                                        products={products.map((p: any) => ({
-                                            id: p.id,
-                                            name: p.name,
-                                            price: p.price,
-                                            category: p.category || 'Outros',
-                                            description: p.description,
-                                            image_url: p.image,
+                                    <AdminMenuView 
+                                        products={filteredProducts.map(p => ({
+                                            ...p,
+                                            image_url: hostingerService.getPublicUrl(p.image),
+                                            category: p.category_name,
                                             inStock: p.inStock,
                                             showInMenu: p.show_in_menu !== false,
                                             internal_id: p.internal_id
@@ -3391,7 +3413,7 @@ export const Admin: React.FC = () => {
                                             email: companyInfo.email,
                                             address: companyInfo.address,
                                             slogan: companyInfo.slogan,
-                                            logo: companyInfo.logo,
+                                            logo: hostingerService.getPublicUrl(companyInfo.logo || 'assets/ui/logo.png'),
                                             website: companyInfo.website
                                         }}
                                     />
@@ -3447,7 +3469,7 @@ export const Admin: React.FC = () => {
                                                 <tr key={p.id} className={`transition-colors ${isEdited ? 'bg-[#d9a65a]/5' : 'hover:bg-gray-50'}`}>
                                                     <td className="p-4">
                                                         <div className="flex items-center gap-3">
-                                                            {p.image ? <img src={p.image} alt={p.name} className="w-10 h-10 rounded-lg object-cover border border-gray-200" /> : <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400"><Package size={16} /></div>}
+                                                            {hostingerService.resolveProductImage(p.name, p.image) ? <img src={hostingerService.resolveProductImage(p.name, p.image)} alt={p.name} className="w-10 h-10 rounded-lg object-cover border border-gray-200" /> : <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400"><Package size={16} /></div>}
                                                             <div>
                                                                 <span className="font-bold text-[#3b2f2f] block">{p.name.charAt(0).toUpperCase() + p.name.slice(1).toLowerCase()}</span>
                                                                 <span className="text-[10px] text-gray-400">Preço Original: {p.price} MT</span>
@@ -3510,7 +3532,7 @@ export const Admin: React.FC = () => {
                                                     {companyInfo.productPrefix || 'PROD'}-{index + 10}
                                                 </td>
                                                 <td className="p-4 flex items-center gap-3">
-                                                    {p.image ? <img src={p.image} alt={p.name} className="w-10 h-10 rounded-lg object-cover border border-gray-200" /> : <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400"><Package size={16} /></div>}
+                                                    {hostingerService.resolveProductImage(p.name, p.image) ? <img src={hostingerService.resolveProductImage(p.name, p.image)} alt={p.name} className="w-10 h-10 rounded-lg object-cover border border-gray-200" /> : <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400"><Package size={16} /></div>}
                                                     <div>
                                                         <span className="font-bold text-[#3b2f2f] block">{p.name.charAt(0).toUpperCase() + p.name.slice(1).toLowerCase()}</span>
                                                         <span className="text-xs text-gray-400 capitalize">{p.category}</span>
@@ -3729,7 +3751,7 @@ export const Admin: React.FC = () => {
                                                     </td>
                                                     <td className="p-4">
                                                         <div className="flex items-center gap-3">
-                                                            {p.image ? <img src={p.image} alt={p.name} className="w-10 h-10 rounded-lg object-cover border border-gray-200" /> : <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400"><Package size={16} /></div>}
+                                                            {hostingerService.resolveProductImage(p.name, p.image) ? <img src={hostingerService.resolveProductImage(p.name, p.image)} alt={p.name} className="w-10 h-10 rounded-lg object-cover border border-gray-200" /> : <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400"><Package size={16} /></div>}
                                                             <div>
                                                                 <span className="font-bold text-[#3b2f2f] block">{p.name.charAt(0).toUpperCase() + p.name.slice(1).toLowerCase()}</span>
                                                                 <span className="text-[10px] text-gray-400 font-mono">ID Ref: {companyInfo.productPrefix}-{p.id.substring(0,6).toUpperCase()}</span>
@@ -4231,7 +4253,7 @@ export const Admin: React.FC = () => {
                                 <div className="flex flex-col items-center gap-4 mb-4">
                                     <div className="w-24 h-24 rounded-full bg-gray-50 border-2 border-[#d9a65a]/20 flex items-center justify-center overflow-hidden relative group">
                                         {(memberAvatar || currentMember?.avatar_url) ? (
-                                            <img src={memberAvatar || currentMember?.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
+                                            <img src={memberAvatar || (currentMember?.avatar_url ? hostingerService.getPublicUrl(currentMember.avatar_url) : '')} alt="Avatar" className="w-full h-full object-cover" />
                                         ) : (
                                             <Users size={32} className="text-gray-300" />
                                         )}
@@ -4708,7 +4730,7 @@ export const Admin: React.FC = () => {
                                     <div>
                                         <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Foto de Perfil</label>
                                         <div className="flex items-center gap-3">
-                                            {userForm.photo && <img src={userForm.photo} alt="Foto de Perfil" className="w-12 h-12 rounded-full object-cover border border-gray-200" />}
+                                            {userForm.photo && <img src={hostingerService.getPublicUrl(userForm.photo)} alt="Foto de Perfil" className="w-12 h-12 rounded-full object-cover border border-gray-200" />}
                                             <label className="flex-1 cursor-pointer bg-gray-50 border border-dashed border-gray-300 rounded-xl p-3 text-center text-sm text-gray-500 hover:bg-gray-100 transition-colors">
                                                 <input type="file" className="hidden" accept="image/*" onChange={handleAvatarUpload} />
                                                 <span className="flex items-center justify-center gap-2"><Upload size={16} /> Carregar Foto</span>
@@ -4942,7 +4964,7 @@ export const Admin: React.FC = () => {
                                                                         <td className="p-4 font-bold text-sm text-[#3b2f2f]">
                                                                             <div className="flex items-center gap-2">
                                                                                 <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-xs overflow-hidden">
-                                                                                    {driver?.avatar_url ? <img src={driver.avatar_url} className="w-full h-full object-cover"/> : driver?.name?.charAt(0).toUpperCase() || '?'}
+                                                                                    {driver?.avatar_url ? <img src={hostingerService.getPublicUrl(driver.avatar_url)} className="w-full h-full object-cover"/> : driver?.name?.charAt(0).toUpperCase() || '?'}
                                                                                 </div>
                                                                                 {driver?.name || 'N/A'}
                                                                             </div>
@@ -5148,7 +5170,7 @@ export const Admin: React.FC = () => {
                                                         <div className="flex items-center gap-3">
                                                             <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center font-bold text-[#3b2f2f] text-lg border-2 border-white shadow-sm overflow-hidden">
                                                                 {driver.avatar_url ? (
-                                                                    <img src={driver.avatar_url} alt={driver.name} className="w-full h-full object-cover" />
+                                                                    <img src={hostingerService.getPublicUrl(driver.avatar_url)} alt={driver.name} className="w-full h-full object-cover" />
                                                                 ) : (
                                                                     driver.name.charAt(0).toUpperCase()
                                                                 )}
@@ -5355,7 +5377,7 @@ export const Admin: React.FC = () => {
                                                     className="bg-white p-3 rounded-2xl border border-gray-100 hover:border-[#d9a65a] transition-all group cursor-pointer hover:shadow-xl hover:-translate-y-1 flex flex-col items-center text-center"
                                                 >
                                                     <div className="w-full h-24 mb-3 rounded-xl overflow-hidden bg-gray-50 relative">
-                                                        <img src={product.image || 'https://via.placeholder.com/150'} alt={product.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                                                        <img src={hostingerService.resolveProductImage(product.name, product.image) || 'https://via.placeholder.com/150'} alt={product.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
                                                         {posSearchTerm && product.name.toLowerCase().includes(posSearchTerm.toLowerCase()) && (
                                                             <div className="absolute top-2 right-2 bg-[#d9a65a] text-white p-1 rounded-full shadow-lg animate-pulse">
                                                                 <CheckCircle size={12} />
@@ -6015,7 +6037,7 @@ export const Admin: React.FC = () => {
                                                     <div className="relative group">
                                                         <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-white shadow-xl bg-gray-100 flex items-center justify-center">
                                                             {userForm.photo ? (
-                                                                <img src={userForm.photo} alt="Avatar" className="w-full h-full object-cover" />
+                                                                <img src={hostingerService.getPublicUrl(userForm.photo)} alt="Avatar" className="w-full h-full object-cover" />
                                                             ) : (
                                                                 <Users size={48} className="text-gray-300" />
                                                             )}
@@ -6121,7 +6143,7 @@ export const Admin: React.FC = () => {
                                                     <div className="flex flex-col items-center gap-4">
                                                         <div className="w-40 h-40 rounded-3xl bg-gray-50 border-2 border-dashed border-gray-200 flex items-center justify-center overflow-hidden relative group">
                                                             {companyInfo.logo ? (
-                                                                <img src={companyInfo.logo} alt="Logo" className="w-full h-full object-contain p-4" />
+                                                                <img src={hostingerService.getPublicUrl(companyInfo.logo)} alt="Logo" className="w-full h-full object-contain p-4" />
                                                             ) : (
                                                                 <Upload size={48} className="text-gray-200" />
                                                             )}
@@ -6377,7 +6399,7 @@ export const Admin: React.FC = () => {
                                                             <div className="flex items-center gap-4">
                                                                 <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-white shadow-sm bg-white flex items-center justify-center font-bold text-[#3b2f2f]">
                                                                     {member.avatar_url ? (
-                                                                        <img src={member.avatar_url} alt={member.name} className="w-full h-full object-cover" />
+                                                                        <img src={hostingerService.getPublicUrl(member.avatar_url)} alt={member.name} className="w-full h-full object-cover" />
                                                                     ) : (
                                                                         member.name.charAt(0).toUpperCase()
                                                                     )}
@@ -7379,7 +7401,7 @@ export const Admin: React.FC = () => {
                                     <div className="flex items-center gap-4 bg-gray-50 p-3 rounded-xl border border-gray-100">
                                         <div className="w-16 h-16 rounded-full overflow-hidden bg-white border shadow-sm shrink-0 flex items-center justify-center">
                                             {driverForm.avatar_url ? (
-                                                <img src={driverForm.avatar_url} alt="Preview" className="w-full h-full object-cover" />
+                                                <img src={hostingerService.getPublicUrl(driverForm.avatar_url)} alt="Preview" className="w-full h-full object-cover" />
                                             ) : (
                                                 <User className="w-8 h-8 text-gray-300" />
                                             )}
@@ -7533,7 +7555,7 @@ export const Admin: React.FC = () => {
                                 <div className="relative z-10 text-center flex-1 overflow-y-auto p-4 sm:p-8 bg-[#fffbf5] custom-scrollbar" id="pos-receipt-content">
                                     <div className="border-b-2 border-[#d9a65a] pb-6 mb-6 text-center space-y-2 flex flex-col items-center">
                                         <div className="w-32 h-auto mb-2">
-                                            <img src="/logo_on_dark.png" alt="Pão Caseiro" className="w-full h-full object-contain" />
+                                            <img src={hostingerService.getPublicUrl(companyInfo.logo || 'assets/ui/logo.png')} alt="Pão Caseiro" className="w-full h-full object-contain" />
                                         </div>
                                         <p className="text-sm text-gray-500 uppercase tracking-widest font-bold">Padaria, Pastelaria e Café</p>
                                     </div>

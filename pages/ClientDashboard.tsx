@@ -36,65 +36,74 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
     useEffect(() => {
         window.scrollTo(0, 0);
         const checkUser = async () => {
-            const { data: { session } } = await authService.getSession();
+            try {
+                const { data: { session } } = await authService.getSession();
 
-            if (session) {
-                const su = session.user;
-                const email = su.email;
-                const authIdentifier = su.phone || email || su.id;
+                if (session) {
+                    const su = session.user;
+                    const email = su.email;
+                    const authIdentifier = su.phone || email || su.id;
 
-                // Sync with Hostinger
-                let customerRecord = await hostingerService.getCustomerByIdentifier(email || authIdentifier);
+                    // Sync with Hostinger
+                    let customerRecord = await hostingerService.getCustomerByIdentifier(email || authIdentifier);
 
-                if (!customerRecord && email) {
-                    const newCustomer = {
-                        id: su.id,
-                        contact_no: email,
-                        phone: email,
-                        name: su.name || su.full_name || email.split('@')[0],
-                        email: email,
-                        avatar_url: su.avatar_url || su.picture,
-                        updated_at: new Date().toISOString()
-                    };
-                    await hostingerService.saveCustomer(newCustomer);
-                    customerRecord = await hostingerService.getCustomerByIdentifier(email);
-                }
+                    if (!customerRecord && email) {
+                        const newCustomer = {
+                            id: su.id,
+                            contact_no: email,
+                            phone: email,
+                            name: su.name || su.full_name || email.split('@')[0],
+                            email: email,
+                            avatar_url: su.avatar_url || su.picture,
+                            updated_at: new Date().toISOString()
+                        };
+                        await hostingerService.saveCustomer(newCustomer);
+                        customerRecord = await hostingerService.getCustomerByIdentifier(email);
+                    }
 
-                const finalIdentifier = customerRecord?.contact_no || authIdentifier;
-                const isGoogle = !!su.email && !su.phone; 
-                
-                if (isGoogle && (!customerRecord?.contact_no || customerRecord.contact_no.includes('@'))) {
-                    setNeedsPhonePrompt(true);
-                }
+                    const finalIdentifier = customerRecord?.contact_no || authIdentifier;
+                    const isGoogle = !!su.email && !su.phone; 
+                    
+                    if (isGoogle && (!customerRecord?.contact_no || customerRecord.contact_no.includes('@'))) {
+                        setNeedsPhonePrompt(true);
+                    }
 
-                setUser({ ...su, phone: finalIdentifier, isGoogle });
-                fetchOrders(finalIdentifier);
+                    setUser({ ...su, phone: finalIdentifier, isGoogle });
+                    fetchOrders(finalIdentifier);
 
-                if (customerRecord) {
-                    setCustomerData(customerRecord);
-                    setEditData({
-                        name: customerRecord.name || '',
-                        email: customerRecord.email || '',
-                        date_of_birth: customerRecord.date_of_birth || '',
-                        address: customerRecord.address || '',
-                        street: customerRecord.street || '',
-                        reference_point: customerRecord.reference_point || '',
-                        nuit: customerRecord.nuit || '',
-                        whatsapp: customerRecord.whatsapp || ''
-                    });
-                    localStorage.setItem('pc_auth_phone', finalIdentifier);
-                    localStorage.setItem('pc_user_data', JSON.stringify(customerRecord));
-                    window.dispatchEvent(new Event('pc_user_update'));
-                }
-            } else {
-                const manualPhone = localStorage.getItem('pc_auth_phone');
-                if (manualPhone) {
-                    setUser({ phone: manualPhone, isManual: true });
-                    fetchOrders(manualPhone);
-                    fetchCustomerData(manualPhone);
+                    if (customerRecord) {
+                        setCustomerData(customerRecord);
+                        setEditData({
+                            name: customerRecord.name || '',
+                            email: customerRecord.email || '',
+                            date_of_birth: customerRecord.date_of_birth || '',
+                            address: customerRecord.address || '',
+                            street: customerRecord.street || '',
+                            reference_point: customerRecord.reference_point || '',
+                            nuit: customerRecord.nuit || '',
+                            whatsapp: customerRecord.whatsapp || ''
+                        });
+                        localStorage.setItem('pc_auth_phone', finalIdentifier);
+                        localStorage.setItem('pc_user_data', JSON.stringify(customerRecord));
+                        window.dispatchEvent(new Event('pc_user_update'));
+                    }
                 } else {
-                    navigate('/');
+                    const manualPhone = localStorage.getItem('pc_auth_phone');
+                    if (manualPhone) {
+                        setUser({ phone: manualPhone, isManual: true });
+                        fetchOrders(manualPhone);
+                        fetchCustomerData(manualPhone);
+                    } else {
+                        navigate('/');
+                    }
                 }
+            } catch (error) {
+                console.error("Auth check failed:", error);
+                // On failure, check if we have local storage as fallback
+                const manualPhone = localStorage.getItem('pc_auth_phone');
+                if (!manualPhone) navigate('/');
+            } finally {
+                setLoading(false);
             }
         };
         checkUser();
@@ -205,15 +214,12 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
     };
 
     const fetchOrders = async (phone: string | undefined) => {
-        if (!phone) { setLoading(false); return; }
-
+        if (!phone) return;
         try {
             const data = await hostingerService.getOrders({ customer_phone: phone });
             setOrders(data || []);
         } catch (error) {
             console.error('Error fetching past orders:', error);
-        } finally {
-            setLoading(false);
         }
     };
 
@@ -311,6 +317,8 @@ export const ClientDashboard: React.FC<{ language: Language }> = ({ language }) 
         setLoading(true);
         try {
             await hostingerService.saveCustomer({
+                id: customerData?.id || user?.id || `c_${Date.now()}`,
+                phone: user?.phone || editData.phone || '',
                 ...customerData,
                 name: editData.name,
                 email: editData.email || null,

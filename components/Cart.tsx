@@ -570,8 +570,9 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                 setError(errMsg);
             }
         } catch (e: any) {
+            console.error("Caught payment error in Cart.tsx:", e);
             setStep('payment');
-            setError('Erro de conexão com o sistema de pagamento.');
+            setError('Erro de conexão: ' + (e.message || 'Desconhecido'));
             await logAudit({
                 action: 'PAYMENT_FAILED',
                 entity_type: 'order',

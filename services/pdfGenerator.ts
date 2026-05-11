@@ -126,7 +126,7 @@ export const generateCustomerReceiptPDF = async (order: any, items: any[], compa
 
     // 1. Logo
     try {
-        const logoUrl = companyInfo.logo || (typeof window !== 'undefined' ? `${window.location.origin}/images/logo_receipt.png` : '/images/logo_receipt.png');
+        const logoUrl = companyInfo.logo || (typeof window !== 'undefined' ? `${window.location.origin}/assets/ui/logo.png` : '/assets/ui/logo.png');
         const logoBase64 = await getBase64ImageFromUrl(logoUrl);
         if (logoBase64) {
             pdf.addImage(logoBase64, 'PNG', (pageWidth - 30) / 2, currentY, 30, 30);
@@ -386,7 +386,7 @@ export const generateFormalInvoicePDF = async (order: any, items: any[], company
 
     // 1. Logo
     try {
-        const logoUrl = companyInfo.logo || (typeof window !== 'undefined' ? `${window.location.origin}/images/logo_receipt.png` : '/images/logo_receipt.png');
+        const logoUrl = companyInfo.logo || (typeof window !== 'undefined' ? `${window.location.origin}/assets/ui/logo.png` : '/assets/ui/logo.png');
         const logoBase64 = await getBase64ImageFromUrl(logoUrl);
         if (logoBase64) {
             pdf.addImage(logoBase64, 'PNG', (pageWidth - 35) / 2, currentY, 35, 35);

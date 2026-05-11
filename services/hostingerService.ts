@@ -3,7 +3,7 @@
 const IS_PROD = typeof window !== 'undefined' && !window.location.hostname.includes('localhost');
 const HOSTINGER_BRIDGE_URL = IS_PROD 
     ? 'https://paocaseiro.co.mz/paocaseiro_db.php' 
-    : 'http://localhost:8000/public/paocaseiro_db.php';
+    : 'http://localhost:8000/paocaseiro_db.php';
 
 console.log(`[Hostinger Service] Bridge URL: ${HOSTINGER_BRIDGE_URL}`);
 const HOSTINGER_API_KEY = 'PaoCaseiro_Direct_MySQL_2026';
@@ -460,7 +460,7 @@ export const hostingerService = {
     },
 
     async processPayment(payload: any) {
-        return this.fetch('process_payment', { payload });
+        return this.fetch('init_tx', { payload });
     },
 
     async uploadDriveFile(file: File, folderId?: string, uploadedBy?: string) {
@@ -504,6 +504,97 @@ export const hostingerService = {
              return `${IS_PROD ? 'https://paocaseiro.co.mz' : 'http://localhost:8000'}/images/products/${cleanPath}`;
         }
 
+        // If it's a UI/branding asset within the local repository (assets/ folder)
+        // These should always be served relative to the site root
+        if (cleanPath.startsWith('assets/')) {
+            return `/${cleanPath}`;
+        }
+
         return `${IS_PROD ? 'https://paocaseiro.co.mz' : 'http://localhost:8000'}/${cleanPath}`;
+    },
+
+    resolveProductImage(name: string, originalImage?: string): string {
+        const normalizedName = name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        
+        const mapping: Record<string, string> = {
+            'pao caseiro': 'pao-caseiro.png',
+            'pao de forma': 'pao-forma-simples.png',
+            'pao integral': 'pao-integral.png',
+            'pao de cereais': 'pao-cereais.png',
+            'pao portugues': 'pao-portugues.png',
+            'pao de hamburguer': 'pao-de-hamburguer.png',
+            'paozinho': 'paozinho-leite-dourado.png',
+            'croissant simples': 'croissants-simples.png',
+            'croissant de chocolate': 'croissants-chocolate.png',
+            'croissant folhado': 'croissant-folhado.png',
+            'croissant recheado': 'croissants-recheados.png',
+            'croissant': 'croissants-simples.png',
+            'pastel de nata': 'pastel-de-nata.png',
+            'pastel de coco': 'pastel-de-coco.png',
+            'bolo de arroz': 'bolo-arroz.png',
+            'bola de berlim': 'bola-berlim.png',
+            'queque': 'queques.png',
+            'palmier': 'palmier.png',
+            'arrofada': 'arrofadas.png',
+            'brioche': 'brioche-fruta.png',
+            'chamuca': 'chamussaS.png',
+            'chamussa': 'chamussaS.png',
+            'empada': 'empadas.png',
+            'rissois': 'rissois-camarao.png',
+            'coxinha': 'coxinhas.png',
+            'folhado de salsicha': 'folhado-salsicha.png',
+            'folhado de carne': 'folhados-carne.png',
+            'folhado': 'mini-folhados.png',
+            'pizza frango': 'pizza-frango.png',
+            'pizza atum': 'pizza-atum.png',
+            'pizza pepperoni': 'pizza-pepperoni.png',
+            'pizza mexicana': 'pizza-mexicana.png',
+            'mini pizza': 'mini-pizza.png',
+            'pizza': 'pizza-4-estacoes.png',
+            'hamburguer simples': 'hamburguer-simples.png',
+            'hamburguer completo': 'hamburguer-completo.png',
+            'cachorro quente': 'cachorro-quente.png',
+            'shawarma': 'shawarma-de-frango.png',
+            'batata frita': 'batata-frita.png',
+            'salada mista': 'salada-mista.png',
+            'salada tomate': 'salada-tomate-cebola.png',
+            'cafe': 'premium-coffee.png',
+            'cappuccino': 'cappuccino.png',
+            'chocolate quente': 'chocolate-quente.png',
+            'cha': 'cha-quente.png',
+            'agua': 'agua-namaacha-500ml.png',
+            'coca cola': 'coca-cola-300ml.png',
+            'coca-cola': 'coca-cola-300ml.png',
+            'fanta': 'fanta-laranja-300ml.png',
+            'sprite': 'sprite-300ml.png',
+            'compal': 'compal-300ml.png',
+            'bolo': 'cakes.png',
+            'torta': 'torta.png',
+            'pudim': 'pudim.png',
+            'waffle': 'waffle-stick.png',
+            'saco de torrada': 'sacos-de-torrada.png',
+            'ketchup': 'ketchup.png',
+            'maionese': 'maionese.png',
+            'molho picante': 'molho-picante.png'
+        };
+
+        for (const [key, image] of Object.entries(mapping)) {
+            if (normalizedName.includes(key)) {
+                return this.getPublicUrl(`assets/products/${image}`);
+            }
+        }
+
+        if (originalImage && originalImage.trim() !== '') {
+            if (originalImage.startsWith('http')) return originalImage;
+            
+            let cleanOriginal = originalImage.replace(/^\//, '');
+            // Se já tiver assets/products, não adiciona de novo
+            if (cleanOriginal.includes('assets/products')) {
+                return this.getPublicUrl(cleanOriginal);
+            }
+            return this.getPublicUrl(`assets/products/${cleanOriginal}`);
+        }
+        
+        return this.getPublicUrl('assets/products/pao-caseiro.png');
     }
 };

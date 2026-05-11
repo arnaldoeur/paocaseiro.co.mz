@@ -24,28 +24,28 @@ const SERVICES = [
         icon: Wheat,
         title: 'Padaria e Pastelaria',
         desc: 'Pães rústicos, bolos tradicionais e salgados frescos, feitos com dedicação diária.',
-        image: '/images/categories/Pao caseiro.png',
+        image: '/assets/products/pao-caseiro.png',
         categoryId: 'paes'
     },
     {
         icon: Cake,
         title: 'Confeitaria',
         desc: 'Doces finos, tortas artesanais e sobremesas personalizadas para momentos especiais.',
-        image: '/images/categories/Fatias Xadrez.png',
+        image: '/assets/products/fatias-xadrez.png',
         categoryId: 'doces-pastelaria'
     },
     {
         icon: Coffee,
         title: 'Café',
         desc: 'Bebidas quentes e frias, preparadas com grãos selecionados para um aroma incomparável.',
-        image: '/images/categories/Cafe quente.png',
+        image: '/assets/products/cafe-categoria.png',
         categoryId: 'cafes'
     },
     {
         icon: ShoppingBag,
         title: 'Lanches e Takeaway',
         desc: 'Opções práticas e deliciosas para quem não abre mão da qualidade no dia a dia.',
-        image: '/images/categories/cachoro quente completo.png',
+        image: '/assets/products/cachorro-quente.png',
         categoryId: 'lanches'
     }
 ];
@@ -55,55 +55,58 @@ const CLASSICS = [
         title: 'Pastéis de Nata',
         desc: 'A clássica doçura portuguesa, estaladiços por fora e cremosos por dentro.',
         price: '',
-        image: '/images/pastel_nata.png',
+        image: '/assets/products/pastel-de-nata.png',
         categoryId: 'doces-pastelaria'
     },
     {
         title: 'Pão de Cereais',
         desc: 'Uma opção saudável, rica em fibra e com um sabor inconfundível.',
         price: '',
-        image: '/images/products/pao-cereais.png',
+        image: '/assets/products/pao-cereais.png',
         categoryId: 'paes'
     },
     {
         title: 'Pão Integral',
         desc: 'O nosso pão integral clássico, fresco a toda a hora.',
         price: '',
-        image: '/images/products/pao-caseiro-fresh.png',
+        image: '/assets/products/pao-integral.png',
         categoryId: 'paes'
     },
     {
         title: 'Pão Caseiro',
         desc: 'Aquele pão rústico especial que toda a família adora.',
         price: '',
-        image: '/images/products/pao-caseiro-marcos.png',
+        image: '/assets/products/pao-caseiro.png',
         categoryId: 'paes'
     },
     {
         title: 'Croissants',
         desc: 'Folhados, recheados ou simples, sempre com a máxima qualidade.',
         price: '',
-        image: '/images/products/croissants-recheados.png',
+        image: '/assets/products/croissants-recheados.png',
         categoryId: 'folhados-salgados'
     },
     {
         title: 'Broa de Milho',
         desc: 'Broa densa e saborosa, feita com a melhor farinha de milho.',
         price: '',
-        image: '/images/products/broa-milho.png',
+        image: '/assets/products/broa-milho.png',
         categoryId: 'paes'
     }
 ];
 
 const DEFAULT_GALLERY_ITEMS = [
-    { src: '/images/products/croissant-folhado.png', caption: 'Croissant Folhado' },
-    { src: '/images/products/queques.png', caption: 'Queques Fofinhos' },
-    { src: '/images/products/rissois-camarao.png', caption: 'Rissóis de Camarão' },
-    { src: '/images/products/chamussas-mix.png', caption: 'Chamussas Crocantes' },
-    { src: '/images/products/folhado-carne.png', caption: 'Folhado de Carne' },
-    { src: '/images/products/pizza-mexicana.png', caption: 'Mini Pizza Mexicana' },
-    { src: '/images/products/torta.png', caption: 'Torta Caseira' },
-    { src: '/images/products/pudim.png', caption: 'Pudim de Ovos' },
+    { src: '/assets/products/pao-caseiro.png', caption: 'Pão Caseiro Tradicional' },
+    { src: '/assets/products/pao-cereais.png', caption: 'Pão de Cereais' },
+    { src: '/assets/products/pastel-de-nata.png', caption: 'Pastel de Nata' },
+    { src: '/assets/products/fatias-xadrez.png', caption: 'Fatias Xadrez' },
+    { src: '/assets/products/croissants-folhados.png', caption: 'Folhados e Croissants' },
+    { src: '/assets/products/queques.png', caption: 'Queques Caseiros' },
+    { src: '/assets/products/empadas.png', caption: 'Empadas' },
+    { src: '/assets/products/chamussaS.png', caption: 'Chamussas' },
+    { src: '/assets/products/pizza-frango.png', caption: 'Pizzas Artesanais' },
+    { src: '/assets/products/torta.png', caption: 'Tortas e Doces' },
+    { src: '/assets/products/cafe-categoria.png', caption: 'O Nosso Café' }
 ];
 
 export const Home: React.FC<HomeProps> = ({ language }) => {
@@ -113,8 +116,8 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
             try {
                 // Use Hostinger instead of legacy systems
                 await hostingerService.getProducts();
-                
-                
+
+
             } catch (e) {
                 // Silently fail
             }
@@ -145,19 +148,31 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
     useEffect(() => {
         const fetchGallery = async () => {
             try {
+                // Tenta carregar imagens específicas da galeria (se houver)
                 const data = await hostingerService.getGallery();
                 if (data && data.length > 0) {
                     setGalleryItems(data);
+                } else {
+                    // Fallback: Usa as fotos dos produtos ativos como galeria
+                    const products = await hostingerService.getProducts();
+                    if (products && products.length > 0) {
+                        const productGallery = products
+                            .filter((p: any) => p.image)
+                            .slice(0, 12) // Pega as primeiras 12 para não sobrecarregar
+                            .map((p: any) => ({
+                                src: hostingerService.resolveProductImage(p.name, p.image),
+                                caption: p.name
+                            }));
+                        if (productGallery.length > 0) {
+                            setGalleryItems(productGallery);
+                        }
+                    }
                 }
             } catch (err) {
                 console.error("Gallery fetch error:", err);
             }
         };
         fetchGallery();
-
-        // Polling as fallback for realtime
-        const interval = setInterval(fetchGallery, 60000); // 1 min
-        return () => clearInterval(interval);
     }, []);
 
 
@@ -166,7 +181,7 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
             videoRef.current.muted = false;
             videoRef.current.controls = true;
             videoRef.current.play().catch(e => console.error("Play failed:", e));
-            
+
             // Try to enter fullscreen if possible
             try {
                 if (videoRef.current.requestFullscreen) {
@@ -210,7 +225,7 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
         // Interaction listener for browsers that block autoplay until user clicks
         const handleFirstInteraction = () => {
             if (video && video.paused) {
-                video.play().catch(() => {});
+                video.play().catch(() => { });
             }
             window.removeEventListener('scroll', handleFirstInteraction);
             window.removeEventListener('click', handleFirstInteraction);
@@ -270,7 +285,7 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
 
             await sendSMS(adminPhone, smsMessage)
                 .catch(e => console.error("Contact SMS failed:", e));
-                
+
             await notifyAdminSystemsAlert(`Nova Mensagem de Contacto: ${formData.name}`, `Nome: ${formData.name}\nEmail: ${formData.email}\nTelefone: ${formData.phone}\n\nMensagem:\n${formData.message}`)
                 .catch(e => console.error("Contact WhatsApp Alert failed:", e));
 
@@ -305,10 +320,13 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
 
     const Logo = ({ className = "h-12" }: { className?: string }) => (
         <img
-            src="/logo_on_dark.png"
+            src={hostingerService.getPublicUrl("/assets/ui/logo.png")}
             alt="Pão Caseiro Logo"
             loading="lazy"
             className={`object-contain ${className}`}
+            onError={(e) => {
+                (e.target as HTMLImageElement).src = '/assets/ui/logo.png';
+            }}
         />
     );
 
@@ -343,16 +361,19 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
     return (
         <>
             {/* --- HERO SECTION --- */}
-            <section id="hero" className="relative min-h-screen flex items-center justify-center overflow-hidden pt-20">
+            <section id="hero" className="relative min-h-screen flex items-center justify-center overflow-hidden pt-14">
                 <div className="absolute inset-0 z-0">
-                    <img 
-                        src="/images/hero-bg-2.png" 
-                        alt="Hero Background" 
+                    <img
+                        src={hostingerService.getPublicUrl("/og-image.jpg")}
+                        alt="Hero Background"
                         className="w-full h-full object-cover"
                         fetchPriority="high"
                         loading="eager"
+                        onError={(e) => {
+                            (e.target as HTMLImageElement).src = '/og-image.jpg';
+                        }}
                     />
-                    <div className="absolute inset-0 bg-black/60" />
+                    <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/60 to-black/70 shadow-[inset_0_0_100px_rgba(0,0,0,0.5)]" />
                 </div>
 
                 <motion.div
@@ -416,7 +437,7 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                 <div className="absolute inset-0 z-0">
                     <video
                         ref={videoRef}
-                        poster="/images/video-placeholder.jpg"
+                        poster="/assets/ui/video-placeholder.jpg"
                         className="w-full h-full object-cover"
                         autoPlay
                         muted
@@ -462,18 +483,24 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
 
                             {/* Image 1 */}
                             <img
-                                src="/images/about-process.jpeg"
+                                src={hostingerService.getPublicUrl("/assets/ui/about-process.jpeg")}
                                 alt="Processo artesanal"
                                 loading="lazy"
                                 className="absolute top-0 left-0 w-[85%] h-[80%] object-cover object-bottom rounded-3xl shadow-xl z-10"
+                                onError={(e) => {
+                                    (e.target as HTMLImageElement).src = '/assets/ui/about-process.jpeg';
+                                }}
                             />
 
                             {/* Image 2 */}
                             <img
-                                src="/images/about-bread.jpeg"
+                                src={hostingerService.getPublicUrl("/assets/ui/about-bread.jpeg")}
                                 alt="Pão fresco"
                                 loading="lazy"
                                 className="absolute bottom-0 right-0 w-[55%] h-[45%] object-cover object-bottom rounded-3xl shadow-2xl border-4 border-[#f7f1eb] z-20"
+                                onError={(e) => {
+                                    (e.target as HTMLImageElement).src = '/assets/ui/about-bread.jpeg';
+                                }}
                             />
 
                             <div className="absolute top-10 right-0 bg-[#3b2f2f] text-[#f7f1eb] p-6 rounded-2xl shadow-lg max-w-[200px] z-30">
@@ -518,7 +545,7 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
             </section >
 
             {/* --- SERVICES SECTION --- */}
-            < section id="services" className="min-h-screen flex items-center py-20 bg-[#4b3a2f] text-[#f7f1eb] relative overflow-hidden bg-cover bg-center bg-no-repeat" style={{ backgroundImage: "url('/images/fundo-services.png')" }} >
+            < section id="services" className="min-h-screen flex items-center py-20 bg-[#4b3a2f] text-[#f7f1eb] relative overflow-hidden bg-cover bg-center bg-no-repeat" style={{ backgroundImage: `url('${hostingerService.getPublicUrl("/assets/ui/services-bg.png")}')` }} >
                 {/* Medium-dark overlay for better text readability against the image */}
                 <div className="absolute inset-0 bg-[#4b3a2f]/80" />
 
@@ -553,11 +580,14 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                                 </div>
                                 <div className="w-full h-56 overflow-hidden mt-auto relative">
                                     <div className="absolute inset-0 bg-gradient-to-t from-[#3b2f2f] to-transparent opacity-60 z-10" />
-                                    <img 
-                                        src={service.image} 
-                                        alt={service.title} 
-                                        loading="lazy" 
-                                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000 ease-out will-change-transform" 
+                                    <img
+                                        src={hostingerService.getPublicUrl(service.image)}
+                                        alt={service.title}
+                                        loading="lazy"
+                                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000 ease-out will-change-transform"
+                                        onError={(e) => {
+                                            (e.target as HTMLImageElement).src = service.image;
+                                        }}
                                     />
                                 </div>
                             </motion.div>
@@ -599,11 +629,14 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                             >
                                 <div className="h-80 relative overflow-hidden">
                                     <div className="absolute inset-0 bg-black/5 group-hover:bg-black/0 transition-colors duration-500 z-10" />
-                                    <img 
-                                        src={item.image} 
-                                        alt={item.title} 
-                                        loading="lazy" 
-                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-1000 ease-out will-change-transform" 
+                                    <img
+                                        src={hostingerService.getPublicUrl(item.image)}
+                                        alt={item.title}
+                                        loading="lazy"
+                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-1000 ease-out will-change-transform"
+                                        onError={(e) => {
+                                            (e.target as HTMLImageElement).src = item.image;
+                                        }}
                                     />
                                     <div className="absolute bottom-6 left-6 z-20">
                                         <div className="bg-[#3b2f2f]/90 backdrop-blur-md text-[#d9a65a] px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-widest shadow-xl">
@@ -653,10 +686,13 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                                 className="relative group rounded-3xl overflow-hidden shadow-lg border border-[#3b2f2f]/10 cursor-pointer bg-[#e5e5e5] flex-grow basis-full md:basis-[calc(50%-1.5rem)] lg:basis-[calc(33.333%-2rem)] aspect-square"
                             >
                                 <img
-                                    src={item.src}
+                                    src={hostingerService.getPublicUrl(item.src)}
                                     alt={item.caption}
                                     className="w-full h-full object-cover object-bottom transform transition-transform duration-700 group-hover:scale-110"
                                     loading="lazy"
+                                    onError={(e) => {
+                                        (e.target as HTMLImageElement).src = item.src;
+                                    }}
                                 />
 
                                 {/* Hover Overlay */}
@@ -770,7 +806,7 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                             <h3 className="font-serif text-4xl md:text-5xl mb-8 leading-tight">
                                 {(t.contact.visit.title || '').split(' ').slice(0, -1).join(' ')} <span className="text-[#d9a65a] italic">{(t.contact.visit.title || '').split(' ').pop()}</span>
                             </h3>
-                            
+
                             <div className="space-y-8">
                                 <div className="flex items-center gap-6 group">
                                     <div className="bg-[#3b2f2f] p-4 rounded-2xl text-[#d9a65a] group-hover:bg-[#d9a65a] group-hover:text-[#3b2f2f] transition-all duration-300 shadow-lg">

@@ -58,7 +58,10 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
         'Bebidas Quentes': 'Hot Drinks',
         'Bebidas Frias': 'Cold Drinks',
         'Refrescos': 'Soft Drinks',
-        'Sucos': 'Juices'
+        'Sucos': 'Juices',
+        'Lanches': 'Snacks',
+        'Extras': 'Extras',
+        'Refrigerantes': 'Soft Drinks'
     };
     const [quantities, setQuantities] = useState<{ [key: string]: number }>({});
     const [selectedProduct, setSelectedProduct] = useState<any | null>(null);
@@ -90,7 +93,7 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
 
             // Scroll spy for active category
             const sections = menuSections.map(s => document.getElementById(generateSlug(s.title)));
-            const scrollPosition = window.scrollY + 160; // Offset for Navbar (80) + StickyNav (64) + buffer
+            const scrollPosition = window.scrollY + 128; // Offset for Navbar (64) + StickyNav (48) + buffer
 
             for (let i = sections.length - 1; i >= 0; i--) {
                 const section = sections[i];
@@ -111,8 +114,8 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
         const id = generateSlug(title);
         const element = document.getElementById(id);
         if (element) {
-            // Offset for Navbar (80) + StickyNav (64) = 144
-            const y = element.getBoundingClientRect().top + window.scrollY - 144;
+            // Offset for Navbar (80) + StickyNav (48) = 128
+            const y = element.getBoundingClientRect().top + window.scrollY - 128;
             window.scrollTo({ top: y, behavior: 'smooth' });
             
             // Ensure section is expanded
@@ -146,35 +149,43 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
 
                         acc[cat].push({
                             name: product.name,
-                            price: product.price,
-                            image: product.image 
-                                ? (product.image.startsWith('http')) 
-                                    ? product.image 
-                                    : hostingerService.getPublicUrl(`images/${product.image.replace(/^\//, '')}`)
-                                : '',
+                            price: Number(product.price),
+                            image: hostingerService.resolveProductImage(product.name, product.image),
                             desc: product.description,
                             description_en: product.description_en,
                             name_en: product.name_en,
                             prepTime: product.prep_time,
                             deliveryTime: product.delivery_time,
-                            variations: typeof product.variations === 'string' ? JSON.parse(product.variations) : (product.variations || []),
-                            complements: typeof product.complements === 'string' ? JSON.parse(product.complements) : (product.complements || []),
+                            variations: (() => {
+                                try { return typeof product.variations === 'string' ? JSON.parse(product.variations) : (product.variations || []); } catch(e) { return []; }
+                            })(),
+                            complements: (() => {
+                                try { return typeof product.complements === 'string' ? JSON.parse(product.complements) : (product.complements || []); } catch(e) { return []; }
+                            })(),
                             unit: product.unit || 'un',
                             stock: product.stock_quantity || 0,
-                            isAvailable: product.is_available === false ? false : (product.stock_quantity > 0)
+                            isAvailable: product.is_available === false ? false : (Number(product.stock_quantity) > 0 || product.stock_quantity === null || product.stock_quantity === undefined)
                         });
                         return acc;
                     }, {});
 
-                    const newSections = Object.keys(grouped).map(title => ({
+                    // Merge DB data with translation categories to ensure all categories exist
+                    const translationSections = translations[language].menu.sections;
+                    const allCategoryTitles = Array.from(new Set([
+                        ...translationSections.map(s => s.title),
+                        ...Object.keys(grouped)
+                    ]));
+
+                    const newSections = allCategoryTitles.map(title => ({
                         title: title,
-                        items: grouped[title]
+                        items: grouped[title] || [] // Keep it even if empty to show the category
                     }));
 
                     const categoryOrder = [
                         'Pães', 'Folhados e Doces', 'Folhados & Salgados', 'Brioches', 
                         'Salgados', 'Fatias e Bolos', 'Bolos & Sobremesas', 'Bolos Inteiros/Encomenda',
-                        'Pizzas', 'Pizzas Grandes', 'Pizzas Médias', 'Lanches', 'Cafés', 'Bebidas'
+                        'Pizzas', 'Pizzas Grandes', 'Pizzas Médias', 'Lanches', 'Cafés', 'Bebidas',
+                        'Extras', 'Refrigerantes'
                     ];
 
                     const sortedSections = newSections.sort((a, b) => {
@@ -265,7 +276,7 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
                     if (element) {
                         clearInterval(scrollInterval);
                         // Custom scroll to handle fixed navbar offset (around 100px)
-                        const y = element.getBoundingClientRect().top + window.scrollY - 144;
+                        const y = element.getBoundingClientRect().top + window.scrollY - 128;
                         window.scrollTo({ top: y, behavior: 'smooth' });
                     } else if (attempts >= 10) {
                         clearInterval(scrollInterval);
@@ -317,7 +328,7 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
     const foodPattern = `data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cpath d='M30 20c-2.2-2.2-5.8-2.2-8 0s-2.2 5.8 0 8l8 8 8-8c2.2-2.2 2.2-5.8 0-8s-5.8-2.2-8 0z' stroke='%23d9a65a' stroke-opacity='0.4' stroke-width='1.5'/%3E%3Cpath d='M10 45c0-4.4 3.6-8 8-8s8 3.6 8 8v4H10v-4z M14 37v-3 M22 37v-3' stroke='%23d9a65a' stroke-opacity='0.4' stroke-width='1.5'/%3E%3Ccircle cx='50' cy='10' r='5' stroke='%23d9a65a' stroke-opacity='0.4' stroke-width='1.5'/%3E%3C/g%3E%3C/svg%3E`;
 
     return (
-        <div className={`min-h-screen bg-[#f7f1eb] pb-20 pt-20 relative ${showOverlay ? 'overflow-hidden max-h-screen' : ''}`}>
+        <div className={`min-h-screen bg-[#f7f1eb] pb-20 pt-16 relative ${showOverlay ? 'overflow-hidden max-h-screen' : ''}`}>
             <AnimatePresence>
                 {showOverlay && (
                     <ComingSoonOverlay 
@@ -402,9 +413,7 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
                 <>
                     {/* Sticky Category Nav */}
             <div 
-                className={`sticky top-20 z-[45] bg-[#f7f1eb]/95 backdrop-blur-md shadow-md border-b border-[#d9a65a]/20 transition-all duration-300 ${
-                    isSticky ? 'opacity-100 translate-y-0 h-16' : 'opacity-0 -translate-y-full h-0 pointer-events-none'
-                }`}
+                className="sticky top-16 z-[45] bg-[#f7f1eb]/95 backdrop-blur-md shadow-sm border-b-[0.5px] border-[#d9a65a]/20 py-3 mb-6 transition-all duration-300"
             >
                 <div className="max-w-7xl mx-auto px-4 h-full flex items-center gap-3 overflow-x-auto no-scrollbar scroll-smooth">
                     {menuSections.map((section) => (
@@ -594,12 +603,19 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
                                             <div
                                                 className="w-full sm:w-40 h-48 sm:h-32 shrink-0 rounded-2xl overflow-hidden relative flex items-center justify-center bg-gray-50/50 p-2"
                                             >
-                                                <img
-                                                    src={item.image}
-                                                    alt={(language === 'en') ? formatProductName(item.name_en || getEnglishProductName(item.name)) : formatProductName(item.name)}
-                                                    className={`w-full h-full object-contain object-center group-hover:scale-110 transition-transform duration-700 ${!item.isAvailable ? 'grayscale opacity-50' : ''}`}
-                                                    loading="lazy"
-                                                />
+                                                {item.image ? (
+                                                    <img
+                                                        src={item.image}
+                                                        alt={(language === 'en') ? formatProductName(item.name_en || getEnglishProductName(item.name)) : formatProductName(item.name)}
+                                                        className={`w-full h-full object-contain object-center group-hover:scale-110 transition-transform duration-700 ${!item.isAvailable ? 'grayscale opacity-50' : ''}`}
+                                                        loading="lazy"
+                                                        onError={(e) => {
+                                                            (e.target as HTMLImageElement).src = hostingerService.getPublicUrl('assets/products/pao-caseiro.png');
+                                                        }}
+                                                    />
+                                                ) : (
+                                                    <PlaceholderImage />
+                                                )}
                                                 
                                                 {!item.isAvailable && (
                                                     <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] flex items-center justify-center">
@@ -624,15 +640,15 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
                                                         </h3>
                                                         <span className="font-black text-lg text-[#d9a65a] shrink-0">
                                                             {item.price === 0 && item.variations && item.variations.length > 0
-                                                                ? `+${Math.min(...item.variations.map((v: any) => v.price))} MT`
+                                                                ? `+${Math.min(...item.variations.map((v: any) => Number(v.price)))} MT`
                                                                 : `${item.price} MT`}
                                                         </span>
                                                     </div>
 
                                                     <p className="text-xs text-gray-500 line-clamp-2 leading-relaxed">
                                                         {language === 'en'
-                                                            ? (item.description_en || getEnglishProductDesc(item.name) || item.desc)
-                                                            : item.desc}
+                                                            ? (item.description_en || getEnglishProductDesc(item.name) || item.desc || 'Freshly made with the best ingredients.')
+                                                            : (item.desc || 'Delicioso produto artesanal da Pão Caseiro, feito com carinho.')}
                                                     </p>
 
                                                     <div className="flex flex-wrap gap-2">

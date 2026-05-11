@@ -44,7 +44,7 @@ export const TVDisplay: React.FC = () => {
             {/* Header */}
             <header className="bg-[#2a2121] py-6 px-10 shadow-xl flex justify-between items-center z-10">
                 <div className="flex items-center gap-4">
-                    <img src="/logo.png" alt="Pão Caseiro" className="h-12 w-auto object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                    <img src={'/assets/ui/logo.png'} alt="Pão Caseiro" className="h-12 w-auto object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                     <h1 className="font-serif text-4xl text-[#d9a65a] font-bold tracking-widest uppercase">Pão Caseiro</h1>
                 </div>
                 <div className="text-[#d9a65a] text-2xl font-bold font-mono tracking-widest">

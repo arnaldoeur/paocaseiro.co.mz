@@ -47,14 +47,14 @@ export const TVTickets: React.FC<{ language?: Language }> = ({ language = 'pt' }
                 const settingsMap = settingsData?.reduce((acc: any, item: any) => ({ ...acc, [item.key]: item.value }), {}) || {};
                 
                 setCompany({
-                    logo_url: '/logo_on_dark.png',
+                    logo_url: '/assets/ui/logo.png',
                     office_name: settingsMap.office_name || 'Pão Caseiro',
                     slogan: settingsMap.slogan || 'O Sabor que Aquece o Coração'
                 });
             } catch (err) {
                 console.error("TVTickets: Error fetching branding:", err);
                 setCompany({
-                    logo_url: '/logo_on_dark.png',
+                    logo_url: '/assets/ui/logo.png',
                     office_name: 'Pão Caseiro',
                     slogan: 'O Sabor que Aquece o Coração'
                 });

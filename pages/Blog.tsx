@@ -253,7 +253,7 @@ export const Blog: React.FC<{ language: Language }> = ({ language }) => {
                                             />
                                         ) : (
                                             <img
-                                                src="/images/about-bread.jpeg"
+                                                src={hostingerService.getPublicUrl('assets/ui/about-bread.jpeg')}
                                                 alt={language === 'en' && post.title_en ? post.title_en : post.title}
                                                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
                                             />
@@ -333,7 +333,7 @@ export const Blog: React.FC<{ language: Language }> = ({ language }) => {
                             >
                                 <div className="absolute inset-0 bg-[#d9a65a]/5 bg-[url('/pattern.png')] bg-repeat opacity-10"></div>
                                 <div className="relative z-10">
-                                    <img src="/logo_on_dark.png" alt="Pão Caseiro" className="h-12 mx-auto mb-6 opacity-90" />
+                                    <img src={'/assets/ui/logo.png'} alt="Pão Caseiro" className="h-12 mx-auto mb-6 opacity-90" />
                                     <p className="text-[#f7f1eb]/80 text-sm leading-relaxed mb-6">
                                         Subscreva a nossa newsletter para receber novidades, ofertas exclusivas e atualizações diretamente no seu email.
                                     </p>

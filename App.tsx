@@ -163,7 +163,7 @@ const MaintenanceGuard: React.FC<{ children: React.ReactNode, language: Language
         >
           {/* Animated Logo */}
           <motion.img 
-            src="/images/logo-official.png" 
+            src="/assets/ui/logo.png" 
             alt="Pão Caseiro Logo" 
             className="w-40 md:w-48 h-auto mb-6 drop-shadow-2xl"
             animate={{ y: [0, -8, 0] }}

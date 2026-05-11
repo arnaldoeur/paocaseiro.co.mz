@@ -22,7 +22,7 @@
   <meta property="og:title" content="Pão Caseiro | O sabor que aquece o coração">
   <meta property="og:description"
     content="Descubra a Pão Caseiro, a melhor padaria em Lichinga, no Niassa. Pão fresco todos os dias, pastelaria de excelência e facilidade em encomendas online.">
-  <meta property="og:image" content="https://paocaseiro.co.mz/images/og-image.jpg">
+  <meta property="og:image" content="https://paocaseiro.co.mz/assets/ui/og-image.jpg">
 
   <!-- Twitter -->
   <meta property="twitter:card" content="summary_large_image">
@@ -30,7 +30,7 @@
   <meta property="twitter:title" content="Pão Caseiro | O sabor que aquece o coração">
   <meta property="twitter:description"
     content="Descubra a Pão Caseiro, a melhor padaria em Lichinga, no Niassa. Pão fresco todos os dias, pastelaria de excelência e facilidade em encomendas online.">
-  <meta property="twitter:image" content="https://paocaseiro.co.mz/images/og-image.jpg">
+  <meta property="twitter:image" content="https://paocaseiro.co.mz/assets/ui/og-image.jpg">
 
   <!-- Performance Optimizations -->
 
@@ -43,7 +43,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
 
-  <link rel="icon" type="image/png" href="/logo_on_dark.png">
+  <link rel="icon" type="image/png" href="/assets/ui/logo.png">
   <style>
     html {
       scroll-behavior: smooth;
@@ -101,6 +101,15 @@
 
     .thin-scrollbar::-webkit-scrollbar-thumb:hover {
       background: rgba(217, 166, 90, 0.6);
+    }
+
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
     }
 
     .food-pattern {

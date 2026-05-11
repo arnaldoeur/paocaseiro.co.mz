@@ -109,7 +109,7 @@ export const ITSupport: React.FC = () => {
             }
 
             // Messages
-            const msgsResult = await hostingerService.getContactMessages('all');
+            const msgsResult = await hostingerService.getContactMessages();
             const msgs = msgsResult.success ? msgsResult.data : [];
             if (msgs) {
                 setMessages(msgs);

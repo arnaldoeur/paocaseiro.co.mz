@@ -6,6 +6,8 @@ import { translations, Language } from '../translations';
 import { ClientLoginModal } from './ClientLoginModal';
 import { authService } from '../services/authService';
 import { sendWelcomeEmail, sendAdminNewUserNotification } from '../services/email';
+import { hostingerService } from '../services/hostingerService';
+
 
 interface NavItem {
   id: string;
@@ -134,9 +136,9 @@ export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
       return () => window.removeEventListener('open_pc_login', handleOpenLogin);
     }, []);
 
-  const Logo = ({ className = "h-12", variant = 'light' }: { className?: string, variant?: 'light' | 'dark' }) => (
+  const Logo = ({ className = "h-12" }: { className?: string }) => (
     <img
-      src={variant === 'light' ? "/logo_on_light.png" : "/logo_on_dark.png"}
+      src="/assets/ui/logo.png"
       alt="Pão Caseiro Logo"
       className={`object-contain ${className}`}
     />
@@ -146,7 +148,7 @@ export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
 
   return (
     <>
-      <nav className="fixed top-0 left-0 right-0 z-50 bg-[#f7f1eb]/90 backdrop-blur-md shadow-sm border-b border-[#3b2f2f]/5 h-20 flex items-center">
+      <nav className="fixed top-0 left-0 right-0 z-50 bg-[#f7f1eb]/95 backdrop-blur-md shadow-sm border-b border-[#3b2f2f]/5 h-20 flex items-center">
         <div className="container mx-auto px-6 flex justify-between lg:grid lg:grid-cols-3 items-center">
           {/* Left: Logo & Language */}
           <div className="flex items-center justify-start gap-4">
@@ -270,7 +272,7 @@ export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
               <X className="w-8 h-8" />
             </button>
 
-            <Logo className="h-20 mb-4" variant="dark" />
+            <Logo className="h-20 mb-4" />
 
             {NAV_ITEMS.map((item) => {
               const isActive = (item.id === 'hero' && location.pathname === '/') || 

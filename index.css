@@ -1,6 +1,4 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
 @layer base {
   html {
@@ -9,11 +7,11 @@
 }
 
 .hero-bg-section {
-    background-image: url("/images/hero-bg-2.png");
+    background-image: url("/assets/ui/hero-bg.png");
 }
 
 .hero-background-overlay {
-    background-image: url("/images/hero-bg-2.png");
+    background-image: url("/assets/ui/hero-bg.png");
 }
 
 .chart-bar-dynamic {

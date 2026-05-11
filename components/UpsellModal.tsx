@@ -90,7 +90,7 @@ export const UpsellModal: React.FC<UpsellModalProps> = ({ isOpen, onClose, langu
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         onClick={onClose}
-                        className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4 pt-20"
+                        className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4 pt-16"
                     >
                         <motion.div
                             initial={{ scale: 0.9, opacity: 0, y: 20 }}
@@ -201,12 +201,12 @@ export const UpsellModal: React.FC<UpsellModalProps> = ({ isOpen, onClose, langu
                                                     <div key={idx} className="flex gap-4 p-3 bg-white rounded-xl shadow-sm border border-gray-100 hover:border-[#d9a65a]/40 transition-all items-center">
                                                         <div className="w-16 h-16 rounded-lg overflow-hidden relative shrink-0 flex items-center justify-center">
                                                             <img 
-                                                                src={item?.image || '/images/pao_caseiro.png'} 
+                                                                src={item?.image || '/assets/products/pao-caseiro.png'} 
                                                                 alt={formatProductName(item?.name)} 
                                                                 className="w-full h-full object-contain object-center p-1 group-hover:scale-105 transition-transform"
                                                                 onError={(e) => {
                                                                     e.currentTarget.onerror = null;
-                                                                    e.currentTarget.src = '/images/pao_caseiro.png';
+                                                                    e.currentTarget.src = '/assets/products/pao-caseiro.png';
                                                                 }}
                                                             />
                                                         </div>

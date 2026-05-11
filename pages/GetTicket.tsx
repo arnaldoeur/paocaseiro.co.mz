@@ -30,14 +30,14 @@ export const GetTicket: React.FC<{ language?: Language }> = ({ language = 'pt' }
                 const settingsMap = settingsData?.reduce((acc: any, item: any) => ({ ...acc, [item.key]: item.value }), {}) || {};
                 
                 setCompany({
-                    logo_url: settingsMap.logo_url || '/logo_on_dark.png',
+                    logo_url: settingsMap.logo_url || '/assets/ui/logo.png',
                     office_name: settingsMap.office_name || 'Pão Caseiro',
                     slogan: settingsMap.slogan || 'O Sabor que Aquece o Coração'
                 });
             } catch (err) {
                 console.error("Error fetching branding:", err);
                 setCompany({
-                    logo_url: '/logo_on_dark.png',
+                    logo_url: '/assets/ui/logo.png',
                     office_name: 'Pão Caseiro',
                     slogan: 'O Sabor que Aquece o Coração'
                 });
@@ -167,7 +167,7 @@ export const GetTicket: React.FC<{ language?: Language }> = ({ language = 'pt' }
                 <motion.img 
                     initial={{ opacity: 0, scale: 0.8 }} 
                     animate={{ opacity: 1, scale: 1 }} 
-                    src={company?.logo_url || "/logo.png"} 
+                    src={company?.logo_url} 
                     alt={company?.office_name || "Pão Caseiro"} 
                     className="h-20 w-auto object-contain mb-6 filter drop-shadow-[0_0_30px_rgba(255,255,255,0.1)]" 
                 />
