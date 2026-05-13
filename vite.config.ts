@@ -12,13 +12,27 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 3000,
       host: '0.0.0.0',
-      proxy: proxyConfig,
+      strictPort: true,
+      proxy: {
+        '/paocaseiro_db.php': {
+          target: 'http://localhost:8000',
+          changeOrigin: true,
+          secure: false
+        }
+      },
       allowedHosts: true
     },
     preview: {
       port: 3000,
       host: '0.0.0.0',
-      proxy: proxyConfig,
+      strictPort: true,
+      proxy: {
+        '/paocaseiro_db.php': {
+          target: 'http://localhost:8000',
+          changeOrigin: true,
+          secure: false
+        }
+      },
       allowedHosts: true
     },
     plugins: [

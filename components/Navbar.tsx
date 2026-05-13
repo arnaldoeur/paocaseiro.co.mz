@@ -207,22 +207,21 @@ export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
               <button
                 onClick={() => navigate('/dashboard')}
                 title={t.nav.myAccount}
-                className="flex items-center gap-2 text-[#3b2f2f] px-4 py-2 rounded-full font-bold hover:bg-[#d9a65a]/10 transition-all border border-[#d9a65a]/20 bg-[#d9a65a]/5 group"
+                className="flex items-center gap-2 text-[#3b2f2f] px-5 py-2.5 rounded-full font-bold hover:bg-[#d9a65a] hover:text-white transition-all border border-[#d9a65a]/30 bg-white shadow-sm group active:scale-95"
                 aria-label={t.nav.myAccount}
               >
-                <User className="w-5 h-5 text-[#d9a65a]" />
+                <div className="w-6 h-6 rounded-full bg-[#d9a65a]/10 group-hover:bg-white/20 flex items-center justify-center transition-colors">
+                  <User className="w-4 h-4 text-[#d9a65a] group-hover:text-white" />
+                </div>
                 <span className="hidden xl:inline">{t.nav.myAccount}</span>
               </button>
             ) : (
-              // Not logged in -> Show Login button
               <button
-                onClick={() => {
-                  setIsLoginModalOpen(true);
-                }}
+                onClick={() => setIsLoginModalOpen(true)}
                 title={t.nav.login}
-                className="flex items-center justify-center h-10 px-4 bg-white hover:bg-gray-50 text-[#3b2f2f] rounded-full transition-colors border border-[#d9a65a]/30 shadow-sm font-bold text-sm"
+                className="flex items-center justify-center h-11 px-6 bg-[#3b2f2f] hover:bg-[#d9a65a] text-white hover:text-[#3b2f2f] rounded-full transition-all shadow-md font-black text-xs uppercase tracking-widest active:scale-95"
               >
-                <User size={18} className="mr-2 text-[#d9a65a]" />
+                <User size={16} className="mr-2" />
                 {t.nav.login}
               </button>
             )}

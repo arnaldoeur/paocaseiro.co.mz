@@ -11,6 +11,7 @@
     "cap:open:android": "npx cap open android",
     "cap:open:ios": "npx cap open ios",
     "start": "node server.js",
+    "bridge": "php -S localhost:8000 -t public",
     "postinstall": "npm run build",
     "test": "vitest run",
     "test:watch": "vitest",

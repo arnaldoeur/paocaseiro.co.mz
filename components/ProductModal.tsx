@@ -157,7 +157,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                             </div>
 
                             {/* Details Section (Right/Bottom) */}
-                            <div className="md:w-1/2 flex flex-col bg-white h-full max-h-[60vh] md:max-h-full">
+                            <div className="md:w-1/2 flex flex-col bg-white h-full max-h-[60vh] md:max-h-full relative">
                                 {/* Scrollable Content */}
                                 <div className="flex-1 overflow-y-auto p-6 md:p-10 pb-32">
                                     <div className="flex justify-between items-start mb-4">
@@ -258,59 +258,68 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                                     </div>
                                 </div>
 
-                                {/* Footer Actions - Fixed at Bottom */}
-                                <div className="absolute xl:relative xl:bottom-0 bottom-0 left-0 w-full p-6 border-t border-gray-100 bg-white">
-                                {isAfterLaunch ? (
-                                    <div className="flex items-stretch gap-4 h-16">
-                                        {/* Quantity */}
-                                        <div className="flex items-center bg-[#f7f1eb] rounded-xl px-1 shadow-sm border border-[#e5dcd3]">
-                                            <button
-                                                onClick={() => setQuantity(q => Math.max(1, q - 1))}
-                                                className="w-12 h-full flex items-center justify-center text-[#3b2f2f] hover:text-[#d9a65a] transition-colors text-2xl font-bold active:scale-95 transform"
-                                            >
-                                                <Minus className="w-5 h-5" />
-                                            </button>
-                                            <div className="w-12 h-8 flex items-center justify-center bg-white rounded-lg shadow-inner">
-                                                <span className="text-center font-bold text-xl text-[#3b2f2f]">{quantity}</span>
-                                            </div>
-                                            <button
-                                                onClick={() => setQuantity(q => q + 1)}
-                                                className="w-12 h-full flex items-center justify-center text-[#3b2f2f] hover:text-[#d9a65a] transition-colors text-2xl font-bold active:scale-95 transform"
-                                            >
-                                                <Plus className="w-5 h-5" />
-                                            </button>
-                                        </div>
-
-                                        {/* Add Button */}
-                                        <motion.button
-                                            whileHover={{ scale: canAdd ? 1.02 : 1 }}
-                                            whileTap={{ scale: canAdd ? 0.98 : 1 }}
-                                            onClick={handleAdd}
-                                            disabled={!canAdd}
-                                            className={`
-                                                flex-1 rounded-xl font-bold uppercase tracking-wide flex flex-col items-center justify-center transition-all shadow-lg py-1
-                                                ${canAdd
-                                                    ? 'bg-[#3b2f2f] text-white hover:bg-[#2c2222]'
-                                                    : 'bg-gray-100 text-gray-400 cursor-not-allowed shadow-none'
-                                                }
-                                            `}
-                                        >
-                                            <div className="flex items-center gap-2">
-                                                <ShoppingBag className="w-5 h-5" />
-                                                <span className="text-lg">
-                                                    {language === 'pt' ? 'Adicionar ao Carrinho' : 'Add to Cart'}
-                                                </span>
-                                            </div>
-
-                                            {canAdd && (
-                                                <div className="text-[#d9a65a] text-base font-bold leading-none mt-1">
-                                                    {(currentPrice * quantity)} MT
+                                {/* Footer Actions - Contained at bottom of details */}
+                                <div className="relative md:mt-auto w-full p-6 border-t border-gray-100 bg-white z-10">
+                                    {isAfterLaunch ? (
+                                        <div className="flex flex-col sm:flex-row items-stretch gap-4">
+                                            {/* Quantity Selector */}
+                                            <div className="flex items-center justify-between bg-[#f7f1eb] rounded-2xl px-2 py-1 shadow-sm border border-[#e5dcd3] sm:w-auto">
+                                                <button
+                                                    onClick={() => setQuantity(q => Math.max(1, q - 1))}
+                                                    className="w-10 h-10 flex items-center justify-center text-[#3b2f2f] hover:text-[#d9a65a] transition-colors"
+                                                    aria-label="Decrease quantity"
+                                                >
+                                                    <Minus className="w-5 h-5" />
+                                                </button>
+                                                <div className="w-10 flex items-center justify-center">
+                                                    <span className="font-bold text-xl text-[#3b2f2f]">{quantity}</span>
                                                 </div>
-                                            )}
-                                        </motion.button>
-                                    </div>
-                                ) : (
-                                    <div className="bg-[#3b2f2f] text-[#d9a65a] rounded-xl py-4 px-6 flex items-center justify-center gap-3 shadow-lg border border-[#d9a65a]/20">
+                                                <button
+                                                    onClick={() => setQuantity(q => q + 1)}
+                                                    className="w-10 h-10 flex items-center justify-center text-[#3b2f2f] hover:text-[#d9a65a] transition-colors"
+                                                    aria-label="Increase quantity"
+                                                >
+                                                    <Plus className="w-5 h-5" />
+                                                </button>
+                                            </div>
+
+                                            {/* Add to Cart Button */}
+                                            <motion.button
+                                                whileHover={{ scale: canAdd ? 1.01 : 1 }}
+                                                whileTap={{ scale: canAdd ? 0.98 : 1 }}
+                                                onClick={handleAdd}
+                                                disabled={!canAdd}
+                                                className={`
+                                                    flex-1 rounded-2xl font-bold transition-all shadow-xl flex items-center justify-between px-6 py-4 min-h-[64px]
+                                                    ${canAdd
+                                                        ? 'bg-[#3b2f2f] text-white cursor-pointer hover:bg-[#2c2222] shadow-[#3b2f2f]/20'
+                                                        : 'bg-gray-100 text-gray-400 cursor-not-allowed shadow-none'
+                                                    }
+                                                `}
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <div className={`p-2 rounded-lg ${canAdd ? 'bg-[#d9a65a]/20' : 'bg-gray-200'}`}>
+                                                        <ShoppingBag className={`w-5 h-5 ${canAdd ? 'text-[#d9a65a]' : 'text-gray-400'}`} />
+                                                    </div>
+                                                    <span className="text-sm md:text-base font-black uppercase tracking-wider">
+                                                        {language === 'pt' ? 'Adicionar' : 'Add to Cart'}
+                                                    </span>
+                                                </div>
+
+                                                {canAdd && (
+                                                    <div className="flex flex-col items-end border-l border-white/10 pl-4">
+                                                        <span className="text-[#d9a65a] text-lg font-black leading-none">
+                                                            {(currentPrice * quantity)} MT
+                                                        </span>
+                                                        <span className="text-white/40 text-[10px] uppercase tracking-tighter mt-0.5 font-bold">
+                                                            {language === 'pt' ? 'Confirmar' : 'Total'}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                            </motion.button>
+                                        </div>
+                                    ) : (
+                                        <div className="bg-[#3b2f2f] text-[#d9a65a] rounded-xl py-4 px-6 flex items-center justify-center gap-3 shadow-lg border border-[#d9a65a]/20">
                                         <div className="w-10 h-10 bg-[#d9a65a] rounded-full flex items-center justify-center text-[#3b2f2f]">
                                             <ShoppingBag size={20} />
                                         </div>

@@ -285,9 +285,9 @@ try {
             $customerId = $o['customer_id'] ?? $pdo->lastInsertId();
 
             // 2. Insert/Update Order
-            $sql = "INSERT INTO orders (id, short_id, customer_id, customer_name, customer_phone, customer_email, total_amount, status, delivery_type, delivery_address, notes, payment_method, payment_status, estimated_ready_at) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ON DUPLICATE KEY UPDATE status=VALUES(status), payment_status=VALUES(payment_status), notes=VALUES(notes), estimated_ready_at=VALUES(estimated_ready_at)";
+            $sql = "INSERT INTO orders (id, short_id, customer_id, customer_name, customer_phone, customer_email, total_amount, status, delivery_type, delivery_address, notes, payment_method, payment_status, payment_reference, transaction_id, estimated_ready_at) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE status=VALUES(status), payment_status=VALUES(payment_status), payment_reference=VALUES(payment_reference), transaction_id=VALUES(transaction_id), notes=VALUES(notes), estimated_ready_at=VALUES(estimated_ready_at)";
             
             $stmt = $pdo->prepare($sql);
             $stmt->execute([
@@ -304,6 +304,8 @@ try {
                 $o['notes'] ?? null,
                 $o['payment_method'] ?? 'cash',
                 $o['payment_status'] ?? 'pending',
+                $o['payment_reference'] ?? $o['payment_ref'] ?? null,
+                $o['transaction_id'] ?? null,
                 $o['estimated_ready_at'] ?? null
             ]);
 
@@ -1127,11 +1129,13 @@ try {
             'receipt_no' => $r['receipt_no'] ?? ('PC-'.date('Ymd').'-'.rand(100,999)),
             'order_id' => $r['order_id'] ?? null,
             'customer_id' => $r['customer_id'] ?? null,
-            'amount' => $r['amount'] ?? 0,
+            'customer_name' => $r['customer_name'] ?? null,
+            'amount' => $r['amount'] ?? $r['total_amount'] ?? 0,
             'payment_method' => $r['payment_method'] ?? 'cash',
             'cashier_id' => $r['cashier_id'] ?? null,
             'items' => (is_array($r['items'] ?? null) || is_object($r['items'] ?? null)) ? json_encode($r['items']) : ($r['items'] ?? '[]'),
             'tax_amount' => $r['tax_amount'] ?? 0,
+            'document_type' => $r['document_type'] ?? 'Receipt',
             'status' => $r['status'] ?? 'paid'
         ];
 
@@ -1570,6 +1574,7 @@ try {
             curl_close($ch);
 
             if ($err) {
+                error_log("PaySuite CURL Error: " . $err);
                 echo json_encode([
                     "success" => false,
                     "message" => "cURL Error: " . $err
@@ -1582,6 +1587,7 @@ try {
                         "data" => $decoded ? $decoded : ["raw_response" => $response, "status" => "PENDING"]
                     ]);
                 } else {
+                    error_log("PaySuite API Error (HTTP $httpCode): " . $response);
                     echo json_encode([
                         "success" => false,
                         "message" => "Erro da PaySuite (HTTP $httpCode)",

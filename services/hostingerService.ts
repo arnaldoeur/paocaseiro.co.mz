@@ -1,9 +1,9 @@
 // services/hostingerService.ts
 
 const IS_PROD = typeof window !== 'undefined' && !window.location.hostname.includes('localhost');
-const HOSTINGER_BRIDGE_URL = IS_PROD 
-    ? 'https://paocaseiro.co.mz/paocaseiro_db.php' 
-    : 'http://localhost:8000/paocaseiro_db.php';
+const HOSTINGER_BRIDGE_URL = (typeof window !== 'undefined' && (window.location.protocol === 'http:' || window.location.protocol === 'https:'))
+    ? '/paocaseiro_db.php'
+    : 'https://paocaseiro.co.mz/paocaseiro_db.php';
 
 console.log(`[Hostinger Service] Bridge URL: ${HOSTINGER_BRIDGE_URL}`);
 const HOSTINGER_API_KEY = 'PaoCaseiro_Direct_MySQL_2026';
@@ -25,39 +25,51 @@ export interface HostingerOrderData {
 }
 
 export const hostingerService = {
-    async fetch(action: string, body: any = {}) {
-        try {
-            const response = await fetch(`${HOSTINGER_BRIDGE_URL}?action=${action}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${HOSTINGER_API_KEY}`
-                },
-                body: JSON.stringify({ action, ...body })
-            });
+    async fetch(action: string, body: any = {}, retryCount = 1) {
+        let lastError: any;
+        for (let i = 0; i <= retryCount; i++) {
+            try {
+                const response = await fetch(`${HOSTINGER_BRIDGE_URL}?action=${action}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${HOSTINGER_API_KEY}`,
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: JSON.stringify({ action, ...body })
+                });
 
-            const data = await response.json().catch(() => null);
+                const data = await response.json().catch(() => null);
 
-            if (!response.ok) {
-                const errorMessage = data?.error || data?.message || `HTTP error! status: ${response.status}`;
-                throw new Error(errorMessage);
+                if (!response.ok) {
+                    const errorMessage = data?.error || data?.message || `HTTP error! status: ${response.status}`;
+                    throw new Error(errorMessage);
+                }
+
+                if (data && data.error) {
+                    throw new Error(data.error);
+                }
+                
+                if (data && data.statusCode && data.statusCode >= 400 && data.message) {
+                    throw new Error(`Email Service Error: ${data.message}`);
+                }
+
+                return data;
+            } catch (error: any) {
+                lastError = error;
+                const isNetworkError = error.message.includes('Failed to fetch') || error.message.includes('NetworkError') || error.message.includes('network');
+                
+                if (isNetworkError && i < retryCount) {
+                    console.warn(`[Hostinger Service] Network failure on ${action}. Retrying... (${i + 1}/${retryCount})`);
+                    await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1))); // Exponential backoff
+                    continue;
+                }
+                
+                console.error(`Hostinger Service Error [${action}]:`, error);
+                throw error;
             }
-
-            // Check for generic error in successful response
-            if (data && data.error) {
-                throw new Error(data.error);
-            }
-            
-            // Check for Resend API errors (which use statusCode and message)
-            if (data && data.statusCode && data.statusCode >= 400 && data.message) {
-                throw new Error(`Email Service Error: ${data.message}`);
-            }
-
-            return data;
-        } catch (error: any) {
-            console.error(`Hostinger Service Error [${action}]:`, error);
-            throw error;
         }
+        throw lastError;
     },
 
     // --- PRODUTOS ---

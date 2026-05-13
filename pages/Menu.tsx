@@ -164,8 +164,9 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
                                 try { return typeof product.complements === 'string' ? JSON.parse(product.complements) : (product.complements || []); } catch(e) { return []; }
                             })(),
                             unit: product.unit || 'un',
-                            stock: product.stock !== undefined ? parseInt(product.stock) : (product.stock_quantity || 0),
-                            isAvailable: product.status === 'AVAILABLE' || product.is_available === true || (product.status !== 'UNAVAILABLE' && product.is_available !== false),
+                            stock: product.stock_quantity !== undefined ? Number(product.stock_quantity) : (product.stock !== undefined ? Number(product.stock) : 0),
+                            isAvailable: (product.status === 'AVAILABLE' || Number(product.is_available) === 1 || Number(product.inStock) === 1) || 
+                                        (product.status !== 'UNAVAILABLE' && product.is_available !== '0' && product.is_available !== 0 && product.inStock !== '0' && product.inStock !== 0),
                             isSpecial: false
                         });
                         return acc;
@@ -225,8 +226,8 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
 
         fetchMenu();
 
-        // Refresh menu every 5 minutes to check for stock/availability changes
-        const interval = setInterval(fetchMenu, 300000);
+        // Refresh menu every 30 seconds to check for stock/availability changes
+        const interval = setInterval(fetchMenu, 30000);
         return () => clearInterval(interval);
     }, [language]);
 
@@ -647,7 +648,7 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
                                                         </span>
                                                     </div>
 
-                                                    <p className="text-xs text-gray-500 line-clamp-2 leading-relaxed">
+                                                    <p className="text-xs text-gray-500 line-clamp-2 leading-relaxed h-10">
                                                         {language === 'en'
                                                             ? (item.description_en || getEnglishProductDesc(item.name) || item.desc || 'Freshly made with the best ingredients.')
                                                             : (item.desc || 'Delicioso produto artesanal da Pão Caseiro, feito com carinho.')}
@@ -655,19 +656,19 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
 
                                                     <div className="flex flex-wrap gap-2">
                                                         {item.prepTime && (
-                                                            <div className="flex items-center gap-1.5 px-2 py-1 bg-[#f7f1eb] rounded-lg text-[9px] font-black text-[#d9a65a] uppercase tracking-tighter">
-                                                                <Clock className="w-3 h-3" /> {item.prepTime}
+                                                            <div className="flex items-center gap-1 px-2 py-0.5 bg-[#f7f1eb] rounded-md text-[9px] font-black text-[#d9a65a] uppercase tracking-tighter border border-[#d9a65a]/10">
+                                                                <Clock className="w-2.5 h-2.5" /> {item.prepTime}
                                                             </div>
                                                         )}
                                                         {item.isAvailable && (
-                                                            <div className="flex items-center gap-1.5 px-2 py-1 bg-green-50 rounded-lg text-[9px] font-black text-green-600 uppercase tracking-tighter">
-                                                                <ShoppingBag className="w-3 h-3" /> {item.stock} {language === 'pt' ? 'Disponíveis' : 'In Stock'}
+                                                            <div className="flex items-center gap-1 px-2 py-0.5 bg-green-50 rounded-md text-[9px] font-black text-green-600 uppercase tracking-tighter border border-green-100">
+                                                                <ShoppingBag className="w-2.5 h-2.5" /> {item.stock} {language === 'pt' ? 'Disponíveis' : 'In Stock'}
                                                             </div>
                                                         )}
                                                     </div>
                                                 </div>
 
-                                                <div className="flex items-center justify-end mt-4 sm:mt-0 pt-2 border-t border-gray-50 sm:border-none">
+                                                <div className="flex items-center justify-end mt-4 sm:mt-1 pt-3 border-t border-gray-50 sm:border-none">
                                                     {item.isAvailable ? (
                                                         isAfterLaunch ? (
                                                             <button
@@ -675,17 +676,17 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
                                                                     e.stopPropagation();
                                                                     addToOrder(item);
                                                                 }}
-                                                                className="flex items-center gap-2 bg-[#3b2f2f] text-[#d9a65a] px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-[#d9a65a] hover:text-[#3b2f2f] transition-all shadow-lg active:scale-95 group-hover:shadow-[#d9a65a]/20"
+                                                                className="flex items-center gap-2 bg-[#3b2f2f] text-white px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-[#d9a65a] hover:text-[#3b2f2f] transition-all shadow-md active:scale-95 group-hover:shadow-lg group-hover:shadow-[#d9a65a]/10"
                                                             >
                                                                 <Plus className="w-4 h-4" /> {language === 'pt' ? 'Adicionar' : 'Add'}
                                                             </button>
                                                         ) : (
-                                                            <div className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-400 rounded-xl text-[10px] font-black uppercase tracking-widest border border-gray-200 cursor-help" title={language === 'pt' ? 'Encomendas abrem em breve' : 'Ordering opens soon'}>
-                                                                <Clock className="w-3 h-3" /> {language === 'pt' ? 'Em breve' : 'Soon'}
+                                                            <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 text-gray-400 rounded-xl text-[10px] font-black uppercase tracking-widest border border-gray-200">
+                                                                <Clock className="w-3 h-3" /> {language === 'pt' ? 'Brevemente' : 'Soon'}
                                                             </div>
                                                         )
                                                     ) : (
-                                                        <div className="text-[10px] font-black text-red-400 uppercase tracking-[0.2em] py-2">
+                                                        <div className="text-[10px] font-black text-red-400 uppercase tracking-[0.2em] py-2 bg-red-50 px-3 rounded-lg border border-red-100">
                                                             {language === 'pt' ? 'Esgotado' : 'Sold Out'}
                                                         </div>
                                                     )}

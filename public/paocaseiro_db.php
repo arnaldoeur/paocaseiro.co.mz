@@ -2,7 +2,7 @@
 // public/paocaseiro_db.php
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, Authorization');
+header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
 header('Content-Type: application/json');
 
 // Resposta para Preflight OPTIONS
@@ -12,8 +12,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
 
 // CONFIGURAÇÕES DE SEGURANÇA
 $API_KEY = "PaoCaseiro_Direct_MySQL_2026"; // Chave de segurança para o frontend
-$PAYSUITE_TOKEN = "1939|bYzLYGtc89gceqRox6udmIRS7gmWdLRj0BO7lRyN074400f8"; // Token real da dashboard da PaySuite
+$PAYSUITE_TOKEN = "1947|o1MrK0BSreKHZFH82ym7DFIm7EaVgveafTBcnTgr38985c43"; // Chave real da dashboard da PaySuite
 $PAYSUITE_WEBHOOK_SECRET = "whsec_c6df7d4376c281e30536e1aa4580807a9783362a85826574"; // Secret para verificar assinaturas de webhooks
+
+// Log function for debugging
+function debug_log($message) {
+    error_log("[PaoCaseiro DB] " . (is_array($message) || is_object($message) ? json_encode($message) : $message));
+}
 
 // CREDENCIAIS DA HOSTINGER
 $isLocal = strpos($_SERVER['HTTP_HOST'] ?? '', 'localhost') !== false;
@@ -23,15 +28,51 @@ $user = "u178468876_nazir";
 $pass = "@Pcaseiro25";
 $db   = "u178468876_pcaseiro";
 
-try {
+function get_pdo_connection() {
+    global $host, $port, $db, $user, $pass;
     $options = [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        PDO::ATTR_TIMEOUT => 5,
+        PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES utf8mb4"
     ];
-    $pdo = new PDO("mysql:host=$host;port=$port;dbname=$db;charset=utf8mb4", $user, $pass, $options);
-} catch (PDOException $e) {
+    try {
+        return new PDO("mysql:host=$host;port=$port;dbname=$db;charset=utf8mb4", $user, $pass, $options);
+    } catch (PDOException $e) {
+        debug_log("PDO Connection Error: " . $e->getMessage());
+        return null;
+    }
+}
+
+function safe_query($sql, $params = []) {
+    global $pdo;
+    if (!$pdo) {
+        $pdo = get_pdo_connection();
+        if (!$pdo) throw new Exception("Database connection unavailable.");
+    }
+    try {
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        return $stmt;
+    } catch (PDOException $e) {
+        if (strpos($e->getMessage(), 'gone away') !== false || strpos($e->getMessage(), 'connection') !== false) {
+            debug_log("MySQL connection lost during query, reconnecting...");
+            $pdo = get_pdo_connection();
+            if ($pdo) {
+                $stmt = $pdo->prepare($sql);
+                $stmt->execute($params);
+                return $stmt;
+            }
+        }
+        throw $e;
+    }
+}
+
+$pdo = get_pdo_connection();
+
+if (!$pdo) {
     http_response_code(500);
-    die(json_encode(["error" => "Falha na conexão com Hostinger: " . $e->getMessage()]));
+    die(json_encode(["error" => "Falha na conexão com Hostinger. Verifique se o servidor MySQL está acessível."]));
 }
 
 // PROCESSAMENTO DA REQUISIÇÃO
@@ -39,12 +80,26 @@ $input = json_decode(file_get_contents('php://input'), true);
 $action = $input['action'] ?? $_GET['action'] ?? '';
 
 // VALIDAÇÃO DE AUTORIZAÇÃO
-$headers = getallheaders();
-$auth = isset($headers['Authorization']) ? str_replace('Bearer ', '', $headers['Authorization']) : '';
+$all_headers = getallheaders();
+$auth = '';
 
-// Webhooks da PaySuite não usam a nossa API_KEY interna no cabeçalho Authorization
-if ($action !== 'paysuite_webhook' && $auth !== $API_KEY) {
+if (isset($all_headers['Authorization'])) {
+    $auth = $all_headers['Authorization'];
+} elseif (isset($all_headers['authorization'])) {
+    $auth = $all_headers['authorization'];
+} elseif (isset($_SERVER['HTTP_AUTHORIZATION'])) {
+    $auth = $_SERVER['HTTP_AUTHORIZATION'];
+}
+
+$token = trim(str_ireplace('Bearer ', '', $auth));
+
+// Debug log for troubleshooting (can be removed later)
+debug_log("Headers received: " . json_encode($all_headers));
+debug_log("Auth token extracted: " . $token);
+
+if ($action !== 'paysuite_webhook' && $token !== $API_KEY) {
     http_response_code(401);
+    debug_log("Unauthorized access attempt. Action: $action, Token: $token");
     die(json_encode(["error" => "Acesso não autorizado."]));
 }
 
@@ -78,8 +133,12 @@ try {
     switch ($action) {
     // --- PRODUCTS ---
     case 'get_products':
-        $stmt = $pdo->query("SELECT * FROM products ORDER BY category, name");
+        $stmt = safe_query("SELECT * FROM products ORDER BY category, name");
         echo json_encode($stmt->fetchAll());
+        break;
+
+    case 'ping':
+        echo json_encode(["success" => true, "message" => "Pong! Conectado com sucesso.", "time" => date('Y-m-d H:i:s')]);
         break;
 
     case 'bulk_save_products':
@@ -283,9 +342,9 @@ try {
             $customerId = $o['customer_id'] ?? $pdo->lastInsertId();
 
             // 2. Insert/Update Order
-            $sql = "INSERT INTO orders (id, short_id, customer_id, customer_name, customer_phone, customer_email, total_amount, status, delivery_type, delivery_address, notes, payment_method, payment_status, estimated_ready_at) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ON DUPLICATE KEY UPDATE status=VALUES(status), payment_status=VALUES(payment_status), notes=VALUES(notes), estimated_ready_at=VALUES(estimated_ready_at)";
+            $sql = "INSERT INTO orders (id, short_id, customer_id, customer_name, customer_phone, customer_email, total_amount, status, delivery_type, delivery_address, notes, payment_method, payment_status, payment_reference, transaction_id, estimated_ready_at) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE status=VALUES(status), payment_status=VALUES(payment_status), payment_reference=VALUES(payment_reference), transaction_id=VALUES(transaction_id), notes=VALUES(notes), estimated_ready_at=VALUES(estimated_ready_at)";
             
             $stmt = $pdo->prepare($sql);
             $stmt->execute([
@@ -302,6 +361,8 @@ try {
                 $o['notes'] ?? null,
                 $o['payment_method'] ?? 'cash',
                 $o['payment_status'] ?? 'pending',
+                $o['payment_reference'] ?? $o['payment_ref'] ?? null,
+                $o['transaction_id'] ?? null,
                 $o['estimated_ready_at'] ?? null
             ]);
 
@@ -1125,11 +1186,13 @@ try {
             'receipt_no' => $r['receipt_no'] ?? ('PC-'.date('Ymd').'-'.rand(100,999)),
             'order_id' => $r['order_id'] ?? null,
             'customer_id' => $r['customer_id'] ?? null,
-            'amount' => $r['amount'] ?? 0,
+            'customer_name' => $r['customer_name'] ?? null,
+            'amount' => $r['amount'] ?? $r['total_amount'] ?? 0,
             'payment_method' => $r['payment_method'] ?? 'cash',
             'cashier_id' => $r['cashier_id'] ?? null,
             'items' => (is_array($r['items'] ?? null) || is_object($r['items'] ?? null)) ? json_encode($r['items']) : ($r['items'] ?? '[]'),
             'tax_amount' => $r['tax_amount'] ?? 0,
+            'document_type' => $r['document_type'] ?? 'Receipt',
             'status' => $r['status'] ?? 'paid'
         ];
 
@@ -1520,32 +1583,35 @@ try {
         break;
 
     case 'init_tx':
-
         try {
-            $payload = $input['payload'] ?? $input;
-            $action = $payload['action'] ?? 'initiate';
+            $inputPayload = $input['payload'] ?? $input;
+            $txAction = $inputPayload['action'] ?? 'initiate';
             
-            // This is a proxy to the payment gateway (PaySuite)
-            // In a real scenario, you'd use CURL to call the gateway API here.
-            // For now, we'll simulate the response if in sandbox mode or implement the CURL.
+            // Clean payload for PaySuite
+            $paySuitePayload = $inputPayload;
+            unset($paySuitePayload['action']); // Remove our internal action field
             
-            $url = "https://paysuite.tech/api/v1/payments"; // Mock/Real URL
-            if ($action === 'verify') {
-                $url .= "/verify/" . $payload['id'];
+            $url = "https://paysuite.tech/api/v1/payments";
+            if ($txAction === 'verify') {
+                $id = $inputPayload['id'] ?? $inputPayload['reference'] ?? '';
+                $url .= "/" . $id;
             }
 
-            // Implement the real CURL to PaySuite API
+            debug_log("Initiating PaySuite " . $txAction . " at " . $url);
+            if ($txAction === 'initiate') {
+                debug_log("Payload: " . json_encode($paySuitePayload));
+            }
+
             $ch = curl_init();
-            
             $curlOptions = [
                 CURLOPT_URL => $url,
                 CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_ENCODING => "",
-                CURLOPT_MAXREDIRS => 10,
-                CURLOPT_TIMEOUT => 30,
+                CURLOPT_MAXREDIRS => 5,
+                CURLOPT_TIMEOUT => 25,
                 CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
-                CURLOPT_SSL_VERIFYPEER => !$isLocal,
-                CURLOPT_SSL_VERIFYHOST => $isLocal ? 0 : 2,
+                CURLOPT_SSL_VERIFYPEER => false,
+                CURLOPT_SSL_VERIFYHOST => 0,
                 CURLOPT_HTTPHEADER => [
                     "Accept: application/json",
                     "Content-Type: application/json",
@@ -1553,9 +1619,9 @@ try {
                 ],
             ];
 
-            if ($action === 'initiate') {
-                $curlOptions[CURLOPT_CUSTOMREQUEST] = "POST";
-                $curlOptions[CURLOPT_POSTFIELDS] = json_encode($payload);
+            if ($txAction === 'initiate') {
+                $curlOptions[CURLOPT_POST] = true;
+                $curlOptions[CURLOPT_POSTFIELDS] = json_encode($paySuitePayload);
             } else {
                 $curlOptions[CURLOPT_CUSTOMREQUEST] = "GET";
             }
@@ -1568,65 +1634,89 @@ try {
             curl_close($ch);
 
             if ($err) {
+                debug_log("PaySuite CURL Error: " . $err);
                 echo json_encode([
                     "success" => false,
-                    "message" => "cURL Error: " . $err
+                    "message" => "Erro de conexão (cURL): " . $err
                 ]);
             } else {
+                debug_log("PaySuite RAW Response (HTTP $httpCode): " . $response);
                 $decoded = json_decode($response, true);
-                if (isset($decoded['checkout_url']) || isset($decoded['status']) || $httpCode == 200 || $httpCode == 201) {
-                    echo json_encode([
-                        "success" => true,
-                        "data" => $decoded ? $decoded : ["raw_response" => $response, "status" => "PENDING"]
-                    ]);
+                
+                if ($httpCode == 401) {
+                    debug_log("PaySuite AUTH FAILURE. Current Token: " . substr($PAYSUITE_TOKEN, 0, 8) . "...");
+                }
+
+                $isSuccess = ($httpCode >= 200 && $httpCode < 300);
+                
+                // PaySuite returns 201 Created and nests data inside a 'data' object
+                $reallySuccessful = $isSuccess && $decoded && (
+                    isset($decoded['checkout_url']) || 
+                    isset($decoded['data']['checkout_url']) || 
+                    (isset($decoded['success']) && $decoded['success'] === true) ||
+                    (isset($decoded['status']) && $decoded['status'] === 'success')
+                );
+
+                if ($reallySuccessful) {
+                    // Extract the inner data if it exists, otherwise return decoded
+                    $responseData = $decoded['data'] ?? $decoded;
+                    echo json_encode(["success" => true, "data" => $responseData]); 
                 } else {
+                    debug_log("PaySuite Logic Error (HTTP $httpCode): " . $response);
+                    http_response_code($httpCode);
                     echo json_encode([
                         "success" => false,
-                        "message" => "Erro da PaySuite (HTTP $httpCode)",
-                        "error_details" => $decoded ? $decoded : $response
+                        "message" => "A PaySuite retornou um erro (HTTP $httpCode)",
+                        "error_details" => $decoded ? $decoded : $response,
+                        "payload_sent" => $txAction === 'initiate' ? $paySuitePayload : null
                     ]);
                 }
             }
         } catch (Exception $e) {
+            debug_log("Exception in init_tx: " . $e->getMessage());
             http_response_code(500);
-            echo json_encode(["error" => $e->getMessage()]);
+            echo json_encode(["success" => false, "message" => "Excepção interna: " . $e->getMessage()]);
         }
         break;
 
-    case 'paysuite_webhook':
-        try {
-            $rawPayload = file_get_contents('php://input');
-            $webhookData = json_decode($rawPayload, true);
+    case 'webhook':
+        // Webhook security verification per PaySuite docs
+        $payload = file_get_contents('php://input');
+        $signature = $_SERVER['HTTP_X_WEBHOOK_SIGNATURE'] ?? '';
+        
+        debug_log("PaySuite Webhook Received. Signature: " . $signature);
+        
+        $calculatedSignature = hash_hmac('sha256', $payload, $PAYSUITE_WEBHOOK_SECRET);
+        
+        if (hash_equals($signature, $calculatedSignature)) {
+            $data = json_decode($payload, true);
+            $event = $data['event'] ?? '';
+            $ref = $data['data']['reference'] ?? '';
+            $txId = $data['data']['transaction']['id'] ?? null;
             
-            // O webhook da PaySuite envia tipicamente a referência e o status
-            // reference ou tx_ref
-            $ref = $webhookData['reference'] ?? $webhookData['tx_ref'] ?? $webhookData['order_id'] ?? null;
-            $status = $webhookData['status'] ?? null;
+            debug_log("Webhook Verified: $event for Ref: $ref");
             
-            if ($ref && $status) {
-                // Mapear status da PaySuite para nosso DB
-                $dbStatus = 'PENDING';
-                $lowerStatus = strtolower($status);
-                if (in_array($lowerStatus, ['successful', 'paid', 'approved', 'success'])) {
-                    $dbStatus = 'PAID';
-                } elseif (in_array($lowerStatus, ['failed', 'rejected', 'canceled', 'cancelled'])) {
-                    $dbStatus = 'CANCELLED';
-                }
-                
-                // Tenta atualizar como payment_reference ou como id (fallback)
-                $stmt = $pdo->prepare("UPDATE orders SET payment_status = ? WHERE payment_reference = ? OR id = ?");
-                $stmt->execute([$dbStatus, $ref, $ref]);
-                
-                echo json_encode(["success" => true, "message" => "Webhook processado", "status" => $dbStatus]);
-            } else {
-                http_response_code(400);
-                echo json_encode(["success" => false, "message" => "Dados inválidos no webhook"]);
+            if ($event === 'payment.success') {
+                $stmt = $pdo->prepare("UPDATE orders SET payment_status = 'paid', status = 'paid', transaction_id = ?, updated_at = NOW() WHERE payment_reference = ?");
+                $stmt->execute([$txId, $ref]);
+                debug_log("Order $ref marked as PAID via Webhook.");
+            } else if ($event === 'payment.failed') {
+                $error = $data['data']['error'] ?? 'Unknown error';
+                $stmt = $pdo->prepare("UPDATE orders SET payment_status = 'failed', notes = CONCAT(IFNULL(notes,''), '\nPaySuite Error: ', ?), updated_at = NOW() WHERE payment_reference = ?");
+                $stmt->execute([$error, $ref]);
+                debug_log("Order $ref marked as FAILED via Webhook: $error");
             }
-        } catch (Exception $e) {
-            http_response_code(500);
-            echo json_encode(["error" => $e->getMessage()]);
+            
+            echo json_encode(["status" => "success", "message" => "Event processed"]);
+        } else {
+            debug_log("Webhook Signature Mismatch! Calculated: $calculatedSignature");
+            http_response_code(401);
+            echo json_encode(["status" => "error", "message" => "Invalid signature"]);
         }
         break;
+
+    // Legacy paysuite_webhook removed - use verified 'webhook' action above.
+
 
     case 'get_ai_insights':
         try {

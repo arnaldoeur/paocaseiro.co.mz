@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useCart } from '../context/CartContext';
 import { ShoppingCart, ShoppingBag, X, Trash2, MessageCircle, MapPin, Phone, User, CreditCard, Banknote, CheckCircle, ArrowLeft, Loader, Store, ArrowRight, AlertTriangle, Clock, Info, Mail, Calendar, FileText, Sparkles, Lock } from 'lucide-react';
+import { Plus, Minus } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { initiatePayment, verifyPayment } from '../services/paySuite';
 import { LocationPicker } from './LocationPicker';
@@ -11,6 +12,7 @@ import { notifyTeam } from '../services/sms';
 import { NotificationService } from '../services/NotificationService';
 import { authService } from '../services/authService';
 import { hostingerService } from '../services/hostingerService';
+import { generateAndUploadReceipt } from '../services/billingService';
 import { logAudit } from '../services/audit';
 import { formatProductName, getEnglishProductName } from '../services/stringUtils';
 import { ClientLoginModal } from './ClientLoginModal';
@@ -711,6 +713,7 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
 
         hostingerService.saveOrder({
             short_id: orderId,
+            customer_id: user?.id || null,
             customer_name: details.name,
             customer_phone: details.phone,
             customer_email: details.email,
@@ -718,13 +721,35 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
             delivery_type: details.type as any,
             delivery_address: details.address,
             notes: details.notes,
+            payment_method: paymentMethod || 'cash',
+            payment_status: remainingBalance > 0 ? 'pending' : 'paid',
+            payment_reference: refId,
+            transaction_id: txId,
             items: itemsPayload
-        }).then(() => {
+        }).then(async (res: any) => {
+            // 1. Generate and Save Receipt/Invoice
+            try {
+                await generateAndUploadReceipt(
+                    res?.order_id || orderId,
+                    orderId,
+                    user?.id || 'guest',
+                    details.name,
+                    itemsPayload,
+                    finalTotal,
+                    'Receipt',
+                    true,
+                    true
+                );
+            } catch (billingErr) {
+                console.error("Receipt generation failed, but order was saved:", billingErr);
+            }
+
+            // 2. Log Audit
             logAudit({
                 action: 'ORDER_PLACED',
                 entity_type: 'order',
                 entity_id: orderId,
-                details: { total: finalTotal, method: 'online' },
+                details: { total: finalTotal, method: paymentMethod, txId },
                 customer_phone: details.phone
             });
             
@@ -741,7 +766,22 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
             msg = msg.substring(0, 160);
             NotificationService.sendCustomNotification(details.phone, msg)
                 .catch(err => console.error("Invoice notification failed", err));
-        }).catch(err => console.error("Database save failed", err));
+            
+            // 3. Move to receipt step
+            setCompletedOrder(newOrder);
+            setStep('receipt');
+            
+            // Clear cart and tracking
+            localStorage.removeItem('active_order_id');
+            localStorage.removeItem('active_tx_id');
+            localStorage.setItem('last_order_id', orderId);
+            clearCart();
+        }).catch(err => {
+            console.error("Database save failed", err);
+            // Fallback: show receipt anyway
+            setCompletedOrder(newOrder);
+            setStep('receipt');
+        });
     };
 
     const renderStepContent = () => {
@@ -770,41 +810,43 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                                                     clearCart();
                                                 }
                                             }}
-                                            className="text-xs font-bold text-red-500 flex items-center gap-1 hover:text-red-700 transition-colors bg-white/50 px-3 py-1.5 rounded-full border border-red-100 shadow-sm"
+                                            className="text-[10px] font-black uppercase tracking-widest text-red-400 flex items-center gap-1.5 hover:text-red-600 transition-all bg-red-50/50 hover:bg-red-50 px-3 py-1.5 rounded-full border border-red-100 shadow-sm active:scale-95"
                                         >
-                                            <Trash2 className="w-3.5 h-3.5" />
+                                            <Trash2 className="w-3 h-3" />
                                             {language === 'en' ? 'Clear all' : 'Limpar tudo'}
                                         </button>
                                     </div>
                                     {cart.map((item) => (
-                                    <div key={item.name} className="bg-white p-3 rounded-xl shadow-sm border border-[#d9a65a]/20 flex gap-4 items-center">
+                                    <div key={item.name} className="bg-white p-3 rounded-2xl shadow-sm border border-[#d9a65a]/10 flex gap-3 items-center group hover:border-[#d9a65a]/30 transition-all">
                                         {/* Image Thumbnail */}
-                                        <div className="w-16 h-16 bg-gray-100 rounded-lg shrink-0 overflow-hidden">
+                                        <div className="w-14 h-14 bg-[#f7f1eb] rounded-xl shrink-0 overflow-hidden border border-[#d9a65a]/10">
                                             {item.image ? (
-                                                <img src={item.image} alt={formatProductName(item.name)} className="w-full h-full object-cover" />
+                                                <img src={item.image} alt={formatProductName(item.name)} className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
                                             ) : (
-                                                <div className="w-full h-full flex items-center justify-center text-xs text-gray-400 font-bold">IMG</div>
+                                                <div className="w-full h-full flex items-center justify-center text-[10px] text-[#d9a65a] font-black opacity-40">PC</div>
                                             )}
                                         </div>
 
                                         <div className="flex-1 min-w-0">
-                                            <h3 className="font-bold text-[#3b2f2f] truncate">{language === 'en' ? formatProductName(item.name_en || getEnglishProductName(item.name)) : formatProductName(item.name)}</h3>
-                                            <p className="text-[#d9a65a] text-sm font-bold">{item.price} MT</p>
+                                            <h3 className="font-bold text-[#3b2f2f] text-sm truncate leading-tight mb-0.5">
+                                                {language === 'en' ? formatProductName(item.name_en || getEnglishProductName(item.name)) : formatProductName(item.name)}
+                                            </h3>
+                                            <p className="text-[#d9a65a] text-xs font-black">{item.price} MT</p>
                                         </div>
 
-                                        <div className="flex items-center gap-2 bg-[#f7f1eb] rounded-lg p-1">
+                                        <div className="flex items-center gap-1 bg-[#f7f1eb] rounded-xl p-1 border border-[#e5dcd3]">
                                             <button
                                                 onClick={() => addToCart({ ...item, quantity: -1 })}
-                                                className="w-8 h-8 flex items-center justify-center hover:bg-[#d9a65a] hover:text-[#3b2f2f] rounded-md transition-colors font-bold"
+                                                className="w-8 h-8 flex items-center justify-center bg-white text-[#3b2f2f] hover:bg-red-500 hover:text-white rounded-lg transition-all shadow-sm active:scale-90"
                                             >
-                                                -
+                                                {item.quantity === 1 ? <Trash2 className="w-4 h-4" /> : <Minus className="w-4 h-4" />}
                                             </button>
-                                            <span className="font-bold w-4 text-center text-sm">{item.quantity}</span>
+                                            <span className="font-black w-8 text-center text-sm text-[#3b2f2f]">{item.quantity}</span>
                                             <button
                                                 onClick={() => addToCart({ ...item, quantity: 1 })}
-                                                className="w-8 h-8 flex items-center justify-center hover:bg-[#d9a65a] hover:text-[#3b2f2f] rounded-md transition-colors font-bold"
+                                                className="w-8 h-8 flex items-center justify-center bg-white text-[#3b2f2f] hover:bg-[#d9a65a] hover:text-white rounded-lg transition-all shadow-sm active:scale-90"
                                             >
-                                                +
+                                                <Plus className="w-4 h-4" />
                                             </button>
                                         </div>
                                     </div>
@@ -857,9 +899,18 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                                 
                                 <button
                                     onClick={handleNextStep}
-                                    className="w-full bg-[#d9a65a] text-[#3b2f2f] py-4 rounded-xl font-bold uppercase tracking-widest hover:bg-[#3b2f2f] hover:text-[#d9a65a] transition-all flex items-center justify-center gap-2 shadow-lg"
+                                    className="group w-full bg-[#3b2f2f] text-[#d9a65a] py-5 rounded-2xl font-black uppercase tracking-widest hover:bg-[#d9a65a] hover:text-[#3b2f2f] transition-all flex items-center justify-between px-8 shadow-2xl relative overflow-hidden"
                                 >
-                                    {t.menu.checkout_btn}
+                                    <div className="flex flex-col items-start text-left">
+                                        <span className="text-[10px] opacity-60 leading-none mb-1">{language === 'en' ? 'Review & Pay' : 'Revisar & Pagar'}</span>
+                                        <span className="text-sm">{t.menu.checkout_btn}</span>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-lg">{total} MT</span>
+                                        <div className="bg-[#d9a65a]/20 group-hover:bg-[#3b2f2f]/10 p-2 rounded-lg transition-colors">
+                                           <ArrowRight className="w-5 h-5" />
+                                        </div>
+                                    </div>
                                 </button>
                             </div>
                         )
