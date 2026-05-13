@@ -753,7 +753,22 @@ try {
         
         $stmt = $pdo->prepare("SELECT * FROM blog_comments WHERE id = ?");
         $stmt->execute([$id]);
-        echo json_encode($stmt->fetch());
+        echo json_encode(['success' => true, 'data' => $stmt->fetch()]);
+        break;
+
+    case 'update_blog_comment_status':
+        $id = $input['id'] ?? '';
+        $status = $input['status'] ?? 'pending';
+        $stmt = $pdo->prepare("UPDATE blog_comments SET status = ? WHERE id = ?");
+        $stmt->execute([$status, $id]);
+        echo json_encode(['success' => true]);
+        break;
+
+    case 'delete_blog_comment':
+        $id = $input['id'] ?? '';
+        $stmt = $pdo->prepare("DELETE FROM blog_comments WHERE id = ?");
+        $stmt->execute([$id]);
+        echo json_encode(['success' => true]);
         break;
 
     // --- QUEUE / TICKETS ---
@@ -1537,6 +1552,48 @@ try {
             }
             echo $response;
         }
+        break;
+
+    // --- GALLERY ---
+    case 'get_gallery':
+    case 'fetch_gallery':
+        $stmt = $pdo->query("SELECT * FROM gallery ORDER BY created_at DESC");
+        $items = $stmt->fetchAll();
+        echo json_encode(['success' => true, 'data' => $items]);
+        break;
+
+    case 'save_gallery_item':
+        $item = $input['item'] ?? [];
+        $id = $item['id'] ?? null;
+        $data = [
+            'title' => $item['title'] ?? '',
+            'description' => $item['description'] ?? '',
+            'image_url' => $item['image_url'] ?? '',
+            'category' => $item['category'] ?? 'General',
+            'is_active' => $item['is_active'] ?? true
+        ];
+        
+        if ($id) {
+            $fields = [];
+            foreach ($data as $k => $v) { $fields[] = "`$k` = ?"; }
+            $stmt = $pdo->prepare("UPDATE gallery SET " . implode(', ', $fields) . " WHERE id = ?");
+            $stmt->execute(array_merge(array_values($data), [$id]));
+        } else {
+            $id = uniqid('gal_');
+            $data['id'] = $id;
+            $cols = array_keys($data);
+            $placeholders = array_fill(0, count($cols), '?');
+            $stmt = $pdo->prepare("INSERT INTO gallery (`" . implode('`, `', $cols) . "`) VALUES (" . implode(', ', $placeholders) . ")");
+            $stmt->execute(array_values($data));
+        }
+        echo json_encode(['success' => true, 'id' => $id]);
+        break;
+
+    case 'delete_gallery_item':
+        $id = $input['id'] ?? '';
+        $stmt = $pdo->prepare("DELETE FROM gallery WHERE id = ?");
+        $stmt->execute([$id]);
+        echo json_encode(['success' => true]);
         break;
 
     case 'test_email':
