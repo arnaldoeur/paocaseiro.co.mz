@@ -25,9 +25,7 @@ jobs:
         if [ -z "${{ secrets.FTP_SERVER }}" ]; then echo "❌ FTP_SERVER missing"; exit 1; fi
         if [ -z "${{ secrets.FTP_USERNAME }}" ]; then echo "❌ FTP_USERNAME missing"; exit 1; fi
         if [ -z "${{ secrets.FTP_PASSWORD }}" ]; then echo "❌ FTP_PASSWORD missing"; exit 1; fi
-        if [ -z "${{ secrets.VITE_SUPABASE_URL }}" ]; then echo "❌ VITE_SUPABASE_URL missing"; exit 1; fi
-        if [ -z "${{ secrets.VITE_SUPABASE_ANON_KEY }}" ]; then echo "❌ VITE_SUPABASE_ANON_KEY missing"; exit 1; fi
-        echo "✅ All secrets are present"
+        echo "✅ All required FTP secrets are present"
 
     - name: 📦 Install dependencies
       run: npm install
@@ -38,6 +36,7 @@ jobs:
         VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
         VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         VITE_GEMINI_API_KEY: ${{ secrets.VITE_GEMINI_API_KEY }}
+        VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
 
     - name: 🔍 Verify Build Output
       run: ls -R dist/
@@ -50,4 +49,6 @@ jobs:
         password: ${{ secrets.FTP_PASSWORD }}
         local-dir: ./dist/
         server-dir: public_html/
-        dangerous-clean-slate: true
+        exclude: |
+          **/*.php
+          **/images/**
