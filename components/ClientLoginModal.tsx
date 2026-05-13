@@ -36,7 +36,14 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
         }
 
         const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-        const redirectUri = window.location.origin; // Always return to root for consistent matching
+        if (!clientId) {
+            setError('Serviço de autenticação Google não configurado. Por favor use outro método.');
+            console.error("[Auth] Google Client ID missing in env");
+            return;
+        }
+
+        // Use origin without trailing slash for Google compatibility by default
+        const redirectUri = window.location.origin; 
         const scope = 'https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile';
         const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=${encodeURIComponent(scope)}&prompt=select_account`;
 

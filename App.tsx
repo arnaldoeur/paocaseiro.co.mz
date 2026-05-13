@@ -289,7 +289,8 @@ const App: React.FC = () => {
   const [language, setLanguage] = useState<Language>(() => {
     // We let RouteObserver handle the actual source of truth for paths, but initialize from localStorage
     const saved = localStorage.getItem('app_language');
-    return (saved as Language) || 'pt';
+    if (saved === 'en' || saved === 'pt') return saved as Language;
+    return 'pt';
   });
 
   useEffect(() => {

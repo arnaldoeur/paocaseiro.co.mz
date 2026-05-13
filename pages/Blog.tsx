@@ -18,7 +18,7 @@ interface BlogPost {
 }
 
 export const Blog: React.FC<{ language: Language }> = ({ language }) => {
-    const t = translations[language].blog;
+    const t = translations[language]?.blog || translations['pt'].blog;
     const [posts, setPosts] = useState<BlogPost[]>([]);
     const [loading, setLoading] = useState(true);
     const [categories, setCategories] = useState<string[]>([]);
@@ -129,13 +129,15 @@ export const Blog: React.FC<{ language: Language }> = ({ language }) => {
                 const data = await hostingerService.getBlogPosts();
 
                 if (data && Array.isArray(data)) {
-                    setPosts(data);
-                    const cats = Array.from(new Set(data.map((p: any) => p.category).filter(Boolean))) as string[];
+                    const validPosts = data.filter(p => p && typeof p === 'object' && p.id && (p.title || p.title_en));
+                    setPosts(validPosts);
+                    const cats = Array.from(new Set(validPosts.map((p: any) => p.category).filter(Boolean))) as string[];
                     setCategories(cats);
-                } else if (data) {
-                    // If data exists but is not an array (and not handled by fetch error logic)
-                    console.error('Expected array for blog posts, got:', typeof data);
-                    setPosts([]);
+                } else if (data && data.data && Array.isArray(data.data)) {
+                    const validPosts = data.data.filter((p: any) => p && typeof p === 'object' && p.id && (p.title || p.title_en));
+                    setPosts(validPosts);
+                    const cats = Array.from(new Set(validPosts.map((p: any) => p.category).filter(Boolean))) as string[];
+                    setCategories(cats);
                 }
             } catch (err) {
                 console.error('Error fetching posts:', err);

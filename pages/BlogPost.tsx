@@ -22,7 +22,7 @@ interface BlogPostFull {
 
 export const BlogPost: React.FC<{ language: Language }> = ({ language }) => {
     const { slug } = useParams<{ slug: string }>();
-    const t = translations[language].blog;
+    const t = translations[language]?.blog || translations['pt'].blog;
     const [post, setPost] = useState<BlogPostFull | null>(null);
     const [loading, setLoading] = useState(true);
     
@@ -336,10 +336,10 @@ export const BlogPost: React.FC<{ language: Language }> = ({ language }) => {
                                 <div key={comment.id} className="bg-gray-50 p-6 rounded-2xl">
                                     <div className="flex items-center gap-3 mb-3">
                                         <div className="w-10 h-10 rounded-full bg-[#d9a65a]/20 flex items-center justify-center text-[#d9a65a] font-black font-serif">
-                                            {comment.author.charAt(0).toUpperCase()}
+                                            {(comment.author || 'U').charAt(0).toUpperCase()}
                                         </div>
                                         <div>
-                                            <h4 className="font-bold text-[#3b2f2f]">{comment.author}</h4>
+                                            <h4 className="font-bold text-[#3b2f2f]">{comment.author || 'Utilizador'}</h4>
                                             <span className="text-xs text-gray-400 font-medium">
                                                 {comment.created_at && !isNaN(new Date(comment.created_at).getTime())
                                                     ? new Date(comment.created_at).toLocaleDateString(language === 'pt' ? 'pt-PT' : 'en-US', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute:'2-digit' })
