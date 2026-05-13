@@ -364,7 +364,7 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
             const openTime = 6 * 60; // 06:00
             const closeTime = 22 * 60; // 22:00
 
-            const isOpen = currentTime >= openTime && currentTime < closeTime;
+            const isOpen = true; // Forçado para sempre aberto a pedido do utilizador
 
             if (!isOpen) {
                 setError(

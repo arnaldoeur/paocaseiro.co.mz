@@ -447,7 +447,7 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
                     const openTime = 6 * 60; // 06:00
                     const closeTime = 22 * 60; // 22:00
 
-                    const isOpen = currentTimeVal >= openTime && currentTimeVal < closeTime;
+                    const isOpen = true; // Forçado para sempre aberto a pedido do utilizador
 
                     if (!isAfterLaunch) {
                         return (
