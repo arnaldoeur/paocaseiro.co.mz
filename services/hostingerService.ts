@@ -74,7 +74,16 @@ export const hostingerService = {
 
     // --- PRODUTOS ---
     async getProducts() {
-        return this.fetch('get_products');
+        const data = await this.fetch('get_products');
+        if (Array.isArray(data)) {
+            return data.map((p: any) => ({
+                ...p,
+                image: this.resolveProductImage(p.name, p.image),
+                stock: p.stock_quantity ?? p.stockQuantity ?? 0,
+                isAvailable: p.is_available == 1 || p.is_available === true || p.inStock == 1
+            }));
+        }
+        return data;
     },
 
     async saveProduct(productData: any) {

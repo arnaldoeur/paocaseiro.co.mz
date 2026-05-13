@@ -2111,7 +2111,7 @@ export const Admin: React.FC = () => {
                 userId
             );
 
-            alert("Check-in realizado com sucesso! Bom trabalho.");
+            setIsUserCheckedIn(true);
             loadPerformanceMetrics();
         } catch (e: any) {
             alert("Erro no check-in: " + e.message);
@@ -2138,15 +2138,7 @@ export const Admin: React.FC = () => {
             // 2. Update the session
             await hostingerService.updateWorkSession(currentSession.id, 'completed', new Date().toISOString());
 
-            await NotificationService.logSystemEvent(
-                "Check-out Realizado", 
-                `${username || 'Admin'} encerrou o turno com sucesso.`, 
-                'USER', 
-                'info', 
-                userId
-            );
-
-            alert("Check-out realizado com sucesso!");
+            setIsUserCheckedIn(false);
             loadPerformanceMetrics();
         } catch (e: any) {
             alert("Erro no check-out: " + e.message);
