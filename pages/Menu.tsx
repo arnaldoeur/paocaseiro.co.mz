@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, ShoppingBag, Plus, Truck, Store, CreditCard, Info, AlertTriangle, Calendar, Clock } from 'lucide-react';
@@ -74,12 +74,25 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
     const [hasDismissedOverlay, setHasDismissedOverlay] = useState(false);
     const [isSticky, setIsSticky] = useState(false);
     const [currentCategory, setCurrentCategory] = useState('');
+    const navContainerRef = useRef<HTMLDivElement>(null);
+    const categoryRefs = useRef<{ [key: string]: HTMLButtonElement | null }>({});
 
-    // Auto-update time
     useEffect(() => {
         const timer = setInterval(() => setCurrentTime(new Date()), 1000);
         return () => clearInterval(timer);
     }, []);
+
+    // Auto-scroll category nav to keep active item visible
+    useEffect(() => {
+        if (currentCategory && navContainerRef.current && categoryRefs.current[currentCategory]) {
+            const container = navContainerRef.current;
+            const element = categoryRefs.current[currentCategory];
+            if (element) {
+                const scrollLeft = element.offsetLeft - (container.offsetWidth / 2) + (element.offsetWidth / 2);
+                container.scrollTo({ left: scrollLeft, behavior: 'smooth' });
+            }
+        }
+    }, [currentCategory]);
 
     // Scroll handling for sticky nav and category tracking
     useEffect(() => {
@@ -93,7 +106,8 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
 
             // Scroll spy for active category
             const sections = menuSections.map(s => document.getElementById(generateSlug(s.title)));
-            const scrollPosition = window.scrollY + 128; // Offset for Navbar (64) + StickyNav (48) + buffer
+            // Navbar (80) + StickyNav (~56) = ~136. Use 140 for safety
+            const scrollPosition = window.scrollY + 140; 
 
             for (let i = sections.length - 1; i >= 0; i--) {
                 const section = sections[i];
@@ -114,8 +128,8 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
         const id = generateSlug(title);
         const element = document.getElementById(id);
         if (element) {
-            // Offset for Navbar (80) + StickyNav (48) = 128
-            const y = element.getBoundingClientRect().top + window.scrollY - 128;
+            // Offset for Navbar (80) + StickyNav (~56) = ~136
+            const y = element.getBoundingClientRect().top + window.scrollY - 136;
             window.scrollTo({ top: y, behavior: 'smooth' });
             
             // Ensure section is expanded
@@ -414,24 +428,53 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
                 </div>
             ) : (
                 <>
-                    {/* Sticky Category Nav */}
+            {/* Sticky Category Nav */}
             <div 
-                className="sticky top-16 z-[45] bg-[#f7f1eb]/95 backdrop-blur-md shadow-sm border-b-[0.5px] border-[#d9a65a]/20 py-3 mb-6 transition-all duration-300"
+                className="sticky top-20 z-[45] bg-[#f7f1eb]/95 backdrop-blur-md shadow-sm border-b-[0.5px] border-[#d9a65a]/20 py-4 mb-6 transition-all duration-300"
             >
-                <div className="max-w-7xl mx-auto px-4 h-full flex items-center gap-3 overflow-x-auto no-scrollbar scroll-smooth">
-                    {menuSections.map((section) => (
-                        <button
-                            key={section.title}
-                            onClick={() => scrollToSection(section.title)}
-                            className={`flex-shrink-0 px-4 py-2 rounded-full text-xs font-bold transition-all whitespace-nowrap shadow-sm ${
-                                currentCategory === section.title 
-                                ? 'bg-[#3b2f2f] text-[#d9a65a] scale-105' 
-                                : 'bg-white text-[#3b2f2f] hover:bg-[#d9a65a]/10 border border-[#d9a65a]/10'
-                            }`}
-                        >
-                            {language === 'pt' ? section.title : (categoryTranslations[section.title] || section.title)}
-                        </button>
-                    ))}
+                <div 
+                    ref={navContainerRef}
+                    className="max-w-7xl mx-auto px-4 flex items-center gap-2 overflow-x-auto no-scrollbar scroll-smooth relative"
+                >
+                    {menuSections.map((section) => {
+                        const isActive = currentCategory === section.title;
+                        return (
+                            <button
+                                key={section.title}
+                                ref={el => categoryRefs.current[section.title] = el}
+                                onClick={() => scrollToSection(section.title)}
+                                className={`relative flex-shrink-0 px-5 py-2.5 rounded-full text-xs font-bold transition-all whitespace-nowrap ${
+                                    isActive 
+                                    ? 'text-[#f7f1eb]' 
+                                    : 'text-[#3b2f2f] hover:bg-[#d9a65a]/5'
+                                }`}
+                            >
+                                {isActive && (
+                                    <motion.div
+                                        layoutId="activeCategoryPill"
+                                        className="absolute inset-0 bg-[#3b2f2f] rounded-full -z-10 shadow-md"
+                                        transition={{ type: "spring", bounce: 0.15, duration: 0.5 }}
+                                    />
+                                )}
+                                {language === 'pt' ? section.title : (categoryTranslations[section.title] || section.title)}
+                            </button>
+                        );
+                    })}
+                </div>
+                {/* Thin horizontal sliding line indicator at the bottom edge of the bar */}
+                <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-[#d9a65a]/10">
+                    <motion.div 
+                        className="h-full bg-[#d9a65a] w-24"
+                        animate={{ 
+                            x: currentCategory && categoryRefs.current[currentCategory] 
+                                ? categoryRefs.current[currentCategory]!.offsetLeft 
+                                : 0,
+                            width: currentCategory && categoryRefs.current[currentCategory] 
+                                ? categoryRefs.current[currentCategory]!.offsetWidth 
+                                : 0
+                        }}
+                        transition={{ type: "spring", bounce: 0, duration: 0.5 }}
+                    />
                 </div>
             </div>
 
