@@ -30,6 +30,7 @@ const GetTicket = React.lazy(() => import('./pages/GetTicket').then(module => ({
 const TVTickets = React.lazy(() => import('./pages/TVTickets').then(module => ({ default: module.TVTickets })));
 
 import { useRole } from './hooks/useRole';
+import { GoogleOAuthProvider } from '@react-oauth/google';
 
 const RouteMetadata: React.FC<{ language: Language }> = ({ language }) => {
   const location = useLocation();
@@ -331,7 +332,8 @@ const App: React.FC = () => {
   };
 
   return (
-    <CartProvider>
+    <GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID || ''}>
+      <CartProvider>
       <Router>
         <RouteObserver language={language} setLanguage={setLanguage} />
         <RouteMetadata language={language} />
@@ -388,7 +390,8 @@ const App: React.FC = () => {
         </div>
       </Router>
     </CartProvider>
-  );
+  </GoogleOAuthProvider>
+);
 };
 
 export default App;

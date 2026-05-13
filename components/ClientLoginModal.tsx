@@ -11,7 +11,7 @@ import { NotificationService } from '../services/NotificationService';
 import { normalizeIdentifier } from '../src/utils/phone';
 import { hostingerService } from '../services/hostingerService';
 import { authService } from '../services/authService';
-import { GoogleOAuthProvider, GoogleLogin } from '@react-oauth/google';
+import { GoogleLogin } from '@react-oauth/google';
 import { jwtDecode } from 'jwt-decode';
 
 interface ClientLoginModalProps {
@@ -28,6 +28,8 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
     const [otp, setOtp] = useState('');
     const [loading, setLoading] = useState(false);
     const [pendingReset, setPendingReset] = useState(false);
+
+    console.log("[Google Auth] Client ID:", import.meta.env.VITE_GOOGLE_CLIENT_ID);
     const [error, setError] = useState('');
     const [successMsg, setSuccessMsg] = useState('');
     const [acceptedTerms, setAcceptedTerms] = useState(false);
@@ -532,8 +534,7 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                                     </div>
 
                                     <div className="space-y-4">
-                                        <GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID || 'dummy'}>
-                                            <div className="flex justify-center w-full">
+                                        <div className="flex justify-center w-full">
                                                 <GoogleLogin
                                                     onSuccess={async (credentialResponse) => {
                                                         if (!acceptedTerms) {
@@ -562,7 +563,6 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                                                     useOneTap
                                                 />
                                             </div>
-                                        </GoogleOAuthProvider>
 
                                         <label className="flex items-center gap-3 cursor-pointer group justify-center pt-2">
                                             <div className="relative">
