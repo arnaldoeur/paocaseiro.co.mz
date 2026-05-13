@@ -537,6 +537,7 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                                         <div className="flex justify-center w-full">
                                                 <GoogleLogin
                                                     onSuccess={async (credentialResponse) => {
+                                                        console.log("[Google Auth] Success Response Received");
                                                         if (!acceptedTerms) {
                                                             setError('Deve aceitar os Termos e a Política de Privacidade antes de continuar.');
                                                             return;
@@ -547,20 +548,27 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                                                             if (!credentialResponse.credential) throw new Error('No credential received');
                                                             const decoded: any = jwtDecode(credentialResponse.credential);
                                                             const { email, name, picture } = decoded;
+                                                            console.log("[Google Auth] Decoded User:", email);
                                                             const { data, error } = await authService.signInWithGoogle(email, name, picture || '');
                                                             if (error) throw error;
                                                             onClose();
                                                             navigate('/dashboard');
                                                         } catch (err: any) {
+                                                            console.error("[Google Auth] Internal Error:", err);
                                                             setError(err.message || 'Erro ao iniciar sessão.');
                                                         } finally {
                                                             setLoading(false);
                                                         }
                                                     }}
                                                     onError={() => {
-                                                        setError('Google Login Failed');
+                                                        console.error("[Google Auth] Google Sign-In Failed (Library Error)");
+                                                        setError('O Login do Google falhou. Verifique se as janelas de popup estão permitidas.');
                                                     }}
-                                                    useOneTap
+                                                    theme="filled_blue"
+                                                    shape="pill"
+                                                    text="signin_with"
+                                                    size="large"
+                                                    width="300"
                                                 />
                                             </div>
 
