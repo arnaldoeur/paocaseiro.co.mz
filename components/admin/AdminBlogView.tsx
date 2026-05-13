@@ -226,6 +226,8 @@ export function AdminBlogView() {
         setSeoTitle(post.seo_title || '');
         setSeoDescription(post.seo_description || '');
         setStatus(post.status || 'draft');
+        setSelectedImageFile(null);
+        setPreviewImageUrl(null);
         setIsEditing(true);
     };
 
@@ -241,6 +243,8 @@ export function AdminBlogView() {
         setSeoTitle('');
         setSeoDescription('');
         setStatus('draft');
+        setSelectedImageFile(null);
+        setPreviewImageUrl(null);
         setIsEditing(true);
     };
 
@@ -307,6 +311,8 @@ export function AdminBlogView() {
                 ...payload,
                 id: currentPost?.id
             });
+            setSelectedImageFile(null);
+            setPreviewImageUrl(null);
             setIsEditing(false);
             loadPosts();
         } catch (err: any) {
