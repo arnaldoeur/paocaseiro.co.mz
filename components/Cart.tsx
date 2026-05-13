@@ -364,7 +364,7 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
             const openTime = 6 * 60; // 06:00
             const closeTime = 22 * 60; // 22:00
 
-            const isOpen = true; // Temporary bypass for testing as requested by user
+            const isOpen = currentTime >= openTime && currentTime < closeTime;
 
             if (!isOpen) {
                 setError(

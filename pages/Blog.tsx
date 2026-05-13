@@ -128,10 +128,14 @@ export const Blog: React.FC<{ language: Language }> = ({ language }) => {
             try {
                 const data = await hostingerService.getBlogPosts();
 
-                if (data) {
+                if (data && Array.isArray(data)) {
                     setPosts(data);
                     const cats = Array.from(new Set(data.map((p: any) => p.category).filter(Boolean))) as string[];
                     setCategories(cats);
+                } else if (data) {
+                    // If data exists but is not an array (and not handled by fetch error logic)
+                    console.error('Expected array for blog posts, got:', typeof data);
+                    setPosts([]);
                 }
             } catch (err) {
                 console.error('Error fetching posts:', err);
@@ -282,7 +286,9 @@ export const Blog: React.FC<{ language: Language }> = ({ language }) => {
                                             <div className="flex items-center gap-4 text-xs font-bold text-gray-400 tracking-wider">
                                                 <div className="flex items-center gap-1.5">
                                                     <Calendar size={14} className="text-[#d9a65a]" />
-                                                    {new Date(post.created_at).toLocaleDateString(language === 'pt' ? 'pt-PT' : 'en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                                    {post.created_at && !isNaN(new Date(post.created_at).getTime()) 
+                                                        ? new Date(post.created_at).toLocaleDateString(language === 'pt' ? 'pt-PT' : 'en-US', { day: 'numeric', month: 'short', year: 'numeric' }) 
+                                                        : (t.publishedAt || 'Publicado em') + ' --'}
                                                 </div>
                                             </div>
                                             <div className="flex items-center text-[#d9a65a] font-bold text-sm tracking-wider group-hover:gap-2 transition-all">

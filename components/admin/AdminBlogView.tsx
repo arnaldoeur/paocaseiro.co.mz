@@ -476,7 +476,11 @@ export function AdminBlogView() {
                                                     {post.status}
                                                 </span>
                                             </td>
-                                            <td className="p-4 text-gray-400 text-sm whitespace-nowrap">{new Date(post.created_at).toLocaleDateString()}</td>
+                                            <td className="p-4 text-gray-400 text-sm whitespace-nowrap">
+                                                {post.created_at && !isNaN(new Date(post.created_at).getTime()) 
+                                                    ? new Date(post.created_at).toLocaleDateString() 
+                                                    : 'Data Inválida'}
+                                            </td>
                                             <td className="p-4 text-right">
                                                 <div className="flex justify-end gap-2">
                                                     <button onClick={() => handleEdit(post)} className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors" title="Editar"><Edit3 size={18} /></button>

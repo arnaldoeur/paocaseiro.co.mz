@@ -148,7 +148,11 @@ export const BlogPost: React.FC<{ language: Language }> = ({ language }) => {
             });
                 
             setCommentMessage({ text: t.comments?.success || 'Comentário enviado!', type: 'success' });
-            setComments([...comments, data]);
+            if (data && data.success && data.data) {
+                setComments([...comments, data.data]);
+            } else if (data && !data.success) {
+                throw new Error(data.error || 'Erro ao guardar comentário');
+            }
             setNewCommentName('');
             setNewCommentContent('');
             
@@ -170,7 +174,9 @@ export const BlogPost: React.FC<{ language: Language }> = ({ language }) => {
         }
     };
 
-    const visibleComments = comments.filter(c => c.status === 'approved' || c.user_id === currentUser?.id || !c.status);
+    const visibleComments = Array.isArray(comments) 
+        ? comments.filter(c => c && (c.status === 'approved' || c.user_id === currentUser?.id || !c.status))
+        : [];
 
     if (loading) {
         return (
@@ -335,7 +341,9 @@ export const BlogPost: React.FC<{ language: Language }> = ({ language }) => {
                                         <div>
                                             <h4 className="font-bold text-[#3b2f2f]">{comment.author}</h4>
                                             <span className="text-xs text-gray-400 font-medium">
-                                                {new Date(comment.created_at).toLocaleDateString(language === 'pt' ? 'pt-PT' : 'en-US', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute:'2-digit' })}
+                                                {comment.created_at && !isNaN(new Date(comment.created_at).getTime())
+                                                    ? new Date(comment.created_at).toLocaleDateString(language === 'pt' ? 'pt-PT' : 'en-US', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute:'2-digit' })
+                                                    : ''}
                                             </span>
                                         </div>
                                     </div>
