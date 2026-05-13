@@ -1671,8 +1671,10 @@ try {
         $file = $_FILES['file'];
         $folderId = $_POST['folder_id'] ?? null;
         $uploadedBy = $_POST['uploaded_by'] ?? 'admin';
+        $targetFolder = preg_replace('/[^a-zA-Z0-9_\-]/', '', $_POST['target_folder'] ?? 'drive');
+        if (empty($targetFolder)) $targetFolder = 'drive';
         
-        $uploadDir = 'uploads/drive/';
+        $uploadDir = 'uploads/' . $targetFolder . '/';
         if (!is_dir($uploadDir)) mkdir($uploadDir, 0777, true);
         
         $fileName = time() . '_' . basename($file['name']);
@@ -1939,16 +1941,82 @@ try {
 
     case 'export_database':
         try {
-            $tables = ['products', 'customers', 'orders', 'order_items', 'receipts', 'team_members', 'audit_logs'];
+            $tables = ['products', 'customers', 'orders', 'order_items', 'receipts', 'team_members', 'audit_logs', 'newsletter_subscribers', 'drive_files'];
             $exportData = [];
             foreach ($tables as $table) {
-                $stmt = $pdo->query("SELECT * FROM $table");
-                $exportData[$table] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                // Check if table exists before querying
+                $check = $pdo->query("SHOW TABLES LIKE '$table'");
+                if ($check->rowCount() > 0) {
+                    $stmt = $pdo->query("SELECT * FROM $table");
+                    $exportData[$table] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                }
             }
             echo json_encode(['success' => true, 'data' => $exportData]);
         } catch (Exception $e) {
             http_response_code(500);
             echo json_encode(["error" => $e->getMessage()]);
+        }
+        break;
+
+    case 'subscribe_newsletter':
+        try {
+            $email = $input['email'] ?? $_POST['email'] ?? null;
+            $name = $input['name'] ?? $_POST['name'] ?? 'Subscritor';
+            if (!$email) throw new Exception("Email é obrigatório");
+
+            // Ensure table exists
+            $pdo->exec("CREATE TABLE IF NOT EXISTS newsletter_subscribers (
+                id VARCHAR(50) PRIMARY KEY,
+                name VARCHAR(255),
+                email VARCHAR(255) UNIQUE,
+                status VARCHAR(50) DEFAULT 'active',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )");
+
+            // Check if exists
+            $stmt = $pdo->prepare("SELECT id, status FROM newsletter_subscribers WHERE email = ?");
+            $stmt->execute([$email]);
+            $existing = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if ($existing) {
+                // Already exists, just update name and status if needed
+                $stmt = $pdo->prepare("UPDATE newsletter_subscribers SET name = ?, status = 'active' WHERE id = ?");
+                $stmt->execute([$name, $existing['id']]);
+                echo json_encode([
+                    "success" => true, 
+                    "message" => "Obrigado! Já reconhecemos o seu registo.", 
+                    "id" => $existing['id'],
+                    "is_returning" => true
+                ]);
+            } else {
+                $id = uniqid();
+                $stmt = $pdo->prepare("INSERT INTO newsletter_subscribers (id, name, email, status) VALUES (?, ?, ?, 'active')");
+                $stmt->execute([$id, $name, $email]);
+                echo json_encode(["success" => true, "id" => $id, "is_returning" => false]);
+            }
+        } catch (Exception $e) {
+            echo json_encode(["success" => false, "error" => $e->getMessage()]);
+        }
+        break;
+
+    case 'get_newsletter_subscribers':
+        try {
+            $stmt = $pdo->query("SELECT * FROM newsletter_subscribers ORDER BY created_at DESC");
+            echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC));
+        } catch (Exception $e) {
+            echo json_encode([]);
+        }
+        break;
+
+    case 'delete_newsletter_subscriber':
+        try {
+            $id = $input['id'] ?? $_GET['id'] ?? null;
+            if (!$id) throw new Exception("ID é obrigatório");
+            $stmt = $pdo->prepare("DELETE FROM newsletter_subscribers WHERE id = ?");
+            $stmt->execute([$id]);
+            echo json_encode(["success" => true]);
+        } catch (Exception $e) {
+            echo json_encode(["success" => false, "error" => $e->getMessage()]);
         }
         break;
 

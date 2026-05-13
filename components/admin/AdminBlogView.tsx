@@ -51,7 +51,7 @@ export function AdminBlogView() {
             if (!file) return;
 
             try {
-                const uploadResult = await hostingerService.uploadDriveFile(file, null, 'blog_editor');
+                const uploadResult = await hostingerService.uploadDriveFile(file, null, 'blog_editor', 'blog');
                 const finalUrl = hostingerService.getPublicUrl(uploadResult.path);
                 
                 const quill = quillRef.current?.getEditor();
@@ -132,7 +132,13 @@ export function AdminBlogView() {
         setLoading(true);
         try {
             const data = await hostingerService.getBlogPosts();
-            if (data) setPosts(data);
+            if (data && Array.isArray(data)) {
+                const processed = data.map((post: any) => ({
+                    ...post,
+                    tags: post.tags ? (typeof post.tags === 'string' ? JSON.parse(post.tags) : post.tags) : []
+                }));
+                setPosts(processed);
+            }
         } catch (err: any) {
             console.error('Error loading posts:', err);
         } finally {
@@ -175,7 +181,7 @@ export function AdminBlogView() {
         
         setUploadingRepoMedia(true);
         try {
-            await hostingerService.uploadDriveFile(file, null, 'admin');
+            await hostingerService.uploadDriveFile(file, null, 'admin', 'repository');
             await loadMediaFiles();
             alert('Ficheiro guardado no repositório!');
         } catch (err: any) {
@@ -207,7 +213,15 @@ export function AdminBlogView() {
         setContent(post.content || '');
         setImageUrl(post.image_url || '');
         setCategory(post.category || '');
-        setTags(post.tags ? post.tags.join(', ') : '');
+        let parsedTags = [];
+        if (post.tags) {
+            try {
+                parsedTags = typeof post.tags === 'string' ? JSON.parse(post.tags) : post.tags;
+            } catch (e) {
+                parsedTags = [];
+            }
+        }
+        setTags(Array.isArray(parsedTags) ? parsedTags.join(', ') : '');
         setAuthor(post.author || 'Admin');
         setSeoTitle(post.seo_title || '');
         setSeoDescription(post.seo_description || '');
@@ -259,7 +273,7 @@ export function AdminBlogView() {
         // Deferred upload for Blog Cover
         if (selectedImageFile) {
             try {
-                const uploadResult = await hostingerService.uploadDriveFile(selectedImageFile, null, 'admin');
+                const uploadResult = await hostingerService.uploadDriveFile(selectedImageFile, null, 'admin', 'blog');
                 finalImageUrl = hostingerService.getPublicUrl(uploadResult.path);
             } catch (err: any) {
                 alert('Erro ao carregar imagem de capa: ' + err.message);
@@ -572,7 +586,7 @@ export function AdminBlogView() {
                                             const file = e.target.files?.[0];
                                             if (!file) return;
                                             try {
-                                                const uploadResult = await hostingerService.uploadDriveFile(file, null, 'admin');
+                                                const uploadResult = await hostingerService.uploadDriveFile(file, null, 'admin', 'gallery');
                                                 const url = hostingerService.getPublicUrl(uploadResult.path);
                                                 
                                                 const caption = prompt('Legenda para a imagem:') || 'Nova Imagem';

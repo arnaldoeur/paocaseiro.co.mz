@@ -1067,7 +1067,7 @@ export const Admin: React.FC = () => {
         // Deferred upload for Driver photo
         if (selectedDriverFile) {
             try {
-                const res = await hostingerService.uploadDriveFile(selectedDriverFile);
+                const res = await hostingerService.uploadDriveFile(selectedDriverFile, null, 'admin', 'team');
                 if (res.path) {
                     finalAvatarUrl = hostingerService.getPublicUrl(res.path);
                 }
@@ -1369,7 +1369,7 @@ export const Admin: React.FC = () => {
         if (!file) return;
 
         try {
-            const res = await hostingerService.uploadDriveFile(file);
+            const res = await hostingerService.uploadDriveFile(file, null, 'admin', 'avatars');
             if (res.path) {
                 const publicUrl = hostingerService.getPublicUrl(res.path);
                 setUserForm(prev => ({ ...prev, photo: publicUrl }));
@@ -1819,7 +1819,7 @@ export const Admin: React.FC = () => {
         // Deferred Image Upload
         if (selectedImageFile) {
             try {
-                const res = await hostingerService.uploadDriveFile(selectedImageFile);
+                const res = await hostingerService.uploadDriveFile(selectedImageFile, null, 'admin', 'products');
                 if (res.path) {
                     productData.image = hostingerService.getPublicUrl(res.path);
                 }
@@ -2184,7 +2184,7 @@ export const Admin: React.FC = () => {
         let imageUrl = '';
         if (supportForm.image) {
             try {
-                const res = await hostingerService.uploadDriveFile(supportForm.image);
+                const res = await hostingerService.uploadDriveFile(supportForm.image, null, 'admin', 'support');
                 if (res.path) {
                     imageUrl = hostingerService.getPublicUrl(res.path);
                 }
@@ -3298,7 +3298,7 @@ export const Admin: React.FC = () => {
                                                     setEditedMassStock(prev => {
                                                         const next = { ...prev };
                                                         selectedMassStockIds.forEach(id => {
-                                                            const p = products.find(prod => prod.id === id);
+                                                            const p = products.find(prod => String(prod.id) === String(id));
                                                             if (!p) return;
                                                             const existing = next[id] || { stockQuantity: p.stockQuantity, unit: p.unit, inStock: p.inStock, sku: p.sku || '', showInMenu: p.show_in_menu !== false };
                                                             next[id] = { ...existing, stockQuantity: Math.max(0, existing.stockQuantity + add) };
@@ -3319,7 +3319,7 @@ export const Admin: React.FC = () => {
                                                     setEditedMassStock(prev => {
                                                         const next = { ...prev };
                                                         selectedMassStockIds.forEach(id => {
-                                                            const p = products.find(prod => prod.id === id);
+                                                            const p = products.find(prod => String(prod.id) === String(id));
                                                             if (!p) return;
                                                             const existing = next[id] || { stockQuantity: p.stockQuantity, unit: p.unit, inStock: p.inStock, sku: p.sku || '', showInMenu: p.show_in_menu !== false };
                                                             next[id] = { ...existing, stockQuantity: Math.max(0, existing.stockQuantity - sub) };
@@ -3339,7 +3339,7 @@ export const Admin: React.FC = () => {
                                             setEditedMassStock(prev => {
                                                 const next = { ...prev };
                                                 selectedMassStockIds.forEach(id => {
-                                                    const p = products.find(prod => prod.id === id);
+                                                    const p = products.find(prod => String(prod.id) === String(id));
                                                     if (!p) return;
                                                     const existing = next[id] || { stockQuantity: p.stockQuantity, unit: p.unit, inStock: p.inStock, sku: p.sku || '', showInMenu: p.show_in_menu !== false };
                                                     next[id] = { ...existing, inStock: true };
@@ -3356,7 +3356,7 @@ export const Admin: React.FC = () => {
                                             setEditedMassStock(prev => {
                                                 const next = { ...prev };
                                                 selectedMassStockIds.forEach(id => {
-                                                    const p = products.find(prod => prod.id === id);
+                                                    const p = products.find(prod => String(prod.id) === String(id));
                                                     if (!p) return;
                                                     const existing = next[id] || { stockQuantity: p.stockQuantity, unit: p.unit, inStock: p.inStock, sku: p.sku || '', showInMenu: p.show_in_menu !== false };
                                                     next[id] = { ...existing, inStock: false };
@@ -3374,7 +3374,7 @@ export const Admin: React.FC = () => {
                                             setEditedMassStock(prev => {
                                                 const next = { ...prev };
                                                 selectedMassStockIds.forEach(id => {
-                                                    const p = products.find(prod => prod.id === id);
+                                                    const p = products.find(prod => String(prod.id) === String(id));
                                                     if (!p) return;
                                                     const existing = next[id] || { stockQuantity: p.stockQuantity, unit: p.unit, inStock: p.inStock, sku: p.sku || '', showInMenu: p.show_in_menu !== false };
                                                     next[id] = { ...existing, showInMenu: true };
@@ -3391,7 +3391,7 @@ export const Admin: React.FC = () => {
                                             setEditedMassStock(prev => {
                                                 const next = { ...prev };
                                                 selectedMassStockIds.forEach(id => {
-                                                    const p = products.find(prod => prod.id === id);
+                                                    const p = products.find(prod => String(prod.id) === String(id));
                                                     if (!p) return;
                                                     const existing = next[id] || { stockQuantity: p.stockQuantity, unit: p.unit, inStock: p.inStock, sku: p.sku || '', showInMenu: p.show_in_menu !== false };
                                                     next[id] = { ...existing, showInMenu: false };
@@ -3634,7 +3634,7 @@ export const Admin: React.FC = () => {
                                                                 setEditedMassStock(prev => {
                                                                     const next = { ...prev };
                                                                     selectedMassStockIds.forEach(id => {
-                                                                        const p = products.find(prod => prod.id === id);
+                                                                        const p = products.find(prod => String(prod.id) === String(id));
                                                                         if (p) {
                                                                             const existing = next[id] || { stockQuantity: p.stockQuantity, unit: p.unit, inStock: p.inStock, sku: p.sku || '', showInMenu: p.show_in_menu !== false };
                                                                             next[id] = { ...existing, stockQuantity: qty };
@@ -3660,7 +3660,7 @@ export const Admin: React.FC = () => {
                                                             setEditedMassStock(prev => {
                                                                 const next = { ...prev };
                                                                 selectedMassStockIds.forEach(id => {
-                                                                    const p = products.find(prod => prod.id === id);
+                                                                    const p = products.find(prod => String(prod.id) === String(id));
                                                                     if (p) {
                                                                         const existing = next[id] || { stockQuantity: p.stockQuantity, unit: p.unit, inStock: p.inStock, sku: p.sku || '', showInMenu: p.show_in_menu !== false };
                                                                         next[id] = { ...existing, unit: val };
@@ -3687,7 +3687,7 @@ export const Admin: React.FC = () => {
                                                             if (!e.target.value) return;
                                                             const val = e.target.value === 'true';
                                                             selectedMassStockIds.forEach(id => {
-                                                                const p = filteredProducts.find(prod => prod.id === id);
+                                                                const p = filteredProducts.find(prod => String(prod.id) === String(id));
                                                                 if (p) {
                                                                     setEditedMassStock(prev => ({
                                                                         ...prev,
@@ -3711,7 +3711,7 @@ export const Admin: React.FC = () => {
                                                             if (!e.target.value) return;
                                                             const val = e.target.value === 'true';
                                                             selectedMassStockIds.forEach(id => {
-                                                                const p = filteredProducts.find(prod => prod.id === id);
+                                                                const p = filteredProducts.find(prod => String(prod.id) === String(id));
                                                                 if (p) {
                                                                     setEditedMassStock(prev => ({
                                                                         ...prev,

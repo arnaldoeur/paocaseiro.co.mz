@@ -2,7 +2,7 @@
 // public/paocaseiro_db.php
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, Authorization');
+header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
 header('Content-Type: application/json');
 
 // Resposta para Preflight OPTIONS
@@ -12,8 +12,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
 
 // CONFIGURAÇÕES DE SEGURANÇA
 $API_KEY = "PaoCaseiro_Direct_MySQL_2026"; // Chave de segurança para o frontend
-$PAYSUITE_TOKEN = "1939|bYzLYGtc89gceqRox6udmIRS7gmWdLRj0BO7lRyN074400f8"; // Token real da dashboard da PaySuite
+$PAYSUITE_TOKEN = "1947|o1MrK0BSreKHZFH82ym7DFIm7EaVgveafTBcnTgr38985c43"; // Chave real da dashboard da PaySuite
 $PAYSUITE_WEBHOOK_SECRET = "whsec_c6df7d4376c281e30536e1aa4580807a9783362a85826574"; // Secret para verificar assinaturas de webhooks
+
+// Log function for debugging
+function debug_log($message) {
+    error_log("[PaoCaseiro DB] " . (is_array($message) || is_object($message) ? json_encode($message) : $message));
+}
 
 // CREDENCIAIS DA HOSTINGER
 $isLocal = strpos($_SERVER['HTTP_HOST'] ?? '', 'localhost') !== false;
@@ -23,15 +28,51 @@ $user = "u178468876_nazir";
 $pass = "@Pcaseiro25";
 $db   = "u178468876_pcaseiro";
 
-try {
+function get_pdo_connection() {
+    global $host, $port, $db, $user, $pass;
     $options = [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        PDO::ATTR_TIMEOUT => 5,
+        PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES utf8mb4"
     ];
-    $pdo = new PDO("mysql:host=$host;port=$port;dbname=$db;charset=utf8mb4", $user, $pass, $options);
-} catch (PDOException $e) {
+    try {
+        return new PDO("mysql:host=$host;port=$port;dbname=$db;charset=utf8mb4", $user, $pass, $options);
+    } catch (PDOException $e) {
+        debug_log("PDO Connection Error: " . $e->getMessage());
+        return null;
+    }
+}
+
+function safe_query($sql, $params = []) {
+    global $pdo;
+    if (!$pdo) {
+        $pdo = get_pdo_connection();
+        if (!$pdo) throw new Exception("Database connection unavailable.");
+    }
+    try {
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        return $stmt;
+    } catch (PDOException $e) {
+        if (strpos($e->getMessage(), 'gone away') !== false || strpos($e->getMessage(), 'connection') !== false) {
+            debug_log("MySQL connection lost during query, reconnecting...");
+            $pdo = get_pdo_connection();
+            if ($pdo) {
+                $stmt = $pdo->prepare($sql);
+                $stmt->execute($params);
+                return $stmt;
+            }
+        }
+        throw $e;
+    }
+}
+
+$pdo = get_pdo_connection();
+
+if (!$pdo) {
     http_response_code(500);
-    die(json_encode(["error" => "Falha na conexão com Hostinger: " . $e->getMessage()]));
+    die(json_encode(["error" => "Falha na conexão com Hostinger. Verifique se o servidor MySQL está acessível."]));
 }
 
 // PROCESSAMENTO DA REQUISIÇÃO
@@ -39,12 +80,26 @@ $input = json_decode(file_get_contents('php://input'), true);
 $action = $input['action'] ?? $_GET['action'] ?? '';
 
 // VALIDAÇÃO DE AUTORIZAÇÃO
-$headers = getallheaders();
-$auth = isset($headers['Authorization']) ? str_replace('Bearer ', '', $headers['Authorization']) : '';
+$all_headers = getallheaders();
+$auth = '';
 
-// Webhooks da PaySuite não usam a nossa API_KEY interna no cabeçalho Authorization
-if ($action !== 'paysuite_webhook' && $auth !== $API_KEY) {
+if (isset($all_headers['Authorization'])) {
+    $auth = $all_headers['Authorization'];
+} elseif (isset($all_headers['authorization'])) {
+    $auth = $all_headers['authorization'];
+} elseif (isset($_SERVER['HTTP_AUTHORIZATION'])) {
+    $auth = $_SERVER['HTTP_AUTHORIZATION'];
+}
+
+$token = trim(str_ireplace('Bearer ', '', $auth));
+
+// Debug log for troubleshooting (can be removed later)
+debug_log("Headers received: " . json_encode($all_headers));
+debug_log("Auth token extracted: " . $token);
+
+if ($action !== 'paysuite_webhook' && $token !== $API_KEY) {
     http_response_code(401);
+    debug_log("Unauthorized access attempt. Action: $action, Token: $token");
     die(json_encode(["error" => "Acesso não autorizado."]));
 }
 
@@ -78,8 +133,12 @@ try {
     switch ($action) {
     // --- PRODUCTS ---
     case 'get_products':
-        $stmt = $pdo->query("SELECT * FROM products ORDER BY category, name");
+        $stmt = safe_query("SELECT * FROM products ORDER BY category, name");
         echo json_encode($stmt->fetchAll());
+        break;
+
+    case 'ping':
+        echo json_encode(["success" => true, "message" => "Pong! Conectado com sucesso.", "time" => date('Y-m-d H:i:s')]);
         break;
 
     case 'bulk_save_products':
@@ -105,16 +164,15 @@ try {
                     'is_available' => isset($p['is_available']) ? ($p['is_available'] ? 1 : 0) : (isset($p['inStock']) ? ($p['inStock'] ? 1 : 0) : 1),
                     'image' => $p['image'] ?? null,
                     'unit' => $p['unit'] ?? 'un',
-                    'sku' => $p['sku'] ?? null,
                     'description' => $p['description'] ?? null,
                     'description_en' => $p['description_en'] ?? null,
-                    'prep_time' => $p['prep_time'] ?? $p['prepTime'] ?? null,
-                    'delivery_time' => $p['delivery_time'] ?? $p['deliveryTime'] ?? null,
-                    'tax_type' => $p['tax_type'] ?? $p['taxType'] ?? 'standard',
-                    'show_in_menu' => isset($p['show_in_menu']) ? ($p['show_in_menu'] ? 1 : 0) : (isset($p['showInMenu']) ? ($p['showInMenu'] ? 1 : 0) : 1),
-                    'purchase_price' => $p['purchase_price'] ?? $p['purchasePrice'] ?? 0,
-                    'other_cost' => $p['other_cost'] ?? $p['otherCost'] ?? 0,
-                    'margin_percentage' => $p['margin_percentage'] ?? $p['marginPercentage'] ?? 0,
+                    'prep_time' => $p['prep_time'] ?? null,
+                    'delivery_time' => $p['delivery_time'] ?? null,
+                    'tax_type' => $p['tax_type'] ?? 'standard',
+                    'show_in_menu' => isset($p['show_in_menu']) ? ($p['show_in_menu'] ? 1 : 0) : 1,
+                    'purchase_price' => $p['purchase_price'] ?? 0,
+                    'other_cost' => $p['other_cost'] ?? 0,
+                    'margin_percentage' => $p['margin_percentage'] ?? 0,
                     'variations' => isset($p['variations']) ? (is_array($p['variations']) ? json_encode($p['variations']) : $p['variations']) : '[]',
                     'complements' => isset($p['complements']) ? (is_array($p['complements']) ? json_encode($p['complements']) : $p['complements']) : '[]'
                 ];
@@ -166,19 +224,18 @@ try {
             'category' => $dataInput['category'] ?? null,
             'description' => $dataInput['description'] ?? null,
             'description_en' => $dataInput['description_en'] ?? null,
-            'prep_time' => $dataInput['prep_time'] ?? $dataInput['prepTime'] ?? null,
-            'delivery_time' => $dataInput['delivery_time'] ?? $dataInput['deliveryTime'] ?? null,
+            'prep_time' => $dataInput['prep_time'] ?? null,
+            'delivery_time' => $dataInput['delivery_time'] ?? null,
             'unit' => $dataInput['unit'] ?? 'un',
-            'sku' => $dataInput['sku'] ?? null,
             'stock_quantity' => $dataInput['stock_quantity'] ?? $dataInput['stockQuantity'] ?? 0,
-            'is_available' => isset($dataInput['is_available']) ? ($dataInput['is_available'] ? 1 : 0) : (isset($dataInput['inStock']) ? ($dataInput['inStock'] ? 1 : 0) : 1),
+            'is_available' => isset($dataInput['is_available']) ? ($dataInput['is_available'] ? 1 : 0) : 1,
             'variations' => isset($dataInput['variations']) ? (is_array($dataInput['variations']) ? json_encode($dataInput['variations']) : $dataInput['variations']) : '[]',
             'complements' => isset($dataInput['complements']) ? (is_array($dataInput['complements']) ? json_encode($dataInput['complements']) : $dataInput['complements']) : '[]',
-            'tax_type' => $dataInput['tax_type'] ?? $dataInput['taxType'] ?? 'standard',
-            'show_in_menu' => isset($dataInput['show_in_menu']) ? ($dataInput['show_in_menu'] ? 1 : 0) : (isset($dataInput['showInMenu']) ? ($dataInput['showInMenu'] ? 1 : 0) : 1),
-            'purchase_price' => $dataInput['purchase_price'] ?? $dataInput['purchasePrice'] ?? 0,
-            'other_cost' => $dataInput['other_cost'] ?? $dataInput['otherCost'] ?? 0,
-            'margin_percentage' => $dataInput['margin_percentage'] ?? $dataInput['marginPercentage'] ?? 0
+            'tax_type' => $dataInput['tax_type'] ?? 'standard',
+            'show_in_menu' => isset($dataInput['show_in_menu']) ? ($dataInput['show_in_menu'] ? 1 : 0) : 1,
+            'purchase_price' => $dataInput['purchase_price'] ?? 0,
+            'other_cost' => $dataInput['other_cost'] ?? 0,
+            'margin_percentage' => $dataInput['margin_percentage'] ?? 0
         ];
 
         $finalData = [];
@@ -595,6 +652,80 @@ try {
         echo json_encode($stmt->fetchAll());
         break;
 
+    case 'save_blog_post':
+        $post = $input['post'] ?? [];
+        $id = $post['id'] ?? null;
+        
+        $data = [
+            'title' => $post['title'] ?? '',
+            'slug' => $post['slug'] ?? '',
+            'content' => $post['content'] ?? '',
+            'excerpt' => $post['excerpt'] ?? '',
+            'image_url' => $post['image_url'] ?? '',
+            'category' => $post['category'] ?? '',
+            'tags' => isset($post['tags']) ? (is_array($post['tags']) ? json_encode($post['tags']) : $post['tags']) : '[]',
+            'status' => $post['status'] ?? 'draft',
+            'author' => $post['author'] ?? 'Admin',
+            'seo_title' => $post['seo_title'] ?? '',
+            'seo_description' => $post['seo_description'] ?? ''
+        ];
+
+        // Schema management
+        try {
+            $stmt = $pdo->query("DESCRIBE blog_posts");
+            $existingColumns = $stmt->fetchAll(PDO::FETCH_COLUMN);
+            foreach ($data as $col => $val) {
+                if (!in_array($col, $existingColumns)) {
+                    $pdo->exec("ALTER TABLE blog_posts ADD COLUMN `$col` TEXT");
+                }
+            }
+            if (!in_array('created_at', $existingColumns)) $pdo->exec("ALTER TABLE blog_posts ADD COLUMN `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
+            if (!in_array('updated_at', $existingColumns)) $pdo->exec("ALTER TABLE blog_posts ADD COLUMN `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
+        } catch (Exception $e) {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS blog_posts (
+                id VARCHAR(50) PRIMARY KEY,
+                title VARCHAR(255),
+                slug VARCHAR(255) UNIQUE,
+                content LONGTEXT,
+                excerpt TEXT,
+                image_url TEXT,
+                category VARCHAR(100),
+                tags TEXT,
+                status VARCHAR(50),
+                author VARCHAR(100),
+                seo_title VARCHAR(255),
+                seo_description TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            )");
+        }
+
+        if ($id) {
+            $data['updated_at'] = date('Y-m-d H:i:s');
+            $setParts = [];
+            foreach ($data as $key => $val) { $setParts[] = "`$key` = ?"; }
+            $stmt = $pdo->prepare("UPDATE blog_posts SET " . implode(', ', $setParts) . " WHERE id = ?");
+            $stmt->execute(array_merge(array_values($data), [$id]));
+        } else {
+            $id = uniqid('post_');
+            $data['id'] = $id;
+            $data['created_at'] = date('Y-m-d H:i:s');
+            $data['updated_at'] = date('Y-m-d H:i:s');
+            $cols = array_keys($data);
+            $vals = array_fill(0, count($cols), '?');
+            $stmt = $pdo->prepare("INSERT INTO blog_posts (`" . implode('`, `', $cols) . "`) VALUES (" . implode(', ', $vals) . ")");
+            $stmt->execute(array_values($data));
+        }
+        echo json_encode(['success' => true, 'id' => $id]);
+        break;
+
+    case 'delete_blog_post':
+        $id = $input['id'] ?? '';
+        $stmt = $pdo->prepare("DELETE FROM blog_posts WHERE id = ?");
+        $stmt->execute([$id]);
+        echo json_encode(['success' => true]);
+        break;
+
     case 'get_blog_post_by_slug':
         $slug = $input['slug'] ?? '';
         $stmt = $pdo->prepare("SELECT * FROM blog_posts WHERE slug = ?");
@@ -622,7 +753,22 @@ try {
         
         $stmt = $pdo->prepare("SELECT * FROM blog_comments WHERE id = ?");
         $stmt->execute([$id]);
-        echo json_encode($stmt->fetch());
+        echo json_encode(['success' => true, 'data' => $stmt->fetch()]);
+        break;
+
+    case 'update_blog_comment_status':
+        $id = $input['id'] ?? '';
+        $status = $input['status'] ?? 'pending';
+        $stmt = $pdo->prepare("UPDATE blog_comments SET status = ? WHERE id = ?");
+        $stmt->execute([$status, $id]);
+        echo json_encode(['success' => true]);
+        break;
+
+    case 'delete_blog_comment':
+        $id = $input['id'] ?? '';
+        $stmt = $pdo->prepare("DELETE FROM blog_comments WHERE id = ?");
+        $stmt->execute([$id]);
+        echo json_encode(['success' => true]);
         break;
 
     // --- QUEUE / TICKETS ---
@@ -1408,6 +1554,48 @@ try {
         }
         break;
 
+    // --- GALLERY ---
+    case 'get_gallery':
+    case 'fetch_gallery':
+        $stmt = $pdo->query("SELECT * FROM gallery ORDER BY created_at DESC");
+        $items = $stmt->fetchAll();
+        echo json_encode(['success' => true, 'data' => $items]);
+        break;
+
+    case 'save_gallery_item':
+        $item = $input['item'] ?? [];
+        $id = $item['id'] ?? null;
+        $data = [
+            'title' => $item['title'] ?? '',
+            'description' => $item['description'] ?? '',
+            'image_url' => $item['image_url'] ?? '',
+            'category' => $item['category'] ?? 'General',
+            'is_active' => $item['is_active'] ?? true
+        ];
+        
+        if ($id) {
+            $fields = [];
+            foreach ($data as $k => $v) { $fields[] = "`$k` = ?"; }
+            $stmt = $pdo->prepare("UPDATE gallery SET " . implode(', ', $fields) . " WHERE id = ?");
+            $stmt->execute(array_merge(array_values($data), [$id]));
+        } else {
+            $id = uniqid('gal_');
+            $data['id'] = $id;
+            $cols = array_keys($data);
+            $placeholders = array_fill(0, count($cols), '?');
+            $stmt = $pdo->prepare("INSERT INTO gallery (`" . implode('`, `', $cols) . "`) VALUES (" . implode(', ', $placeholders) . ")");
+            $stmt->execute(array_values($data));
+        }
+        echo json_encode(['success' => true, 'id' => $id]);
+        break;
+
+    case 'delete_gallery_item':
+        $id = $input['id'] ?? '';
+        $stmt = $pdo->prepare("DELETE FROM gallery WHERE id = ?");
+        $stmt->execute([$id]);
+        echo json_encode(['success' => true]);
+        break;
+
     case 'test_email':
         $to = $input['to'] ?? 'geral@paocaseiro.co.mz';
         $result = send_resend_email($to, 'Teste de Email Pão Caseiro', '<h1>Funcionando!</h1><p>Este é um teste de entrega da ponte PHP.</p>');
@@ -1483,8 +1671,10 @@ try {
         $file = $_FILES['file'];
         $folderId = $_POST['folder_id'] ?? null;
         $uploadedBy = $_POST['uploaded_by'] ?? 'admin';
+        $targetFolder = preg_replace('/[^a-zA-Z0-9_\-]/', '', $_POST['target_folder'] ?? 'drive');
+        if (empty($targetFolder)) $targetFolder = 'drive';
         
-        $uploadDir = 'uploads/drive/';
+        $uploadDir = 'uploads/' . $targetFolder . '/';
         if (!is_dir($uploadDir)) mkdir($uploadDir, 0777, true);
         
         $fileName = time() . '_' . basename($file['name']);
@@ -1526,32 +1716,35 @@ try {
         break;
 
     case 'init_tx':
-
         try {
-            $payload = $input['payload'] ?? $input;
-            $action = $payload['action'] ?? 'initiate';
+            $inputPayload = $input['payload'] ?? $input;
+            $txAction = $inputPayload['action'] ?? 'initiate';
             
-            // This is a proxy to the payment gateway (PaySuite)
-            // In a real scenario, you'd use CURL to call the gateway API here.
-            // For now, we'll simulate the response if in sandbox mode or implement the CURL.
+            // Clean payload for PaySuite
+            $paySuitePayload = $inputPayload;
+            unset($paySuitePayload['action']); // Remove our internal action field
             
-            $url = "https://paysuite.tech/api/v1/payments"; // Mock/Real URL
-            if ($action === 'verify') {
-                $url .= "/verify/" . $payload['id'];
+            $url = "https://paysuite.tech/api/v1/payments";
+            if ($txAction === 'verify') {
+                $id = $inputPayload['id'] ?? $inputPayload['reference'] ?? '';
+                $url .= "/" . $id;
             }
 
-            // Implement the real CURL to PaySuite API
+            debug_log("Initiating PaySuite " . $txAction . " at " . $url);
+            if ($txAction === 'initiate') {
+                debug_log("Payload: " . json_encode($paySuitePayload));
+            }
+
             $ch = curl_init();
-            
             $curlOptions = [
                 CURLOPT_URL => $url,
                 CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_ENCODING => "",
-                CURLOPT_MAXREDIRS => 10,
-                CURLOPT_TIMEOUT => 30,
+                CURLOPT_MAXREDIRS => 5,
+                CURLOPT_TIMEOUT => 25,
                 CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
-                CURLOPT_SSL_VERIFYPEER => !$isLocal,
-                CURLOPT_SSL_VERIFYHOST => $isLocal ? 0 : 2,
+                CURLOPT_SSL_VERIFYPEER => false,
+                CURLOPT_SSL_VERIFYHOST => 0,
                 CURLOPT_HTTPHEADER => [
                     "Accept: application/json",
                     "Content-Type: application/json",
@@ -1559,9 +1752,9 @@ try {
                 ],
             ];
 
-            if ($action === 'initiate') {
-                $curlOptions[CURLOPT_CUSTOMREQUEST] = "POST";
-                $curlOptions[CURLOPT_POSTFIELDS] = json_encode($payload);
+            if ($txAction === 'initiate') {
+                $curlOptions[CURLOPT_POST] = true;
+                $curlOptions[CURLOPT_POSTFIELDS] = json_encode($paySuitePayload);
             } else {
                 $curlOptions[CURLOPT_CUSTOMREQUEST] = "GET";
             }
@@ -1574,67 +1767,89 @@ try {
             curl_close($ch);
 
             if ($err) {
-                error_log("PaySuite CURL Error: " . $err);
+                debug_log("PaySuite CURL Error: " . $err);
                 echo json_encode([
                     "success" => false,
-                    "message" => "cURL Error: " . $err
+                    "message" => "Erro de conexão (cURL): " . $err
                 ]);
             } else {
+                debug_log("PaySuite RAW Response (HTTP $httpCode): " . $response);
                 $decoded = json_decode($response, true);
-                if (isset($decoded['checkout_url']) || isset($decoded['status']) || $httpCode == 200 || $httpCode == 201) {
-                    echo json_encode([
-                        "success" => true,
-                        "data" => $decoded ? $decoded : ["raw_response" => $response, "status" => "PENDING"]
-                    ]);
+                
+                if ($httpCode == 401) {
+                    debug_log("PaySuite AUTH FAILURE. Current Token: " . substr($PAYSUITE_TOKEN, 0, 8) . "...");
+                }
+
+                $isSuccess = ($httpCode >= 200 && $httpCode < 300);
+                
+                // PaySuite returns 201 Created and nests data inside a 'data' object
+                $reallySuccessful = $isSuccess && $decoded && (
+                    isset($decoded['checkout_url']) || 
+                    isset($decoded['data']['checkout_url']) || 
+                    (isset($decoded['success']) && $decoded['success'] === true) ||
+                    (isset($decoded['status']) && $decoded['status'] === 'success')
+                );
+
+                if ($reallySuccessful) {
+                    // Extract the inner data if it exists, otherwise return decoded
+                    $responseData = $decoded['data'] ?? $decoded;
+                    echo json_encode(["success" => true, "data" => $responseData]); 
                 } else {
-                    error_log("PaySuite API Error (HTTP $httpCode): " . $response);
+                    debug_log("PaySuite Logic Error (HTTP $httpCode): " . $response);
+                    http_response_code($httpCode);
                     echo json_encode([
                         "success" => false,
-                        "message" => "Erro da PaySuite (HTTP $httpCode)",
-                        "error_details" => $decoded ? $decoded : $response
+                        "message" => "A PaySuite retornou um erro (HTTP $httpCode)",
+                        "error_details" => $decoded ? $decoded : $response,
+                        "payload_sent" => $txAction === 'initiate' ? $paySuitePayload : null
                     ]);
                 }
             }
         } catch (Exception $e) {
+            debug_log("Exception in init_tx: " . $e->getMessage());
             http_response_code(500);
-            echo json_encode(["error" => $e->getMessage()]);
+            echo json_encode(["success" => false, "message" => "Excepção interna: " . $e->getMessage()]);
         }
         break;
 
-    case 'paysuite_webhook':
-        try {
-            $rawPayload = file_get_contents('php://input');
-            $webhookData = json_decode($rawPayload, true);
+    case 'webhook':
+        // Webhook security verification per PaySuite docs
+        $payload = file_get_contents('php://input');
+        $signature = $_SERVER['HTTP_X_WEBHOOK_SIGNATURE'] ?? '';
+        
+        debug_log("PaySuite Webhook Received. Signature: " . $signature);
+        
+        $calculatedSignature = hash_hmac('sha256', $payload, $PAYSUITE_WEBHOOK_SECRET);
+        
+        if (hash_equals($signature, $calculatedSignature)) {
+            $data = json_decode($payload, true);
+            $event = $data['event'] ?? '';
+            $ref = $data['data']['reference'] ?? '';
+            $txId = $data['data']['transaction']['id'] ?? null;
             
-            // O webhook da PaySuite envia tipicamente a referência e o status
-            // reference ou tx_ref
-            $ref = $webhookData['reference'] ?? $webhookData['tx_ref'] ?? $webhookData['order_id'] ?? null;
-            $status = $webhookData['status'] ?? null;
+            debug_log("Webhook Verified: $event for Ref: $ref");
             
-            if ($ref && $status) {
-                // Mapear status da PaySuite para nosso DB
-                $dbStatus = 'PENDING';
-                $lowerStatus = strtolower($status);
-                if (in_array($lowerStatus, ['successful', 'paid', 'approved', 'success'])) {
-                    $dbStatus = 'PAID';
-                } elseif (in_array($lowerStatus, ['failed', 'rejected', 'canceled', 'cancelled'])) {
-                    $dbStatus = 'CANCELLED';
-                }
-                
-                // Tenta atualizar como payment_reference ou como id (fallback)
-                $stmt = $pdo->prepare("UPDATE orders SET payment_status = ? WHERE payment_reference = ? OR id = ?");
-                $stmt->execute([$dbStatus, $ref, $ref]);
-                
-                echo json_encode(["success" => true, "message" => "Webhook processado", "status" => $dbStatus]);
-            } else {
-                http_response_code(400);
-                echo json_encode(["success" => false, "message" => "Dados inválidos no webhook"]);
+            if ($event === 'payment.success') {
+                $stmt = $pdo->prepare("UPDATE orders SET payment_status = 'paid', status = 'paid', transaction_id = ?, updated_at = NOW() WHERE payment_reference = ?");
+                $stmt->execute([$txId, $ref]);
+                debug_log("Order $ref marked as PAID via Webhook.");
+            } else if ($event === 'payment.failed') {
+                $error = $data['data']['error'] ?? 'Unknown error';
+                $stmt = $pdo->prepare("UPDATE orders SET payment_status = 'failed', notes = CONCAT(IFNULL(notes,''), '\nPaySuite Error: ', ?), updated_at = NOW() WHERE payment_reference = ?");
+                $stmt->execute([$error, $ref]);
+                debug_log("Order $ref marked as FAILED via Webhook: $error");
             }
-        } catch (Exception $e) {
-            http_response_code(500);
-            echo json_encode(["error" => $e->getMessage()]);
+            
+            echo json_encode(["status" => "success", "message" => "Event processed"]);
+        } else {
+            debug_log("Webhook Signature Mismatch! Calculated: $calculatedSignature");
+            http_response_code(401);
+            echo json_encode(["status" => "error", "message" => "Invalid signature"]);
         }
         break;
+
+    // Legacy paysuite_webhook removed - use verified 'webhook' action above.
+
 
     case 'get_ai_insights':
         try {
@@ -1726,16 +1941,82 @@ try {
 
     case 'export_database':
         try {
-            $tables = ['products', 'customers', 'orders', 'order_items', 'receipts', 'team_members', 'audit_logs'];
+            $tables = ['products', 'customers', 'orders', 'order_items', 'receipts', 'team_members', 'audit_logs', 'newsletter_subscribers', 'drive_files'];
             $exportData = [];
             foreach ($tables as $table) {
-                $stmt = $pdo->query("SELECT * FROM $table");
-                $exportData[$table] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                // Check if table exists before querying
+                $check = $pdo->query("SHOW TABLES LIKE '$table'");
+                if ($check->rowCount() > 0) {
+                    $stmt = $pdo->query("SELECT * FROM $table");
+                    $exportData[$table] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                }
             }
             echo json_encode(['success' => true, 'data' => $exportData]);
         } catch (Exception $e) {
             http_response_code(500);
             echo json_encode(["error" => $e->getMessage()]);
+        }
+        break;
+
+    case 'subscribe_newsletter':
+        try {
+            $email = $input['email'] ?? $_POST['email'] ?? null;
+            $name = $input['name'] ?? $_POST['name'] ?? 'Subscritor';
+            if (!$email) throw new Exception("Email é obrigatório");
+
+            // Ensure table exists
+            $pdo->exec("CREATE TABLE IF NOT EXISTS newsletter_subscribers (
+                id VARCHAR(50) PRIMARY KEY,
+                name VARCHAR(255),
+                email VARCHAR(255) UNIQUE,
+                status VARCHAR(50) DEFAULT 'active',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )");
+
+            // Check if exists
+            $stmt = $pdo->prepare("SELECT id, status FROM newsletter_subscribers WHERE email = ?");
+            $stmt->execute([$email]);
+            $existing = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if ($existing) {
+                // Already exists, just update name and status if needed
+                $stmt = $pdo->prepare("UPDATE newsletter_subscribers SET name = ?, status = 'active' WHERE id = ?");
+                $stmt->execute([$name, $existing['id']]);
+                echo json_encode([
+                    "success" => true, 
+                    "message" => "Obrigado! Já reconhecemos o seu registo.", 
+                    "id" => $existing['id'],
+                    "is_returning" => true
+                ]);
+            } else {
+                $id = uniqid();
+                $stmt = $pdo->prepare("INSERT INTO newsletter_subscribers (id, name, email, status) VALUES (?, ?, ?, 'active')");
+                $stmt->execute([$id, $name, $email]);
+                echo json_encode(["success" => true, "id" => $id, "is_returning" => false]);
+            }
+        } catch (Exception $e) {
+            echo json_encode(["success" => false, "error" => $e->getMessage()]);
+        }
+        break;
+
+    case 'get_newsletter_subscribers':
+        try {
+            $stmt = $pdo->query("SELECT * FROM newsletter_subscribers ORDER BY created_at DESC");
+            echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC));
+        } catch (Exception $e) {
+            echo json_encode([]);
+        }
+        break;
+
+    case 'delete_newsletter_subscriber':
+        try {
+            $id = $input['id'] ?? $_GET['id'] ?? null;
+            if (!$id) throw new Exception("ID é obrigatório");
+            $stmt = $pdo->prepare("DELETE FROM newsletter_subscribers WHERE id = ?");
+            $stmt->execute([$id]);
+            echo json_encode(["success" => true]);
+        } catch (Exception $e) {
+            echo json_encode(["success" => false, "error" => $e->getMessage()]);
         }
         break;
 

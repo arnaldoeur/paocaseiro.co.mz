@@ -471,17 +471,17 @@ export const hostingerService = {
     async registerDriveFile(file: any) {
         return this.fetch('register_drive_file', { file });
     },
-
     async processPayment(payload: any) {
         return this.fetch('init_tx', { payload });
     },
 
-    async uploadDriveFile(file: File, folderId?: string, uploadedBy?: string) {
+    async uploadDriveFile(file: File, folderId?: string | null, uploadedBy?: string, targetFolder?: string) {
         const formData = new FormData();
         formData.append('file', file);
         if (folderId) formData.append('folder_id', folderId);
         if (uploadedBy) formData.append('uploaded_by', uploadedBy);
-        
+        if (targetFolder) formData.append('target_folder', targetFolder);
+
         const response = await fetch(`${HOSTINGER_BRIDGE_URL}?action=upload_drive_file`, {
             method: 'POST',
             headers: {
@@ -490,7 +490,7 @@ export const hostingerService = {
             body: formData
         });
 
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        if (!response.ok) throw new Error('Falha no upload');
         const data = await response.json();
         if (data && data.error) throw new Error(data.error);
         return data;
