@@ -1808,6 +1808,7 @@ export const Admin: React.FC = () => {
             tax_type: form.taxType.value,
             stock_quantity: Number(form.stockQuantity.value) || 0,
             is_available: form.inStock.checked ? 1 : 0,
+            show_in_menu: form.showInMenu.checked ? 1 : 0,
             prep_time: form.prepTime.value,
             delivery_time: form.deliveryTime.value,
             unit: form.unit.value,
@@ -2517,18 +2518,19 @@ export const Admin: React.FC = () => {
             
             if (productIds.length > 0) {
                 const productsToUpdate = productIds.map(id => {
-                    const originalProduct = products.find(prod => String(prod.id) === String(id));
+                    const p = products.find(prod => String(prod.id) === String(id));
+                    if (!p) return null;
                     const changes = editedMassStock[id];
                     return {
-                        ...originalProduct,
+                        ...p,
                         id,
-                        stock_quantity: changes.stockQuantity,
-                        unit: changes.unit,
-                        is_available: changes.inStock,
-                        show_in_menu: changes.showInMenu,
-                        sku: changes.sku
+                        stock_quantity: changes.stockQuantity !== undefined ? changes.stockQuantity : p.stockQuantity,
+                        unit: changes.unit !== undefined ? changes.unit : p.unit,
+                        is_available: changes.inStock !== undefined ? (changes.inStock ? 1 : 0) : (p.inStock ? 1 : 0),
+                        show_in_menu: changes.showInMenu !== undefined ? (changes.showInMenu ? 1 : 0) : (p.show_in_menu !== false ? 1 : 0),
+                        sku: changes.sku !== undefined ? changes.sku : p.sku
                     };
-                });
+                }).filter(p => p !== null);
                 const result = await hostingerService.bulkSaveProducts(productsToUpdate);
                 if (!result.success) throw new Error(result.error || 'Erro no Hostinger');
                 
@@ -3282,10 +3284,56 @@ export const Admin: React.FC = () => {
                             </select>
                             
                             {stockTab === 'management' && selectedMassStockIds.length > 0 && (
-                                <div className="flex gap-2 mr-auto bg-[#d9a65a]/10 p-2 rounded-xl border border-[#d9a65a]/20 items-center animate-fade-in shadow-inner">
-                                    <span className="text-xs font-black text-[#3b2f2f] uppercase tracking-wider px-3 border-r border-[#d9a65a]/30">
-                                        {selectedMassStockIds.length} Sel.
+                                <div className="flex flex-wrap gap-2 mr-auto bg-[#d9a65a]/10 p-2 rounded-xl border border-[#d9a65a]/20 items-center animate-fade-in shadow-inner">
+                                    <span className="text-[10px] font-black text-[#3b2f2f] uppercase tracking-wider px-3 border-r border-[#d9a65a]/30">
+                                        {selectedMassStockIds.length} Itens
                                     </span>
+                                    
+                                    <div className="flex items-center gap-1.5 px-2 border-r border-[#d9a65a]/30">
+                                        <button 
+                                            onClick={() => {
+                                                const val = prompt("Quantidade a adicionar ao stock atual de todos os itens selecionados:");
+                                                if (val && !isNaN(Number(val))) {
+                                                    const add = Number(val);
+                                                    setEditedMassStock(prev => {
+                                                        const next = { ...prev };
+                                                        selectedMassStockIds.forEach(id => {
+                                                            const p = products.find(prod => prod.id === id);
+                                                            if (!p) return;
+                                                            const existing = next[id] || { stockQuantity: p.stockQuantity, unit: p.unit, inStock: p.inStock, sku: p.sku || '', showInMenu: p.show_in_menu !== false };
+                                                            next[id] = { ...existing, stockQuantity: Math.max(0, existing.stockQuantity + add) };
+                                                        });
+                                                        return next;
+                                                    });
+                                                }
+                                            }}
+                                            className="bg-white text-[#d9a65a] hover:bg-orange-50 border border-[#d9a65a]/30 px-2 py-1 rounded text-[10px] font-bold transition-all"
+                                        >
+                                            + Stock
+                                        </button>
+                                        <button 
+                                            onClick={() => {
+                                                const val = prompt("Quantidade a remover do stock atual de todos os itens selecionados:");
+                                                if (val && !isNaN(Number(val))) {
+                                                    const sub = Number(val);
+                                                    setEditedMassStock(prev => {
+                                                        const next = { ...prev };
+                                                        selectedMassStockIds.forEach(id => {
+                                                            const p = products.find(prod => prod.id === id);
+                                                            if (!p) return;
+                                                            const existing = next[id] || { stockQuantity: p.stockQuantity, unit: p.unit, inStock: p.inStock, sku: p.sku || '', showInMenu: p.show_in_menu !== false };
+                                                            next[id] = { ...existing, stockQuantity: Math.max(0, existing.stockQuantity - sub) };
+                                                        });
+                                                        return next;
+                                                    });
+                                                }
+                                            }}
+                                            className="bg-white text-red-500 hover:bg-red-50 border border-red-100 px-2 py-1 rounded text-[10px] font-bold transition-all"
+                                        >
+                                            - Stock
+                                        </button>
+                                    </div>
+
                                     <button 
                                         onClick={() => {
                                             setEditedMassStock(prev => {
@@ -3293,20 +3341,15 @@ export const Admin: React.FC = () => {
                                                 selectedMassStockIds.forEach(id => {
                                                     const p = products.find(prod => prod.id === id);
                                                     if (!p) return;
-                                                    const existing = next[id] || { stockQuantity: p.stockQuantity, unit: p.unit, inStock: p.inStock, sku: p.sku || '', showInMenu: p.show_in_menu };
-                                                    const newState = { ...existing, inStock: true };
-                                                    if (newState.stockQuantity === p.stockQuantity && newState.unit === p.unit && newState.inStock === p.inStock && newState.sku === (p.sku || '') && newState.showInMenu === p.show_in_menu) {
-                                                        delete next[id];
-                                                    } else {
-                                                        next[id] = newState;
-                                                    }
+                                                    const existing = next[id] || { stockQuantity: p.stockQuantity, unit: p.unit, inStock: p.inStock, sku: p.sku || '', showInMenu: p.show_in_menu !== false };
+                                                    next[id] = { ...existing, inStock: true };
                                                 });
                                                 return next;
                                             });
                                         }}
-                                        className="bg-green-100 text-green-800 hover:bg-green-200 border border-green-200 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm focus:outline-none"
+                                        className="bg-green-100 text-green-800 hover:bg-green-200 border border-green-200 px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all shadow-sm"
                                     >
-                                        Marcar Disponível
+                                        Disponível
                                     </button>
                                     <button 
                                         onClick={() => {
@@ -3315,20 +3358,15 @@ export const Admin: React.FC = () => {
                                                 selectedMassStockIds.forEach(id => {
                                                     const p = products.find(prod => prod.id === id);
                                                     if (!p) return;
-                                                    const existing = next[id] || { stockQuantity: p.stockQuantity, unit: p.unit, inStock: p.inStock, sku: p.sku || '', showInMenu: p.show_in_menu };
-                                                    const newState = { ...existing, inStock: false };
-                                                    if (newState.stockQuantity === p.stockQuantity && newState.unit === p.unit && newState.inStock === p.inStock && newState.sku === (p.sku || '') && newState.showInMenu === p.show_in_menu) {
-                                                        delete next[id];
-                                                    } else {
-                                                        next[id] = newState;
-                                                    }
+                                                    const existing = next[id] || { stockQuantity: p.stockQuantity, unit: p.unit, inStock: p.inStock, sku: p.sku || '', showInMenu: p.show_in_menu !== false };
+                                                    next[id] = { ...existing, inStock: false };
                                                 });
                                                 return next;
                                             });
                                         }}
-                                        className="bg-red-100 text-red-800 hover:bg-red-200 border border-red-200 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm focus:outline-none"
+                                        className="bg-red-100 text-red-800 hover:bg-red-200 border border-red-200 px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all shadow-sm"
                                     >
-                                        Marcar Esgotado
+                                        Esgotado
                                     </button>
                                     <div className="h-6 w-px bg-gray-200 mx-1"></div>
                                     <button 
@@ -3338,20 +3376,15 @@ export const Admin: React.FC = () => {
                                                 selectedMassStockIds.forEach(id => {
                                                     const p = products.find(prod => prod.id === id);
                                                     if (!p) return;
-                                                    const existing = next[id] || { stockQuantity: p.stockQuantity, unit: p.unit, inStock: p.inStock, sku: p.sku || '', showInMenu: p.show_in_menu };
-                                                    const newState = { ...existing, showInMenu: true };
-                                                    if (newState.stockQuantity === p.stockQuantity && newState.unit === p.unit && newState.inStock === p.inStock && newState.sku === (p.sku || '') && newState.showInMenu === p.show_in_menu) {
-                                                        delete next[id];
-                                                    } else {
-                                                        next[id] = newState;
-                                                    }
+                                                    const existing = next[id] || { stockQuantity: p.stockQuantity, unit: p.unit, inStock: p.inStock, sku: p.sku || '', showInMenu: p.show_in_menu !== false };
+                                                    next[id] = { ...existing, showInMenu: true };
                                                 });
                                                 return next;
                                             });
                                         }}
-                                        className="bg-blue-100 text-blue-800 hover:bg-blue-200 border border-blue-200 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm focus:outline-none"
+                                        className="bg-blue-100 text-blue-800 hover:bg-blue-200 border border-blue-200 px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all shadow-sm"
                                     >
-                                        Mostrar no Menu
+                                        Visível
                                     </button>
                                     <button 
                                         onClick={() => {
@@ -3360,20 +3393,22 @@ export const Admin: React.FC = () => {
                                                 selectedMassStockIds.forEach(id => {
                                                     const p = products.find(prod => prod.id === id);
                                                     if (!p) return;
-                                                    const existing = next[id] || { stockQuantity: p.stockQuantity, unit: p.unit, inStock: p.inStock, sku: p.sku || '', showInMenu: p.show_in_menu };
-                                                    const newState = { ...existing, showInMenu: false };
-                                                    if (newState.stockQuantity === p.stockQuantity && newState.unit === p.unit && newState.inStock === p.inStock && newState.sku === (p.sku || '') && newState.showInMenu === p.show_in_menu) {
-                                                        delete next[id];
-                                                    } else {
-                                                        next[id] = newState;
-                                                    }
+                                                    const existing = next[id] || { stockQuantity: p.stockQuantity, unit: p.unit, inStock: p.inStock, sku: p.sku || '', showInMenu: p.show_in_menu !== false };
+                                                    next[id] = { ...existing, showInMenu: false };
                                                 });
                                                 return next;
                                             });
                                         }}
-                                        className="bg-gray-100 text-gray-800 hover:bg-gray-200 border border-gray-200 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm focus:outline-none"
+                                        className="bg-gray-100 text-gray-800 hover:bg-gray-200 border border-gray-200 px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all shadow-sm"
                                     >
-                                        Ocultar do Menu
+                                        Ocultar
+                                    </button>
+                                    <button 
+                                        onClick={() => setSelectedMassStockIds([])}
+                                        className="ml-2 text-gray-400 hover:text-red-500 transition-colors"
+                                        title="Limpar Seleção"
+                                    >
+                                        <X size={14} />
                                     </button>
                                 </div>
                             )}
@@ -3590,25 +3625,29 @@ export const Admin: React.FC = () => {
                                             
                                             <div className="flex items-center gap-4">
                                                 <div className="flex items-center gap-2">
-                                                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Definir Qtd</label>
-                                                    <input 
-                                                        type="number" 
-                                                        placeholder="Ex: 10" 
-                                                        className="w-20 p-1.5 text-xs border border-gray-200 rounded-lg focus:border-[#d9a65a] outline-none"
-                                                        onChange={(e) => {
-                                                            const val = Number(e.target.value);
-                                                            if (isNaN(val)) return;
-                                                            selectedMassStockIds.forEach(id => {
-                                                                const p = filteredProducts.find(prod => prod.id === id);
-                                                                if (p) {
-                                                                    setEditedMassStock(prev => ({
-                                                                        ...prev,
-                                                                        [id]: { ...(prev[id] || { stockQuantity: p.stockQuantity, unit: p.unit, inStock: p.inStock, sku: p.sku || '' }), stockQuantity: val }
-                                                                    }));
-                                                                }
-                                                            });
+                                                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Stock</label>
+                                                    <button 
+                                                        onClick={() => {
+                                                            const val = prompt("Definir Stock para todos os selecionados:");
+                                                            if (val !== null && !isNaN(Number(val))) {
+                                                                const qty = Number(val);
+                                                                setEditedMassStock(prev => {
+                                                                    const next = { ...prev };
+                                                                    selectedMassStockIds.forEach(id => {
+                                                                        const p = products.find(prod => prod.id === id);
+                                                                        if (p) {
+                                                                            const existing = next[id] || { stockQuantity: p.stockQuantity, unit: p.unit, inStock: p.inStock, sku: p.sku || '', showInMenu: p.show_in_menu !== false };
+                                                                            next[id] = { ...existing, stockQuantity: qty };
+                                                                        }
+                                                                    });
+                                                                    return next;
+                                                                });
+                                                            }
                                                         }}
-                                                    />
+                                                        className="bg-white text-[#d9a65a] border border-[#d9a65a]/30 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-orange-50 transition-all shadow-sm flex items-center gap-2"
+                                                    >
+                                                        <Box size={14} /> Definir Qtd
+                                                    </button>
                                                 </div>
                                                 
                                                 <div className="flex items-center gap-2">
@@ -3617,14 +3656,17 @@ export const Admin: React.FC = () => {
                                                         className="p-1.5 text-xs border border-gray-200 rounded-lg focus:border-[#d9a65a] outline-none"
                                                         onChange={(e) => {
                                                             const val = e.target.value;
-                                                            selectedMassStockIds.forEach(id => {
-                                                                const p = filteredProducts.find(prod => prod.id === id);
-                                                                if (p) {
-                                                                    setEditedMassStock(prev => ({
-                                                                        ...prev,
-                                                                        [id]: { ...(prev[id] || { stockQuantity: p.stockQuantity, unit: p.unit, inStock: p.inStock, sku: p.sku || '' }), unit: val }
-                                                                    }));
-                                                                }
+                                                            if (!val) return;
+                                                            setEditedMassStock(prev => {
+                                                                const next = { ...prev };
+                                                                selectedMassStockIds.forEach(id => {
+                                                                    const p = products.find(prod => prod.id === id);
+                                                                    if (p) {
+                                                                        const existing = next[id] || { stockQuantity: p.stockQuantity, unit: p.unit, inStock: p.inStock, sku: p.sku || '', showInMenu: p.show_in_menu !== false };
+                                                                        next[id] = { ...existing, unit: val };
+                                                                    }
+                                                                });
+                                                                return next;
                                                             });
                                                         }}
                                                     >
@@ -7374,14 +7416,27 @@ export const Admin: React.FC = () => {
                                     </div>
 
                                     <div className="flex items-center justify-between pt-6 border-t border-gray-100">
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex flex-col sm:flex-row gap-6">
                                             <div className="relative inline-flex items-center cursor-pointer">
                                                 <input type="checkbox" name="inStock" defaultChecked={currentProduct?.inStock} className="sr-only peer" />
                                                 <div onClick={(e) => {
                                                     const checkbox = (e.currentTarget.previousElementSibling as HTMLInputElement);
                                                     checkbox.checked = !checkbox.checked;
-                                                }} className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                                                    e.currentTarget.classList.toggle('bg-green-600', checkbox.checked);
+                                                    e.currentTarget.classList.toggle('bg-gray-200', !checkbox.checked);
+                                                }} className={`w-11 h-6 ${currentProduct?.inStock ? 'bg-green-600' : 'bg-gray-200'} peer-focus:outline-none rounded-full peer after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full peer-checked:after:border-white transition-colors`}></div>
                                                 <span className="ml-3 text-[10px] font-black text-gray-400 uppercase tracking-widest">Disponível</span>
+                                            </div>
+
+                                            <div className="relative inline-flex items-center cursor-pointer">
+                                                <input type="checkbox" name="showInMenu" defaultChecked={currentProduct?.show_in_menu !== false} className="sr-only peer" />
+                                                <div onClick={(e) => {
+                                                    const checkbox = (e.currentTarget.previousElementSibling as HTMLInputElement);
+                                                    checkbox.checked = !checkbox.checked;
+                                                    e.currentTarget.classList.toggle('bg-blue-600', checkbox.checked);
+                                                    e.currentTarget.classList.toggle('bg-gray-200', !checkbox.checked);
+                                                }} className={`w-11 h-6 ${currentProduct?.show_in_menu !== false ? 'bg-blue-600' : 'bg-gray-200'} peer-focus:outline-none rounded-full peer after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full peer-checked:after:border-white transition-colors`}></div>
+                                                <span className="ml-3 text-[10px] font-black text-gray-400 uppercase tracking-widest">Visível no Menu</span>
                                             </div>
                                         </div>
                                         <div className="flex gap-3">

@@ -652,6 +652,80 @@ try {
         echo json_encode($stmt->fetchAll());
         break;
 
+    case 'save_blog_post':
+        $post = $input['post'] ?? [];
+        $id = $post['id'] ?? null;
+        
+        $data = [
+            'title' => $post['title'] ?? '',
+            'slug' => $post['slug'] ?? '',
+            'content' => $post['content'] ?? '',
+            'excerpt' => $post['excerpt'] ?? '',
+            'image_url' => $post['image_url'] ?? '',
+            'category' => $post['category'] ?? '',
+            'tags' => isset($post['tags']) ? (is_array($post['tags']) ? json_encode($post['tags']) : $post['tags']) : '[]',
+            'status' => $post['status'] ?? 'draft',
+            'author' => $post['author'] ?? 'Admin',
+            'seo_title' => $post['seo_title'] ?? '',
+            'seo_description' => $post['seo_description'] ?? ''
+        ];
+
+        // Schema management
+        try {
+            $stmt = $pdo->query("DESCRIBE blog_posts");
+            $existingColumns = $stmt->fetchAll(PDO::FETCH_COLUMN);
+            foreach ($data as $col => $val) {
+                if (!in_array($col, $existingColumns)) {
+                    $pdo->exec("ALTER TABLE blog_posts ADD COLUMN `$col` TEXT");
+                }
+            }
+            if (!in_array('created_at', $existingColumns)) $pdo->exec("ALTER TABLE blog_posts ADD COLUMN `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
+            if (!in_array('updated_at', $existingColumns)) $pdo->exec("ALTER TABLE blog_posts ADD COLUMN `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
+        } catch (Exception $e) {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS blog_posts (
+                id VARCHAR(50) PRIMARY KEY,
+                title VARCHAR(255),
+                slug VARCHAR(255) UNIQUE,
+                content LONGTEXT,
+                excerpt TEXT,
+                image_url TEXT,
+                category VARCHAR(100),
+                tags TEXT,
+                status VARCHAR(50),
+                author VARCHAR(100),
+                seo_title VARCHAR(255),
+                seo_description TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            )");
+        }
+
+        if ($id) {
+            $data['updated_at'] = date('Y-m-d H:i:s');
+            $setParts = [];
+            foreach ($data as $key => $val) { $setParts[] = "`$key` = ?"; }
+            $stmt = $pdo->prepare("UPDATE blog_posts SET " . implode(', ', $setParts) . " WHERE id = ?");
+            $stmt->execute(array_merge(array_values($data), [$id]));
+        } else {
+            $id = uniqid('post_');
+            $data['id'] = $id;
+            $data['created_at'] = date('Y-m-d H:i:s');
+            $data['updated_at'] = date('Y-m-d H:i:s');
+            $cols = array_keys($data);
+            $vals = array_fill(0, count($cols), '?');
+            $stmt = $pdo->prepare("INSERT INTO blog_posts (`" . implode('`, `', $cols) . "`) VALUES (" . implode(', ', $vals) . ")");
+            $stmt->execute(array_values($data));
+        }
+        echo json_encode(['success' => true, 'id' => $id]);
+        break;
+
+    case 'delete_blog_post':
+        $id = $input['id'] ?? '';
+        $stmt = $pdo->prepare("DELETE FROM blog_posts WHERE id = ?");
+        $stmt->execute([$id]);
+        echo json_encode(['success' => true]);
+        break;
+
     case 'get_blog_post_by_slug':
         $slug = $input['slug'] ?? '';
         $stmt = $pdo->prepare("SELECT * FROM blog_posts WHERE slug = ?");
