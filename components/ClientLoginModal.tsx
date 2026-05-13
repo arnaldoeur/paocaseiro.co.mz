@@ -28,7 +28,7 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
     const [loading, setLoading] = useState(false);
     const [pendingReset, setPendingReset] = useState(false);
 
-    // Manual OAuth2 Flow (The Bulletproof Way)
+    // Manual OAuth2 Redirect Flow (The most bulletproof way)
     const handleManualGoogleLogin = () => {
         if (!acceptedTerms) {
             setError('Deve aceitar os Termos antes de continuar.');
@@ -36,60 +36,15 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
         }
 
         const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-        const redirectUri = window.location.origin; // Redirects back to the current page
+        const redirectUri = window.location.origin + window.location.pathname; // Returns to exact current page
         const scope = 'https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile';
         const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=${encodeURIComponent(scope)}&prompt=select_account`;
 
-        // Open Google Login in a popup
-        const width = 500;
-        const height = 600;
-        const left = window.screenX + (window.outerWidth - width) / 2;
-        const top = window.screenY + (window.outerHeight - height) / 2;
+        // Mark that we are logging in to handle the hash on return
+        localStorage.setItem('google_login_pending', 'true');
         
-        const popup = window.open(authUrl, 'google-login', `width=${width},height=${height},left=${left},top=${top}`);
-
-        // Polling to check if the popup returned with the token
-        const checkPopup = setInterval(async () => {
-            try {
-                if (!popup || popup.closed) {
-                    clearInterval(checkPopup);
-                    return;
-                }
-
-                const hash = popup.location.hash;
-                if (hash && hash.includes('access_token')) {
-                    clearInterval(checkPopup);
-                    const params = new URLSearchParams(hash.substring(1));
-                    const accessToken = params.get('access_token');
-                    popup.close();
-
-                    if (accessToken) {
-                        setLoading(true);
-                        try {
-                            const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-                                headers: { Authorization: `Bearer ${accessToken}` }
-                            });
-                            const userInfo = await response.json();
-                            
-                            const { data, error } = await authService.signInWithGoogle(
-                                userInfo.email,
-                                userInfo.name || '',
-                                userInfo.picture || ''
-                            );
-                            if (error) throw error;
-                            onClose();
-                            navigate('/dashboard');
-                        } catch (err: any) {
-                            setError('Erro ao processar login.');
-                        } finally {
-                            setLoading(false);
-                        }
-                    }
-                }
-            } catch (e) {
-                // Ignore cross-origin errors while popup is on Google's domain
-            }
-        }, 500);
+        // Redirect the main window
+        window.location.href = authUrl;
     };
     const [error, setError] = useState('');
     const [successMsg, setSuccessMsg] = useState('');

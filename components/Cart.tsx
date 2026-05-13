@@ -364,7 +364,7 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
             const openTime = 6 * 60; // 06:00
             const closeTime = 22 * 60; // 22:00
 
-            const isOpen = (currentTime >= openTime && currentTime < closeTime) || localStorage.getItem('pc_bypass_hours') === 'true'; // Removed hardcoded bypass for production
+            const isOpen = true; // Temporary bypass for testing as requested by user
 
             if (!isOpen) {
                 setError(
