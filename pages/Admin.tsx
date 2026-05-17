@@ -355,7 +355,8 @@ export const Admin: React.FC = () => {
     const [lastBarcodeCharTime, setLastBarcodeCharTime] = useState(0);
     const [changeDue, setChangeDue] = useState(0);
     const [showPaymentModal, setShowPaymentModal] = useState(false);
-    const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'mpesa' | 'paysuite' | 'emola'>('cash');
+    const [paymentMethod, setPaymentMethod] = useState<'cash' | 'paysuite'>('cash');
+    const [paysuiteMethod, setPaysuiteMethod] = useState<'mpesa' | 'emola' | 'mkesh' | 'card'>('mpesa');
     const [splitPayments, setSplitPayments] = useState<Record<string, number | string>>({});
     const [paysuitePhone, setPaysuitePhone] = useState<string>('');
     const [isInitiatingPaysuite, setIsInitiatingPaysuite] = useState<boolean>(false);
@@ -443,6 +444,7 @@ export const Admin: React.FC = () => {
             setPaysuiteCheckoutUrl('');
             setPaysuiteStatus('idle');
             setPaysuiteError('');
+            setPaysuiteMethod('mpesa');
         }
     }, [showPaymentModal, posCustomer]);
 
@@ -776,7 +778,8 @@ export const Admin: React.FC = () => {
             const { initiatePayment } = await import('../services/paySuite');
             const result = await initiatePayment({
                 amount: amountToPay,
-                msisdn: paysuitePhone || posCustomer?.contact_no || '000000000',
+                msisdn: paysuiteMethod === 'card' ? '000000000' : (paysuitePhone || posCustomer?.contact_no || '000000000'),
+                method: paysuiteMethod === 'card' ? undefined : paysuiteMethod,
                 reference: refId,
                 customerName: posCustomer?.name || 'Venda Local (Balcão)',
                 customerEmail: posCustomer?.email || 'geral@paocaseiro.co.mz'
@@ -871,7 +874,7 @@ export const Admin: React.FC = () => {
             finalAmountReceived = cashReceived;
             finalMethodStr = 'CASH';
         } else if (paymentMethod === 'paysuite') {
-            finalMethodStr = `PAYSUITE (Ref: ${paysuiteTxId || 'Pendente'})`;
+            finalMethodStr = `PAYSUITE (${paysuiteMethod.toUpperCase()}) (Ref: ${paysuiteTxId || 'Pendente'})`;
         }
 
         setIsSubmitting(true);
@@ -5749,41 +5752,20 @@ export const Admin: React.FC = () => {
                             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white rounded-[2.5rem] w-full max-w-lg p-8 shadow-2xl overflow-hidden relative">
                                 <div className="absolute top-0 right-0 p-8 opacity-5"><Banknote size={150} /></div>
 
-                                <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-8 relative z-10">
+                                <div className="grid grid-cols-2 gap-4 mb-8 relative z-10">
                                     <button
                                         onClick={() => setPaymentMethod('cash')}
-                                        className={`flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all ${paymentMethod === 'cash' ? 'bg-[#3b2f2f] border-[#3b2f2f] text-[#d9a65a] shadow-xl scale-105' : 'bg-gray-50 border-gray-100 text-gray-400 hover:bg-gray-100'}`}
+                                        className={`flex flex-col items-center gap-2.5 py-5 rounded-2xl border-2 transition-all ${paymentMethod === 'cash' ? 'bg-[#3b2f2f] border-[#3b2f2f] text-[#d9a65a] shadow-xl scale-105' : 'bg-gray-50 border-gray-100 text-gray-400 hover:bg-gray-100'}`}
                                     >
-                                        <Banknote size={24} />
-                                        <span className="text-[10px] font-bold uppercase">Dinheiro</span>
-                                    </button>
-                                    <button
-                                        onClick={() => setPaymentMethod('mpesa')}
-                                        className={`flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all ${paymentMethod === 'mpesa' ? 'bg-[#e31212] border-[#e31212] text-white shadow-xl scale-105' : 'bg-gray-50 border-gray-100 text-gray-400 hover:bg-gray-100'}`}
-                                    >
-                                        <Smartphone size={24} />
-                                        <span className="text-[10px] font-bold uppercase">M-Pesa</span>
-                                    </button>
-                                    <button
-                                        onClick={() => setPaymentMethod('card')}
-                                        className={`flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all ${paymentMethod === 'card' ? 'bg-[#003d71] border-[#003d71] text-white shadow-xl scale-105' : 'bg-gray-50 border-gray-100 text-gray-400 hover:bg-gray-100'}`}
-                                    >
-                                        <CreditCard size={24} />
-                                        <span className="text-[10px] font-bold uppercase">POS/Cartão</span>
-                                    </button>
-                                    <button
-                                        onClick={() => setPaymentMethod('emola')}
-                                        className={`flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all ${paymentMethod === 'emola' ? 'bg-[#00a1e4] border-[#00a1e4] text-white shadow-xl scale-105' : 'bg-gray-50 border-gray-100 text-gray-400 hover:bg-gray-100'}`}
-                                    >
-                                        <Smartphone size={24} />
-                                        <span className="text-[10px] font-bold uppercase">e-Mola</span>
+                                        <Banknote size={28} />
+                                        <span className="text-xs font-black uppercase tracking-wider">Dinheiro (Cash)</span>
                                     </button>
                                     <button
                                         onClick={() => setPaymentMethod('paysuite')}
-                                        className={`flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all ${paymentMethod === 'paysuite' ? 'bg-[#7c3aed] border-[#7c3aed] text-white shadow-xl scale-105' : 'bg-gray-50 border-gray-100 text-gray-400 hover:bg-gray-100'}`}
+                                        className={`flex flex-col items-center gap-2.5 py-5 rounded-2xl border-2 transition-all ${paymentMethod === 'paysuite' ? 'bg-[#7c3aed] border-[#7c3aed] text-white shadow-xl scale-105' : 'bg-gray-50 border-gray-100 text-gray-400 hover:bg-gray-100'}`}
                                     >
-                                        <Globe size={24} />
-                                        <span className="text-[10px] font-bold uppercase">PaySuite</span>
+                                        <Globe size={28} />
+                                        <span className="text-xs font-black uppercase tracking-wider">PaySuite (Electronic)</span>
                                     </button>
                                 </div>
 
@@ -5823,23 +5805,6 @@ export const Admin: React.FC = () => {
                                     </div>
                                 )}
 
-                                {paymentMethod !== 'cash' && paymentMethod !== 'paysuite' && (
-                                    <div className="bg-gray-50 p-10 rounded-3xl border border-gray-100 mb-8 relative z-10 animate-fade-in text-center">
-                                        <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 ${paymentMethod === 'mpesa' ? 'bg-[#e31212]/10 text-[#e31212]' :
-                                            paymentMethod === 'card' ? 'bg-[#003d71]/10 text-[#003d71]' :
-                                                paymentMethod === 'emola' ? 'bg-[#00a1e4]/10 text-[#00a1e4]' :
-                                                    'bg-[#ffcc00]/10 text-[#ffcc00]'
-                                            }`}>
-                                            {paymentMethod === 'card' ? <CreditCard size={40} /> : <Smartphone size={40} />}
-                                        </div>
-                                        <h4 className="text-xl font-bold text-[#3b2f2f] mb-2 uppercase">Confirmar {paymentMethod === 'mpesa' ? 'M-Pesa' : paymentMethod === 'emola' ? 'e-Mola' : 'POS/Cartão'}</h4>
-                                        <p className="text-gray-500 text-sm mb-6">Por favor, confirme o recebimento do pagamento de:</p>
-                                        <div className="text-4xl font-black text-[#d9a65a] mb-6">
-                                            {posCart.reduce((acc, curr) => acc + (curr.price * curr.quantity), 0).toLocaleString()} MT
-                                        </div>
-                                    </div>
-                                )}
-
                                 {paymentMethod === 'paysuite' && (
                                     <div className="bg-gray-50 p-6 rounded-3xl border border-gray-100 mb-8 relative z-10 animate-fade-in">
                                         <div className="text-center mb-6">
@@ -5853,15 +5818,76 @@ export const Admin: React.FC = () => {
                                         {paysuiteStatus === 'idle' && (
                                             <div className="space-y-4">
                                                 <div>
-                                                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-2 tracking-widest text-center">Número de Telefone do Cliente</label>
-                                                    <input
-                                                        type="text"
-                                                        value={paysuitePhone}
-                                                        onChange={e => setPaysuitePhone(e.target.value)}
-                                                        placeholder="Ex: 84XXXXXXX / 85XXXXXXX / 82XXXXXXX"
-                                                        className="w-full bg-white border-2 border-gray-100 rounded-2xl p-4 text-xl font-bold text-center text-[#3b2f2f] focus:border-[#7c3aed] outline-none transition-all"
-                                                    />
+                                                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-2 tracking-widest text-center">Método PaySuite</label>
+                                                    <div className="grid grid-cols-4 gap-2 mb-4">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setPaysuiteMethod('mpesa')}
+                                                            className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 transition-all ${
+                                                                paysuiteMethod === 'mpesa'
+                                                                    ? 'bg-[#e31212] border-[#e31212] text-white shadow-md scale-105'
+                                                                    : 'bg-white border-gray-100 text-gray-500 hover:bg-gray-50'
+                                                            }`}
+                                                        >
+                                                            <Smartphone size={18} />
+                                                            <span className="text-[9px] font-black uppercase tracking-wider">M-Pesa</span>
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setPaysuiteMethod('emola')}
+                                                            className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 transition-all ${
+                                                                paysuiteMethod === 'emola'
+                                                                    ? 'bg-[#00a1e4] border-[#00a1e4] text-white shadow-md scale-105'
+                                                                    : 'bg-white border-gray-100 text-gray-500 hover:bg-gray-50'
+                                                            }`}
+                                                        >
+                                                            <Smartphone size={18} />
+                                                            <span className="text-[9px] font-black uppercase tracking-wider">e-Mola</span>
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setPaysuiteMethod('mkesh')}
+                                                            className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 transition-all ${
+                                                                paysuiteMethod === 'mkesh'
+                                                                    ? 'bg-[#ffcc00] border-[#ffcc00] text-[#3b2f2f] shadow-md scale-105'
+                                                                    : 'bg-white border-gray-100 text-gray-500 hover:bg-gray-50'
+                                                            }`}
+                                                        >
+                                                            <Smartphone size={18} />
+                                                            <span className="text-[9px] font-black uppercase tracking-wider">mKesh</span>
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setPaysuiteMethod('card')}
+                                                            className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 transition-all ${
+                                                                paysuiteMethod === 'card'
+                                                                    ? 'bg-[#003d71] border-[#003d71] text-white shadow-md scale-105'
+                                                                    : 'bg-white border-gray-100 text-gray-500 hover:bg-gray-50'
+                                                            }`}
+                                                        >
+                                                            <CreditCard size={18} />
+                                                            <span className="text-[9px] font-black uppercase tracking-wider">Cartão</span>
+                                                        </button>
+                                                    </div>
                                                 </div>
+
+                                                {paysuiteMethod !== 'card' ? (
+                                                    <div>
+                                                        <label className="block text-[10px] font-bold text-gray-400 uppercase mb-2 tracking-widest text-center">Número de Telefone do Cliente</label>
+                                                        <input
+                                                            type="text"
+                                                            value={paysuitePhone}
+                                                            onChange={e => setPaysuitePhone(e.target.value)}
+                                                            placeholder="Ex: 84XXXXXXX / 85XXXXXXX / 82XXXXXXX"
+                                                            className="w-full bg-white border-2 border-gray-100 rounded-2xl p-4 text-xl font-bold text-center text-[#3b2f2f] focus:border-[#7c3aed] outline-none transition-all"
+                                                        />
+                                                    </div>
+                                                ) : (
+                                                    <div className="bg-white border border-gray-100 rounded-2xl p-4 text-center">
+                                                        <p className="text-xs text-gray-500 font-medium">O pagamento por cartão de crédito/débito será efetuado através de uma página de pagamento externa segura do PaySuite.</p>
+                                                    </div>
+                                                )}
+
                                                 <button
                                                     onClick={handleInitiatePaySuite}
                                                     disabled={isInitiatingPaysuite}
@@ -5889,7 +5915,11 @@ export const Admin: React.FC = () => {
                                                 <div className="space-y-2">
                                                     <p className="font-bold text-gray-700">Aguardando Pagamento...</p>
                                                     <p className="text-xs text-gray-500 max-w-xs mx-auto">
-                                                        O cliente deve introduzir o PIN no telemóvel ({paysuitePhone || posCustomer?.contact_no || 'Introduzido'}).
+                                                        {paysuiteMethod === 'card' ? (
+                                                            'Por favor, utilize o link de pagamento abaixo para processar o cartão do cliente.'
+                                                        ) : (
+                                                            `O cliente deve introduzir o PIN no telemóvel (${paysuitePhone || posCustomer?.contact_no || 'Introduzido'}).`
+                                                        )}
                                                     </p>
                                                 </div>
 

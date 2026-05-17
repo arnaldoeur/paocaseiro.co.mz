@@ -445,7 +445,7 @@ try {
                 $stmtDel = $pdo->prepare("DELETE FROM order_items WHERE order_id = ?");
                 $stmtDel->execute([$orderId]);
 
-                $stmtItem = $pdo->prepare("INSERT INTO order_items (id, order_id, product_name, quantity, price, total) VALUES (?, ?, ?, ?, ?, ?)");
+                $stmtItem = $pdo->prepare("INSERT INTO order_items (id, order_id, product_name, quantity, price, subtotal) VALUES (?, ?, ?, ?, ?, ?)");
                 foreach ($o['items'] as $item) {
                     $stmtItem->execute([
                         $item['id'] ?? uniqid(),
