@@ -973,12 +973,40 @@ try {
         $s = $input['session'] ?? $input;
         $id = $s['id'] ?? uniqid('ws_');
         
+        $memberId = $s['member_id'] ?? null;
+        if ($memberId) {
+            $checkStmt = $pdo->prepare("SELECT COUNT(*) FROM team_members WHERE id = ?");
+            $checkStmt->execute([$memberId]);
+            if ($checkStmt->fetchColumn() == 0) {
+                // If memberId is invalid/mock, let's check if there is an active member with the name or username
+                $memberName = $s['member_name'] ?? '';
+                $findStmt = $pdo->prepare("SELECT id FROM team_members WHERE (name = ? OR username = ?) AND is_active = 1 LIMIT 1");
+                $findStmt->execute([$memberName, $memberName]);
+                $foundId = $findStmt->fetchColumn();
+                if ($foundId) {
+                    $memberId = $foundId;
+                } else {
+                    echo json_encode([
+                        'success' => false, 
+                        'error' => 'A sua sessão de utilizador é inválida ou expirou (Erro 1452). A sua sessão será terminada por segurança.'
+                    ]);
+                    break;
+                }
+            }
+        } else {
+            echo json_encode([
+                'success' => false, 
+                'error' => 'Erro no check-in: Utilizador não identificado.'
+            ]);
+            break;
+        }
+
         $stmt = $pdo->query("DESCRIBE work_sessions");
         $dbColumns = $stmt->fetchAll(PDO::FETCH_COLUMN);
 
         $data = [
             'id' => $id,
-            'member_id' => $s['member_id'] ?? null,
+            'member_id' => $memberId,
             'member_name' => $s['member_name'] ?? '',
             'role' => $s['role'] ?? 'staff',
             'clock_in' => $s['clock_in'] ?? date('Y-m-d H:i:s'),

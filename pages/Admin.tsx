@@ -1517,7 +1517,7 @@ export const Admin: React.FC = () => {
             // Local fallback credentials (mirrors team_members table in Hostinger DB)
             // Used when network blocks bridge access
             const localCredentials = [
-                { id: '9f4b4a2d-2303-44db-9695-3cd8c5e4be00', username: 'nazir', name: 'Nazir', role: 'admin', password: '@Pcaseiro25' },
+                { id: 'd8f553a1-7c93-4ea2-80ba-3b0286b245b9', username: 'nazir', name: 'Nazir', role: 'admin', password: '@Pcaseiro25' },
             ];
 
             try {
