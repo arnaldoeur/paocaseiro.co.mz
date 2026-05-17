@@ -2114,7 +2114,15 @@ export const Admin: React.FC = () => {
             setIsUserCheckedIn(true);
             loadPerformanceMetrics();
         } catch (e: any) {
-            alert("Erro no check-in: " + e.message);
+            console.error("Check-in Error:", e);
+            const errMsg = e.message || "";
+            if (errMsg.includes('foreign key') || errMsg.includes('1452') || errMsg.includes('Integrity constraint violation')) {
+                alert("A sua sessão de utilizador é inválida ou expirou (Erro 1452). A sua sessão será terminada por segurança.");
+                handleLogout();
+                window.location.reload();
+            } else {
+                alert("Erro no check-in: " + errMsg);
+            }
         } finally {
             setIsSubmitting(false);
         }

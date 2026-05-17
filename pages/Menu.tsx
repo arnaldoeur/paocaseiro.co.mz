@@ -94,6 +94,69 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
         }
     }, [currentCategory]);
 
+    // Mouse drag to scroll
+    useEffect(() => {
+        const slider = navContainerRef.current;
+        if (!slider) return;
+
+        let isDown = false;
+        let isDragging = false;
+        let startX: number;
+        let scrollLeft: number;
+
+        const onMouseDown = (e: MouseEvent) => {
+            isDown = true;
+            isDragging = false;
+            slider.classList.add('cursor-grabbing');
+            startX = e.pageX - slider.offsetLeft;
+            scrollLeft = slider.scrollLeft;
+        };
+
+        const onMouseLeave = () => {
+            isDown = false;
+            slider.classList.remove('cursor-grabbing');
+        };
+
+        const onMouseUp = () => {
+            isDown = false;
+            slider.classList.remove('cursor-grabbing');
+        };
+
+        const onMouseMove = (e: MouseEvent) => {
+            if (!isDown) return;
+            const x = e.pageX - slider.offsetLeft;
+            const walk = (x - startX) * 2;
+            if (Math.abs(walk) > 5) {
+                isDragging = true;
+            }
+            if (isDragging) {
+                e.preventDefault();
+                slider.scrollLeft = scrollLeft - walk;
+            }
+        };
+
+        const onClickCapture = (e: MouseEvent) => {
+            if (isDragging) {
+                e.stopPropagation();
+                e.preventDefault();
+            }
+        };
+
+        slider.addEventListener('mousedown', onMouseDown);
+        slider.addEventListener('mouseleave', onMouseLeave);
+        slider.addEventListener('mouseup', onMouseUp);
+        slider.addEventListener('mousemove', onMouseMove);
+        slider.addEventListener('click', onClickCapture, true);
+
+        return () => {
+            slider.removeEventListener('mousedown', onMouseDown);
+            slider.removeEventListener('mouseleave', onMouseLeave);
+            slider.removeEventListener('mouseup', onMouseUp);
+            slider.removeEventListener('mousemove', onMouseMove);
+            slider.removeEventListener('click', onClickCapture, true);
+        };
+    }, []);
+
     // Scroll handling for sticky nav and category tracking
     useEffect(() => {
         const handleScroll = () => {
@@ -356,7 +419,7 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
                 )}
             </AnimatePresence>
 
-            <div className="absolute inset-0 z-0 opacity-10 food-pattern"></div>
+            <div className="absolute inset-0 z-0 opacity-10 food-pattern pointer-events-none"></div>
 
             {/* Header */}
             <header className="bg-[#3b2f2f] text-white py-12 px-6 text-center relative overflow-hidden z-10">
@@ -435,9 +498,9 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
             >
                 <div 
                     ref={navContainerRef}
-                    className="max-w-7xl mx-auto px-4 flex items-center gap-2 overflow-x-auto no-scrollbar scroll-smooth relative h-12"
+                    className="max-w-7xl mx-auto px-4 flex items-center gap-2 overflow-x-auto no-scrollbar relative h-12"
                 >
-                    {menuSections.map((section) => {
+                    {filteredSections.map((section) => {
                         const isActive = currentCategory === section.title;
                         return (
                             <button

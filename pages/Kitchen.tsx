@@ -325,13 +325,29 @@ export const Kitchen: React.FC<KitchenProps> = ({ user: externalUser }) => {
                 status: 'active'
             });
 
-            if (newSession) {
+            if (newSession && newSession.success !== false) {
                 setIsClockedIn(true);
-                setActiveSessionId(newSession.id);
+                setActiveSessionId(newSession.id || newSession.session?.id);
                 alert("Início de turno registado!");
+            } else {
+                throw new Error(newSession?.error || 'Falha ao registar turno.');
             }
         } catch (e: any) {
-            alert("Erro ao registar início de turno: " + e.message);
+            console.error("Clock In Error:", e);
+            const errMsg = e.message || "";
+            if (errMsg.includes('foreign key') || errMsg.includes('1452') || errMsg.includes('Integrity constraint violation')) {
+                alert("Sessão expirada ou utilizador inválido (Erro 1452). A sua sessão será terminada por segurança.");
+                if (externalUser) {
+                    localStorage.removeItem('admin_auth');
+                    localStorage.removeItem('admin_user');
+                    window.location.reload();
+                } else {
+                    handleLogout();
+                    window.location.reload();
+                }
+            } else {
+                alert("Erro ao registar início de turno: " + errMsg);
+            }
         } finally {
             setLoading(false);
         }

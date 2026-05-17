@@ -773,24 +773,28 @@ try {
 
     // --- QUEUE / TICKETS ---
     case 'generate_ticket':
-        $phone = $input['p_phone'] ?? null;
-        $userId = $input['p_user_id'] ?? null;
-        $priority = $input['p_priority'] ?? false;
-        $category = $input['p_category'] ?? 'Geral';
+        $phone = $input['phone'] ?? null;
+        $userId = $input['user_id'] ?? null;
+        $priority = $input['is_priority'] ?? false;
+        $category = $input['category'] ?? 'Geral';
         
         $identifier = $phone ?? $userId;
-        if (!$identifier) {
+        
+        // Priority tickets always require an identifier
+        if ($priority && !$identifier) {
             echo json_encode(['success' => false, 'error' => 'Identifier required']);
             break;
         }
 
-        // Check if already has active ticket
-        $stmt = $pdo->prepare("SELECT * FROM queue_tickets WHERE (customer_phone = ? OR user_id = ?) AND status = 'waiting' LIMIT 1");
-        $stmt->execute([$phone, $userId]);
-        $existing = $stmt->fetch();
-        if ($existing) {
-            echo json_encode(['success' => true, 'data' => [$existing]]);
-            break;
+        // Only check for existing tickets if an identifier was provided
+        if ($identifier) {
+            $stmt = $pdo->prepare("SELECT * FROM queue_tickets WHERE (customer_phone = ? OR user_id = ?) AND status = 'waiting' LIMIT 1");
+            $stmt->execute([$phone, $userId]);
+            $existing = $stmt->fetch();
+            if ($existing) {
+                echo json_encode(['success' => true, 'data' => [$existing]]);
+                break;
+            }
         }
 
         // Get max ticket number for today
@@ -890,13 +894,13 @@ try {
     case 'get_next_ticket':
         $counter = $input['counter'];
         // Try priority first
-        $stmt = $pdo->prepare("SELECT * FROM queue_tickets WHERE status = 'waiting' AND is_priority = 1 AND DATE(created_at) = CURDATE() ORDER BY created_at ASC LIMIT 1");
+        $stmt = $pdo->prepare("SELECT * FROM queue_tickets WHERE status = 'waiting' AND priority = 1 AND DATE(created_at) = CURDATE() ORDER BY created_at ASC LIMIT 1");
         $stmt->execute();
         $ticket = $stmt->fetch();
         
         // If no priority, try normal
         if (!$ticket) {
-            $stmt = $pdo->prepare("SELECT * FROM queue_tickets WHERE status = 'waiting' AND is_priority = 0 AND DATE(created_at) = CURDATE() ORDER BY created_at ASC LIMIT 1");
+            $stmt = $pdo->prepare("SELECT * FROM queue_tickets WHERE status = 'waiting' AND priority = 0 AND DATE(created_at) = CURDATE() ORDER BY created_at ASC LIMIT 1");
             $stmt->execute();
             $ticket = $stmt->fetch();
         }
@@ -1149,7 +1153,6 @@ try {
         break;
 
     case 'get_contact_messages':
-
         $folder = $input['folder'] ?? null;
         $email = $input['email'] ?? null;
         $phone = $input['phone'] ?? null;
@@ -1175,6 +1178,24 @@ try {
         $stmt = $pdo->prepare($sql);
         $stmt->execute($params);
         echo json_encode($stmt->fetchAll());
+        break;
+
+    case 'save_contact_message':
+        $m = $input['message'] ?? $input;
+        $id = $m['id'] ?? uniqid('msg_');
+        $sql = "INSERT INTO contact_messages (id, name, phone, email, message, folder, status) 
+                VALUES (?, ?, ?, ?, ?, ?, ?)";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([
+            $id, 
+            $m['name'], 
+            $m['phone'], 
+            $m['email'] ?? null, 
+            $m['message'], 
+            $m['folder'] ?? 'inbox', 
+            $m['status'] ?? 'new'
+        ]);
+        echo json_encode(["success" => true, "id" => $id]);
         break;
 
     case 'update_contact_message_status':

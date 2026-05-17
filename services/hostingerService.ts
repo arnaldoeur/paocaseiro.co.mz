@@ -600,22 +600,45 @@ export const hostingerService = {
             'molho picante': 'molho-picante.png'
         };
 
-        for (const [key, image] of Object.entries(mapping)) {
-            if (normalizedName.includes(key)) {
-                return this.getPublicUrl(`assets/products/${image}`);
-            }
-        }
-
         if (originalImage && originalImage.trim() !== '') {
             if (originalImage.startsWith('http')) return originalImage;
             
             let cleanOriginal = originalImage.replace(/^\//, '');
+            // Normalize the filename part of the original image just like we did with physical files
+            const parts = cleanOriginal.split('/');
+            const filename = parts.pop() || '';
+            const path = parts.length > 0 ? parts.join('/') + '/' : '';
+            
+            const dotIndex = filename.lastIndexOf('.');
+            const namePart = dotIndex > -1 ? filename.substring(0, dotIndex) : filename;
+            const extPart = dotIndex > -1 ? filename.substring(dotIndex) : '';
+            
+            const normalizedFilename = namePart
+                .toLowerCase()
+                .normalize("NFD")
+                .replace(/[\u0300-\u036f]/g, "")
+                .replace(/\s+/g, '-')
+                + extPart.toLowerCase();
+
+            cleanOriginal = path + normalizedFilename;
+
             // Se já tiver assets/products, não adiciona de novo
             if (cleanOriginal.includes('assets/products')) {
                 return this.getPublicUrl(cleanOriginal);
             }
             return this.getPublicUrl(`assets/products/${cleanOriginal}`);
         }
+
+        // Sort keys by length descending to ensure more specific matches (e.g. "forma integral") are checked before broader ones (e.g. "forma")
+        const mappingEntries = Object.entries(mapping).sort((a, b) => b[0].length - a[0].length);
+
+        for (const [key, image] of mappingEntries) {
+            if (normalizedName.includes(key)) {
+                return this.getPublicUrl(`assets/products/${image}`);
+            }
+        }
+
+        
         
         return this.getPublicUrl('assets/products/pao-caseiro.png');
     }

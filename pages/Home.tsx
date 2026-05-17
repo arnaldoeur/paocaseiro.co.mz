@@ -32,7 +32,7 @@ const SERVICES = [
         title: 'Confeitaria',
         desc: 'Doces finos, tortas artesanais e sobremesas personalizadas para momentos especiais.',
         image: '/assets/products/fatias-xadrez.png',
-        categoryId: 'doces-pastelaria'
+        categoryId: 'folhados-e-doces'
     },
     {
         icon: Coffee,
@@ -56,7 +56,7 @@ const CLASSICS = [
         desc: 'A clássica doçura portuguesa, estaladiços por fora e cremosos por dentro.',
         price: '',
         image: '/assets/products/pastel-de-nata.png',
-        categoryId: 'doces-pastelaria'
+        categoryId: 'folhados-e-doces'
     },
     {
         title: 'Pão de Cereais',
