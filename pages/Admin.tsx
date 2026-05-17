@@ -772,7 +772,7 @@ export const Admin: React.FC = () => {
         setIsInitiatingPaysuite(true);
         setPaysuiteError('');
         const amountToPay = posCart.reduce((acc, curr) => acc + (curr.price * curr.quantity), 0);
-        const refId = `PC-POS-${Date.now()}`;
+        const refId = `PCPOS${Date.now()}`;
         
         try {
             const { initiatePayment } = await import('../services/paySuite');
