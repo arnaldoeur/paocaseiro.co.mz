@@ -367,19 +367,53 @@ try {
             $o = $input['order_data'] ?? $input;
             $orderId = $o['id'] ?? uniqid();
             
-            // 1. Ensure customer exists or update
-            $stmtC = $pdo->prepare("INSERT INTO customers (id, name, phone, contact_no, email, address) 
-                                   VALUES (?, ?, ?, ?, ?, ?) 
-                                   ON DUPLICATE KEY UPDATE name=VALUES(name), last_order_at=NOW()");
-            $stmtC->execute([
-                $o['customer_id'] ?? uniqid(),
-                $o['customer_name'], 
-                $o['customer_phone'], 
-                $o['customer_phone'],
-                $o['customer_email'] ?? null,
-                $o['delivery_address'] ?? null
-            ]);
-            $customerId = $o['customer_id'] ?? $pdo->lastInsertId();
+            // 1. Ensure customer exists or update with robust null/empty sanitization
+            $customerId = null;
+            if (isset($o['customer_id'])) {
+                $val = trim((string)$o['customer_id']);
+                if ($val !== '' && $val !== 'guest' && $val !== 'null' && $val !== 'undefined') {
+                    $customerId = $val;
+                }
+            }
+            
+            if ($customerId) {
+                $stmtC = $pdo->prepare("INSERT INTO customers (id, name, phone, contact_no, email, address) 
+                                       VALUES (?, ?, ?, ?, ?, ?) 
+                                       ON DUPLICATE KEY UPDATE name=VALUES(name), last_order_at=NOW()");
+                $stmtC->execute([
+                    $customerId,
+                    $o['customer_name'] ?? 'Cliente', 
+                    $o['customer_phone'] ?? '', 
+                    $o['customer_phone'] ?? '',
+                    $o['customer_email'] ?? null,
+                    $o['delivery_address'] ?? null
+                ]);
+            } else if (!empty($o['customer_phone']) && trim((string)$o['customer_phone']) !== '' && trim((string)$o['customer_phone']) !== 'N/A' && trim((string)$o['customer_phone']) !== 'undefined' && trim((string)$o['customer_phone']) !== 'null') {
+                $phone = trim((string)$o['customer_phone']);
+                $stmtExist = $pdo->prepare("SELECT id FROM customers WHERE phone = ? LIMIT 1");
+                $stmtExist->execute([$phone]);
+                $customerId = $stmtExist->fetchColumn();
+                
+                if (!$customerId) {
+                    $customerId = uniqid('c_');
+                    $stmtC = $pdo->prepare("INSERT INTO customers (id, name, phone, contact_no, email, address) VALUES (?, ?, ?, ?, ?, ?)");
+                    $stmtC->execute([
+                        $customerId,
+                        $o['customer_name'] ?? 'Cliente Balcão',
+                        $phone,
+                        $phone,
+                        $o['customer_email'] ?? null,
+                        $o['delivery_address'] ?? null
+                    ]);
+                }
+            } else {
+                $customerId = null;
+            }
+
+            // Secondary double-check to ensure no invalid string bypasses to MySQL
+            if (empty($customerId) || $customerId === 'guest' || $customerId === 'null' || $customerId === 'undefined' || trim((string)$customerId) === '') {
+                $customerId = null;
+            }
 
             // 2. Insert/Update Order
             $sql = "INSERT INTO orders (id, short_id, customer_id, customer_name, customer_phone, customer_email, total_amount, status, delivery_type, delivery_address, notes, payment_method, payment_status, payment_reference, transaction_id, estimated_ready_at) 
@@ -962,6 +996,7 @@ try {
         break;
 
     // --- WORK SESSIONS ---
+    case 'get_active_work_shift':
     case 'get_active_work_session':
         $memberId = $input['member_id'] ?? '';
         $stmt = $pdo->prepare("SELECT * FROM work_sessions WHERE member_id = ? AND status = 'active' ORDER BY clock_in DESC LIMIT 1");
@@ -969,8 +1004,9 @@ try {
         echo json_encode($stmt->fetch());
         break;
 
+    case 'save_work_shift':
     case 'save_work_session':
-        $s = $input['session'] ?? $input;
+        $s = $input['shift'] ?? $input['session'] ?? $input;
         $id = $s['id'] ?? uniqid('ws_');
         
         $memberId = $s['member_id'] ?? null;
@@ -1029,6 +1065,7 @@ try {
         echo json_encode(['success' => true, 'id' => $id]);
         break;
 
+    case 'get_work_shifts':
     case 'get_work_sessions':
         $member_id = $input['member_id'] ?? null;
         $status = $input['status'] ?? null;
@@ -1042,6 +1079,7 @@ try {
         echo json_encode($stmt->fetchAll());
         break;
 
+    case 'update_work_shift':
     case 'update_work_session':
         $id = $input['id'] ?? '';
         $status = $input['status'] ?? 'completed';
@@ -1402,11 +1440,13 @@ try {
         echo json_encode(['success' => true]);
         break;
 
+    case 'get_cash_registers':
     case 'get_cash_sessions':
         $stmt = $pdo->query("SELECT * FROM cash_sessions ORDER BY opened_at DESC LIMIT 50");
         echo json_encode($stmt->fetchAll());
         break;
 
+    case 'save_cash_register':
     case 'save_cash_session':
         try {
             $openedBy = $input['opened_by'] ?? null;
@@ -1439,10 +1479,11 @@ try {
             $stmt->execute(array_values($finalData));
             echo json_encode(['success' => true, 'id' => $id]);
         } catch (Exception $e) {
-            throw $e;
+            echo json_encode(['success' => false, 'error' => $e->getMessage()]);
         }
         break;
 
+    case 'update_cash_register':
     case 'update_cash_session':
         $id = $input['id'];
         $stmt = $pdo->query("DESCRIBE cash_sessions");

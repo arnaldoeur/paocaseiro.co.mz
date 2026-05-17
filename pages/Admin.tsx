@@ -355,8 +355,42 @@ export const Admin: React.FC = () => {
     const [lastBarcodeCharTime, setLastBarcodeCharTime] = useState(0);
     const [changeDue, setChangeDue] = useState(0);
     const [showPaymentModal, setShowPaymentModal] = useState(false);
-    const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'mpesa' | 'ecash' | 'emola'>('cash');
+    const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'mpesa' | 'paysuite' | 'emola'>('cash');
     const [splitPayments, setSplitPayments] = useState<Record<string, number | string>>({});
+    const [paysuitePhone, setPaysuitePhone] = useState<string>('');
+    const [isInitiatingPaysuite, setIsInitiatingPaysuite] = useState<boolean>(false);
+    const [paysuiteTxId, setPaysuiteTxId] = useState<string>('');
+    const [paysuiteStatus, setPaysuiteStatus] = useState<'idle' | 'pending' | 'success' | 'failed'>('idle');
+    const [paysuiteError, setPaysuiteError] = useState<string>('');
+    const [paysuiteCheckoutUrl, setPaysuiteCheckoutUrl] = useState<string>('');
+
+    const playSuccessBeep = () => {
+        try {
+            const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); // A5 note
+            gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            oscillator.start();
+            oscillator.stop(audioCtx.currentTime + 0.15);
+            setTimeout(() => {
+                const osc2 = audioCtx.createOscillator();
+                const gain2 = audioCtx.createGain();
+                osc2.connect(gain2);
+                gain2.connect(audioCtx.destination);
+                osc2.type = 'sine';
+                osc2.frequency.setValueAtTime(1320, audioCtx.currentTime); // E6 note
+                gain2.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                osc2.start();
+                osc2.stop(audioCtx.currentTime + 0.3);
+            }, 150);
+        } catch (e) {
+            console.warn("AudioContext beep failed", e);
+        }
+    };
     const [currentSession, setCurrentSession] = useState<any>(null);
     const [isOpeningSession, setIsOpeningSession] = useState(false);
     const [initialBalance, setInitialBalance] = useState('');
@@ -404,8 +438,13 @@ export const Admin: React.FC = () => {
             setSplitPayments({});
             setPaymentMethod('cash');
             setChangeDue(0);
+            setPaysuitePhone(posCustomer?.contact_no || '');
+            setPaysuiteTxId('');
+            setPaysuiteCheckoutUrl('');
+            setPaysuiteStatus('idle');
+            setPaysuiteError('');
         }
-    }, [showPaymentModal]);
+    }, [showPaymentModal, posCustomer]);
 
     // Message & System Settings State
     const [companyInfo, setCompanyInfo] = useState({
@@ -727,24 +766,112 @@ export const Admin: React.FC = () => {
         }
     };
 
+    const handleInitiatePaySuite = async () => {
+        setIsInitiatingPaysuite(true);
+        setPaysuiteError('');
+        const amountToPay = posCart.reduce((acc, curr) => acc + (curr.price * curr.quantity), 0);
+        const refId = `PC-POS-${Date.now()}`;
+        
+        try {
+            const { initiatePayment } = await import('../services/paySuite');
+            const result = await initiatePayment({
+                amount: amountToPay,
+                msisdn: paysuitePhone || posCustomer?.contact_no || '000000000',
+                reference: refId,
+                customerName: posCustomer?.name || 'Venda Local (Balcão)',
+                customerEmail: posCustomer?.email || 'geral@paocaseiro.co.mz'
+            });
+            
+            if (result.success) {
+                setPaysuiteTxId(result.transaction_id);
+                setPaysuiteCheckoutUrl(result.checkout_url || '');
+                setPaysuiteStatus('pending');
+                
+                if (result.checkout_url) {
+                    window.open(result.checkout_url, '_blank', 'width=500,height=600');
+                }
+            } else {
+                setPaysuiteStatus('failed');
+                setPaysuiteError(result.message || 'Falha ao iniciar pagamento.');
+            }
+        } catch (err: any) {
+            console.error("PaySuite POS error:", err);
+            setPaysuiteStatus('failed');
+            setPaysuiteError(err.message || 'Erro de conexão.');
+        } finally {
+            setIsInitiatingPaysuite(false);
+        }
+    };
+
+    const handleVerifyPaySuite = async () => {
+        if (!paysuiteTxId) return;
+        try {
+            const { verifyPayment } = await import('../services/paySuite');
+            const verification = await verifyPayment(paysuiteTxId);
+            if (verification.success && verification.status === 'SUCCESSFUL') {
+                playSuccessBeep();
+                setPaysuiteStatus('success');
+            } else if (verification.status === 'FAILED') {
+                setPaysuiteStatus('failed');
+                setPaysuiteError('Pagamento rejeitado ou falhado na PaySuite.');
+            } else {
+                alert('O pagamento ainda está pendente ou não foi processado.');
+            }
+        } catch (e: any) {
+            alert('Erro ao verificar: ' + (e.message || 'Desconhecido'));
+        }
+    };
+
+    useEffect(() => {
+        let interval: any;
+        if (paysuiteStatus === 'pending' && paysuiteTxId) {
+            let attempts = 0;
+            interval = setInterval(async () => {
+                attempts++;
+                if (attempts > 35) { // 2 minutes max
+                    clearInterval(interval);
+                    setPaysuiteStatus('failed');
+                    setPaysuiteError('Tempo limite de pagamento PaySuite expirado.');
+                    return;
+                }
+                
+                try {
+                    const { verifyPayment } = await import('../services/paySuite');
+                    const verification = await verifyPayment(paysuiteTxId);
+                    if (verification.success && verification.status === 'SUCCESSFUL') {
+                        clearInterval(interval);
+                        playSuccessBeep();
+                        setPaysuiteStatus('success');
+                    } else if (verification.status === 'FAILED') {
+                        clearInterval(interval);
+                        setPaysuiteStatus('failed');
+                        setPaysuiteError('Pagamento rejeitado ou falhado na PaySuite.');
+                    }
+                } catch (e) {
+                    console.warn("PaySuite polling verification error:", e);
+                }
+            }, 3500);
+        }
+        return () => {
+            if (interval) clearInterval(interval);
+        };
+    }, [paysuiteStatus, paysuiteTxId]);
+
     const handleProcessPayment = async () => {
         const total = posCart.reduce((acc, curr) => acc + (curr.price * curr.quantity), 0);
-        let finalAmountReceived = Object.values(splitPayments).reduce((acc: number, val: any) => acc + (Number(val) || 0), 0);
-        let finalMethodStr = paymentMethod;
+        let finalAmountReceived = total;
+        let finalMethodStr = paymentMethod.toUpperCase();
 
-        if (Object.keys(splitPayments).filter(k => Number(splitPayments[k]) > 0).length > 0) {
-            if (finalAmountReceived < total) {
-                alert('Valor recebido insuficiente nos métodos parciais!');
+        if (paymentMethod === 'cash') {
+            const cashReceived = Number(splitPayments['cash']) || 0;
+            if (cashReceived < total) {
+                alert('Valor recebido insuficiente em dinheiro!');
                 return;
             }
-            const methods = Object.entries(splitPayments).filter(([k,v]) => Number(v) > 0).map(([k,v]) => `${k.toUpperCase()} (${v}MT)`);
-            finalMethodStr = methods.join(' | ');
-        } else {
-            if (paymentMethod === 'cash') {
-                alert('Introduza o valor recebido em dinheiro!');
-                return;
-            }
-            finalAmountReceived = total; // Assume full amount for single non-cash method
+            finalAmountReceived = cashReceived;
+            finalMethodStr = 'CASH';
+        } else if (paymentMethod === 'paysuite') {
+            finalMethodStr = `PAYSUITE (Ref: ${paysuiteTxId || 'Pendente'})`;
         }
 
         setIsSubmitting(true);
@@ -5652,11 +5779,11 @@ export const Admin: React.FC = () => {
                                         <span className="text-[10px] font-bold uppercase">e-Mola</span>
                                     </button>
                                     <button
-                                        onClick={() => setPaymentMethod('ecash')}
-                                        className={`flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all ${paymentMethod === 'ecash' ? 'bg-[#ffcc00] border-[#ffcc00] text-[#3b2f2f] shadow-xl scale-105' : 'bg-gray-50 border-gray-100 text-gray-400 hover:bg-gray-100'}`}
+                                        onClick={() => setPaymentMethod('paysuite')}
+                                        className={`flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all ${paymentMethod === 'paysuite' ? 'bg-[#7c3aed] border-[#7c3aed] text-white shadow-xl scale-105' : 'bg-gray-50 border-gray-100 text-gray-400 hover:bg-gray-100'}`}
                                     >
-                                        <Key size={24} />
-                                        <span className="text-[10px] font-bold uppercase">e-Cash</span>
+                                        <Globe size={24} />
+                                        <span className="text-[10px] font-bold uppercase">PaySuite</span>
                                     </button>
                                 </div>
 
@@ -5696,7 +5823,7 @@ export const Admin: React.FC = () => {
                                     </div>
                                 )}
 
-                                {paymentMethod !== 'cash' && (
+                                {paymentMethod !== 'cash' && paymentMethod !== 'paysuite' && (
                                     <div className="bg-gray-50 p-10 rounded-3xl border border-gray-100 mb-8 relative z-10 animate-fade-in text-center">
                                         <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 ${paymentMethod === 'mpesa' ? 'bg-[#e31212]/10 text-[#e31212]' :
                                             paymentMethod === 'card' ? 'bg-[#003d71]/10 text-[#003d71]' :
@@ -5705,44 +5832,132 @@ export const Admin: React.FC = () => {
                                             }`}>
                                             {paymentMethod === 'card' ? <CreditCard size={40} /> : <Smartphone size={40} />}
                                         </div>
-                                        <h4 className="text-xl font-bold text-[#3b2f2f] mb-2 uppercase">Confirmar {paymentMethod}</h4>
-                                        <p className="text-gray-500 text-sm mb-6">Por favor, introduza o valor pago via {paymentMethod.toUpperCase()} (ou deixe em branco para o total).</p>
-                                        <div className="text-3xl font-black text-[#d9a65a] mb-6">
+                                        <h4 className="text-xl font-bold text-[#3b2f2f] mb-2 uppercase">Confirmar {paymentMethod === 'mpesa' ? 'M-Pesa' : paymentMethod === 'emola' ? 'e-Mola' : 'POS/Cartão'}</h4>
+                                        <p className="text-gray-500 text-sm mb-6">Por favor, confirme o recebimento do pagamento de:</p>
+                                        <div className="text-4xl font-black text-[#d9a65a] mb-6">
                                             {posCart.reduce((acc, curr) => acc + (curr.price * curr.quantity), 0).toLocaleString()} MT
-                                        </div>
-                                        <div>
-                                            <input
-                                                type="number"
-                                                value={splitPayments[paymentMethod] || ''}
-                                                onChange={e => setSplitPayments(prev => ({...prev, [paymentMethod]: e.target.value}))}
-                                                placeholder="Partilhar Pag. (MT) Opcional"
-                                                className="w-full bg-white border-2 border-gray-100 rounded-2xl p-4 text-2xl font-black text-center text-[#3b2f2f] focus:border-[#d9a65a] outline-none transition-all shadow-inner"
-                                            />
                                         </div>
                                     </div>
                                 )}
 
-                                {/* Show Split Payments Summary if multiple */}
-                                {Object.keys(splitPayments).filter(k => Number(splitPayments[k]) > 0).length > 0 && (
-                                    <div className="bg-white border-2 border-gray-100 p-4 rounded-2xl mb-6 relative z-10 animate-fade-in">
-                                        <h5 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Pagamentos Adicionados</h5>
-                                        <div className="flex flex-col gap-1">
-                                            {Object.entries(splitPayments).filter(([k,v]) => Number(v) > 0).map(([k,v]) => (
-                                                <div key={k} className="flex justify-between text-sm font-bold text-[#3b2f2f]">
-                                                    <span>{k.toUpperCase()}</span>
-                                                    <span>{Number(v).toLocaleString()} MT</span>
+                                {paymentMethod === 'paysuite' && (
+                                    <div className="bg-gray-50 p-6 rounded-3xl border border-gray-100 mb-8 relative z-10 animate-fade-in">
+                                        <div className="text-center mb-6">
+                                            <div className="w-16 h-16 rounded-full bg-[#7c3aed]/10 text-[#7c3aed] flex items-center justify-center mx-auto mb-3">
+                                                <Globe size={32} />
+                                            </div>
+                                            <h4 className="text-lg font-bold text-[#3b2f2f] uppercase tracking-wide">PaySuite POS</h4>
+                                            <p className="text-gray-500 text-xs mt-1">Processamento de pagamentos móveis e cartão directo à conta</p>
+                                        </div>
+
+                                        {paysuiteStatus === 'idle' && (
+                                            <div className="space-y-4">
+                                                <div>
+                                                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-2 tracking-widest text-center">Número de Telefone do Cliente</label>
+                                                    <input
+                                                        type="text"
+                                                        value={paysuitePhone}
+                                                        onChange={e => setPaysuitePhone(e.target.value)}
+                                                        placeholder="Ex: 84XXXXXXX / 85XXXXXXX / 82XXXXXXX"
+                                                        className="w-full bg-white border-2 border-gray-100 rounded-2xl p-4 text-xl font-bold text-center text-[#3b2f2f] focus:border-[#7c3aed] outline-none transition-all"
+                                                    />
                                                 </div>
-                                            ))}
-                                        </div>
-                                        <div className="mt-3 pt-3 border-t border-gray-100 flex justify-between font-black text-[#d9a65a]">
-                                            <span>SOMA RECEBIDA</span>
-                                            <span>{Object.values(splitPayments).reduce((a: number, b: any) => a + (Number(b)||0), 0).toLocaleString()} MT</span>
-                                        </div>
+                                                <button
+                                                    onClick={handleInitiatePaySuite}
+                                                    disabled={isInitiatingPaysuite}
+                                                    className="w-full py-4 bg-[#7c3aed] text-white font-bold rounded-2xl shadow-lg hover:brightness-110 active:scale-95 transition-all text-sm uppercase tracking-wider flex items-center justify-center gap-2 disabled:opacity-50"
+                                                >
+                                                    {isInitiatingPaysuite ? (
+                                                        <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                                                    ) : (
+                                                        <>🚀 Iniciar Pagamento ({posCart.reduce((acc, curr) => acc + (curr.price * curr.quantity), 0).toLocaleString()} MT)</>
+                                                    )}
+                                                </button>
+                                            </div>
+                                        )}
+
+                                        {paysuiteStatus === 'pending' && (
+                                            <div className="text-center py-4 space-y-6">
+                                                <div className="relative w-20 h-20 mx-auto">
+                                                    <div className="absolute inset-0 border-4 border-[#7c3aed]/20 rounded-full"></div>
+                                                    <div className="absolute inset-0 border-4 border-[#7c3aed] border-t-transparent rounded-full animate-spin"></div>
+                                                    <div className="absolute inset-0 flex items-center justify-center text-[#7c3aed]">
+                                                        <Smartphone size={28} className="animate-pulse" />
+                                                    </div>
+                                                </div>
+                                                
+                                                <div className="space-y-2">
+                                                    <p className="font-bold text-gray-700">Aguardando Pagamento...</p>
+                                                    <p className="text-xs text-gray-500 max-w-xs mx-auto">
+                                                        O cliente deve introduzir o PIN no telemóvel ({paysuitePhone || posCustomer?.contact_no || 'Introduzido'}).
+                                                    </p>
+                                                </div>
+
+                                                <div className="flex gap-2 justify-center">
+                                                    <button
+                                                        onClick={handleVerifyPaySuite}
+                                                        className="px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-xl text-xs font-bold hover:bg-gray-50 transition-all flex items-center gap-1.5"
+                                                    >
+                                                        🔄 Verificar Agora
+                                                    </button>
+                                                    {paysuiteCheckoutUrl && (
+                                                        <a
+                                                            href={paysuiteCheckoutUrl}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="px-4 py-2 bg-[#7c3aed]/10 text-[#7c3aed] rounded-xl text-xs font-bold hover:bg-[#7c3aed]/20 transition-all flex items-center gap-1.5"
+                                                        >
+                                                            🔗 Link de Pagamento
+                                                        </a>
+                                                    )}
+                                                </div>
+
+                                                <button
+                                                    onClick={() => setPaysuiteStatus('idle')}
+                                                    className="text-xs font-bold text-red-500 hover:underline mt-2"
+                                                >
+                                                    Cancelar e Mudar Número
+                                                </button>
+                                            </div>
+                                        )}
+
+                                        {paysuiteStatus === 'success' && (
+                                            <div className="text-center py-6 space-y-4">
+                                                <div className="w-20 h-20 bg-green-500/10 text-green-500 rounded-full flex items-center justify-center mx-auto animate-bounce-slow">
+                                                    <CheckCircle size={48} />
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <h5 className="font-black text-green-600 text-lg">PAGAMENTO CONFIRMADO!</h5>
+                                                    <p className="text-xs text-gray-500">Transação PaySuite: {paysuiteTxId}</p>
+                                                </div>
+                                                <p className="text-sm text-gray-600 font-medium">
+                                                    O valor de <span className="font-bold text-[#3b2f2f]">{posCart.reduce((acc, curr) => acc + (curr.price * curr.quantity), 0).toLocaleString()} MT</span> foi recebido com sucesso.
+                                                </p>
+                                            </div>
+                                        )}
+
+                                        {paysuiteStatus === 'failed' && (
+                                            <div className="text-center py-6 space-y-4">
+                                                <div className="w-20 h-20 bg-red-500/10 text-red-500 rounded-full flex items-center justify-center mx-auto">
+                                                    <XCircle size={48} />
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <h5 className="font-black text-red-600 text-lg font-serif">PAGAMENTO FALHOU</h5>
+                                                    <p className="text-xs text-red-400 font-bold max-w-xs mx-auto">{paysuiteError || 'Erro na transacção.'}</p>
+                                                </div>
+                                                <button
+                                                    onClick={() => setPaysuiteStatus('idle')}
+                                                    className="px-6 py-2.5 bg-[#7c3aed] text-white rounded-xl text-xs font-bold hover:bg-[#6d28d9] transition-all"
+                                                >
+                                                    Tentar Novamente
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
 
                                 <div className="flex flex-col items-center gap-6 relative z-10">
-                                    {(paymentMethod === 'cash' || Object.keys(splitPayments).includes('cash')) && (
+                                    {paymentMethod === 'cash' && (
                                         <div className="text-center animate-bounce-slow">
                                             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.3em] mb-1">Troco a Entregar</p>
                                             <p className={`text-5xl font-black ${changeDue > 0 ? 'text-green-500' : 'text-gray-300'}`}>
@@ -5759,11 +5974,14 @@ export const Admin: React.FC = () => {
                                             Cancelar
                                         </button>
                                         <button
-                                            disabled={isSubmitting || (Object.keys(splitPayments).filter(k => Number(splitPayments[k]) > 0).length > 0 && Object.values(splitPayments).reduce((acc: number, val: any) => acc + (Number(val) || 0), 0) < posCart.reduce((acc, curr) => acc + (curr.price * curr.quantity), 0))}
+                                            disabled={isSubmitting || (
+                                                paymentMethod === 'cash' ? (Number(splitPayments['cash']) || 0) < posCart.reduce((acc, curr) => acc + (curr.price * curr.quantity), 0) :
+                                                paymentMethod === 'paysuite' ? paysuiteStatus !== 'success' : false
+                                            )}
                                             onClick={handleProcessPayment}
-                                            className="flex-[2] py-4 bg-[#3b2f2f] text-[#d9a65a] font-bold rounded-2xl shadow-xl hover:brightness-110 active:scale-95 transition-all text-sm uppercase tracking-widest flex items-center justify-center gap-3 disabled:opacity-50 disabled:grayscale"
+                                            className={`flex-[2] py-4 font-bold rounded-2xl shadow-xl hover:brightness-110 active:scale-95 transition-all text-sm uppercase tracking-widest flex items-center justify-center gap-3 disabled:opacity-50 disabled:grayscale ${paymentMethod === 'paysuite' && paysuiteStatus === 'success' ? 'bg-green-600 text-white animate-pulse' : 'bg-[#3b2f2f] text-[#d9a65a]'}`}
                                         >
-                                            {isSubmitting ? <span className="w-4 h-4 border-2 border-[#d9a65a] border-t-transparent rounded-full animate-spin"></span> : <><CheckCircle size={20} /> Confirmar ({posCart.reduce((acc, curr) => acc + (curr.price * curr.quantity), 0).toLocaleString()} MT)</>}
+                                            {isSubmitting ? <span className="w-4 h-4 border-2 border-[#d9a65a] border-t-transparent rounded-full animate-spin"></span> : <><CheckCircle size={20} /> {paymentMethod === 'paysuite' && paysuiteStatus === 'success' ? 'Confirmar e Imprimir' : 'Confirmar'} ({posCart.reduce((acc, curr) => acc + (curr.price * curr.quantity), 0).toLocaleString()} MT)</>}
                                         </button>
                                     </div>
                                 </div>
