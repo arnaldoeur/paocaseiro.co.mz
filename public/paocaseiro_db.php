@@ -37,7 +37,41 @@ function get_pdo_connection() {
         PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES utf8mb4"
     ];
     try {
-        return new PDO("mysql:host=$host;port=$port;dbname=$db;charset=utf8mb4", $user, $pass, $options);
+        $conn = new PDO("mysql:host=$host;port=$port;dbname=$db;charset=utf8mb4", $user, $pass, $options);
+        
+        // Self-healing migration for missing columns
+        static $migrated = false;
+        if (!$migrated && $conn) {
+            $migrated = true;
+            try {
+                // Ensure queue_tickets table exists and has 'priority' column
+                $tableCheck = $conn->query("SHOW TABLES LIKE 'queue_tickets'")->rowCount();
+                if ($tableCheck === 0) {
+                    $conn->exec("CREATE TABLE queue_tickets (
+                        id VARCHAR(50) PRIMARY KEY,
+                        customer_phone VARCHAR(50) NULL,
+                        user_id VARCHAR(50) NULL,
+                        ticket_number INT NOT NULL,
+                        priority TINYINT(1) DEFAULT 0,
+                        category VARCHAR(50) DEFAULT 'Geral',
+                        status VARCHAR(50) DEFAULT 'waiting',
+                        counter INT NULL,
+                        called_at TIMESTAMP NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )");
+                } else {
+                    $colCheck = $conn->query("SHOW COLUMNS FROM queue_tickets LIKE 'priority'")->rowCount();
+                    if ($colCheck === 0) {
+                        $conn->exec("ALTER TABLE queue_tickets ADD COLUMN priority TINYINT(1) DEFAULT 0 AFTER ticket_number");
+                    }
+                }
+            } catch (Exception $e) {
+                // Silently ignore schema check errors
+                error_log("[PaoCaseiro Schema Auto-Heal Error] " . $e->getMessage());
+            }
+        }
+        
+        return $conn;
     } catch (PDOException $e) {
         debug_log("PDO Connection Error: " . $e->getMessage());
         return null;
@@ -66,6 +100,12 @@ function safe_query($sql, $params = []) {
         }
         throw $e;
     }
+}
+
+function map_ticket($ticket) {
+    if (!$ticket) return $ticket;
+    $ticket['is_priority'] = isset($ticket['priority']) ? (bool)$ticket['priority'] : false;
+    return $ticket;
 }
 
 $pdo = get_pdo_connection();
@@ -792,7 +832,7 @@ try {
             $stmt->execute([$phone, $userId]);
             $existing = $stmt->fetch();
             if ($existing) {
-                echo json_encode(['success' => true, 'data' => [$existing]]);
+                echo json_encode(['success' => true, 'data' => [map_ticket($existing)]]);
                 break;
             }
         }
@@ -811,7 +851,7 @@ try {
         $stmt = $pdo->prepare("SELECT * FROM queue_tickets WHERE id = ?");
         $stmt->execute([$id]);
         $newTicket = $stmt->fetch();
-        echo json_encode(['success' => true, 'data' => [$newTicket]]);
+        echo json_encode(['success' => true, 'data' => [map_ticket($newTicket)]]);
         break;
 
     case 'get_queue_count':
@@ -825,13 +865,17 @@ try {
         $identifier = $input['identifier'] ?? '';
         $stmt = $pdo->prepare("SELECT * FROM queue_tickets WHERE (user_id = ? OR customer_phone = ?) AND status IN ('waiting', 'calling') AND DATE(created_at) = CURDATE() ORDER BY created_at DESC LIMIT 1");
         $stmt->execute([$identifier, $identifier]);
-        echo json_encode($stmt->fetch());
+        echo json_encode(map_ticket($stmt->fetch()));
         break;
 
     case 'get_tickets_today':
         $stmt = $pdo->prepare("SELECT * FROM queue_tickets WHERE DATE(created_at) = CURDATE() ORDER BY created_at ASC");
         $stmt->execute();
-        echo json_encode($stmt->fetchAll());
+        $tickets = $stmt->fetchAll();
+        foreach ($tickets as &$t) {
+            $t = map_ticket($t);
+        }
+        echo json_encode($tickets);
         break;
 
     case 'update_ticket_status':
@@ -855,7 +899,7 @@ try {
         
         $stmt = $pdo->prepare("SELECT * FROM queue_tickets WHERE id = ?");
         $stmt->execute([$id]);
-        echo json_encode($stmt->fetch());
+        echo json_encode(map_ticket($stmt->fetch()));
         break;
 
     case 'update_ticket':
@@ -882,7 +926,7 @@ try {
         
         $stmt = $pdo->prepare("SELECT * FROM queue_tickets WHERE id = ?");
         $stmt->execute([$id]);
-        echo json_encode($stmt->fetch());
+        echo json_encode(map_ticket($stmt->fetch()));
         break;
 
     case 'reset_today_queue':
@@ -914,7 +958,7 @@ try {
             $ticket = $stmt->fetch();
         }
         
-        echo json_encode($ticket);
+        echo json_encode(map_ticket($ticket));
         break;
 
     // --- WORK SESSIONS ---
