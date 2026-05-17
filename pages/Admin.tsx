@@ -129,9 +129,7 @@ interface ManualDelivery { // For non-order based deliveries if needed
 
 const isValidUUID = (id: string) => {
     if (!id || id === 'undefined' || id === 'null') return false;
-    // Allow UUIDs or simple alphanumeric IDs (for Hostinger/MySQL compatibility)
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    return uuidRegex.test(id) || id.length >= 1;
+    return id.trim().length >= 1;
 };
 
 export const Admin: React.FC = () => {

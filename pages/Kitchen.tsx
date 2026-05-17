@@ -53,7 +53,8 @@ const OrderTimer: React.FC<{ target: string }> = ({ target }) => {
 }
 
 const isValidUUID = (id: string) => {
-    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    if (!id || id === 'undefined' || id === 'null') return false;
+    return id.trim().length >= 1;
 };
 
 interface KitchenProps {

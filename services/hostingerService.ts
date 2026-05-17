@@ -10,6 +10,7 @@ const HOSTINGER_API_KEY = 'PaoCaseiro_Direct_MySQL_2026';
 
 export interface HostingerOrderData {
     short_id: string;
+    customer_id?: string | null;
     customer_name: string;
     customer_phone: string;
     customer_email?: string;
@@ -17,6 +18,10 @@ export interface HostingerOrderData {
     delivery_type: 'pickup' | 'delivery' | 'dine_in';
     delivery_address?: string;
     notes?: string;
+    payment_method?: string;
+    payment_status?: string;
+    payment_reference?: string;
+    transaction_id?: string;
     items: Array<{
         name: string;
         quantity: number;

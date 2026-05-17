@@ -12,6 +12,8 @@ import { authService } from '../services/authService';
 // Removed @react-oauth/google dependencies for direct API use
 import { jwtDecode } from 'jwt-decode';
 import { useEffect } from 'react';
+import { hostingerService } from '../services/hostingerService';
+import { normalizeIdentifier } from '../src/utils/phone';
 
 interface ClientLoginModalProps {
     isOpen: boolean;
