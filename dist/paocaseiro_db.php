@@ -94,6 +94,38 @@ function get_pdo_connection() {
                         $conn->exec("ALTER TABLE orders ADD COLUMN cash_session_id VARCHAR(50) NULL AFTER user_id");
                     }
                 }
+
+                // Ensure contact_messages table exists and has all required columns
+                $contactCheck = $conn->query("SHOW TABLES LIKE 'contact_messages'")->rowCount();
+                if ($contactCheck === 0) {
+                    $conn->exec("CREATE TABLE contact_messages (
+                        id VARCHAR(50) PRIMARY KEY,
+                        name VARCHAR(255) NOT NULL,
+                        phone VARCHAR(50) NOT NULL,
+                        email VARCHAR(255) NULL,
+                        message TEXT NOT NULL,
+                        folder VARCHAR(50) DEFAULT 'inbox',
+                        status VARCHAR(50) DEFAULT 'new',
+                        reply_content TEXT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )");
+                } else {
+                    // Check and add missing columns
+                    $colFolder = $conn->query("SHOW COLUMNS FROM contact_messages LIKE 'folder'")->rowCount();
+                    if ($colFolder === 0) {
+                        $conn->exec("ALTER TABLE contact_messages ADD COLUMN folder VARCHAR(50) DEFAULT 'inbox' AFTER message");
+                    }
+                    
+                    $colStatus = $conn->query("SHOW COLUMNS FROM contact_messages LIKE 'status'")->rowCount();
+                    if ($colStatus === 0) {
+                        $conn->exec("ALTER TABLE contact_messages ADD COLUMN status VARCHAR(50) DEFAULT 'new' AFTER folder");
+                    }
+
+                    $colReply = $conn->query("SHOW COLUMNS FROM contact_messages LIKE 'reply_content'")->rowCount();
+                    if ($colReply === 0) {
+                        $conn->exec("ALTER TABLE contact_messages ADD COLUMN reply_content TEXT NULL AFTER status");
+                    }
+                }
             } catch (Exception $e) {
                 // Silently ignore schema check errors
                 error_log("[PaoCaseiro Schema Auto-Heal Error] " . $e->getMessage());
@@ -133,9 +165,41 @@ function safe_query($sql, $params = []) {
 
 function map_ticket($ticket) {
     if (!$ticket) return $ticket;
-    $ticket['is_priority'] = isset($ticket['priority']) ? (bool)$ticket['priority'] : false;
+    
+    $isPriority = isset($ticket['priority']) ? (bool)$ticket['priority'] : false;
+    $ticket['is_priority'] = $isPriority;
+    
+    // Check if ticket_number is already formatted (contains letters/hyphens)
+    if (is_string($ticket['ticket_number']) && preg_match('/[a-zA-Z]/', $ticket['ticket_number'])) {
+        return $ticket;
+    }
+    
+    // Determine category code
+    $category = $ticket['category'] ?? 'Geral';
+    $catLower = mb_strtolower(trim($category));
+    $prefix = 'G';
+    
+    if ($catLower === 'padaria') {
+        $prefix = 'P';
+    } else if ($catLower === 'confeitaria') {
+        $prefix = 'C';
+    } else if ($catLower === 'café' || $catLower === 'cafe') {
+        $prefix = 'F';
+    } else if ($catLower === 'lanches') {
+        $prefix = 'L';
+    }
+    
+    $numStr = str_pad($ticket['ticket_number'], 2, '0', STR_PAD_LEFT);
+    
+    if ($isPriority) {
+        $ticket['ticket_number'] = "PR-" . $prefix . "-" . $numStr;
+    } else {
+        $ticket['ticket_number'] = $prefix . "-" . $numStr;
+    }
+    
     return $ticket;
 }
+
 
 $pdo = get_pdo_connection();
 
@@ -512,8 +576,17 @@ try {
 
     case 'get_customer_by_identifier':
         $identifier = $input['identifier'] ?? '';
-        $stmt = $pdo->prepare("SELECT * FROM customers WHERE phone = ? OR contact_no = ? OR email = ? LIMIT 1");
-        $stmt->execute([$identifier, $identifier, $identifier]);
+        $cleanPhone = preg_replace('/\D/', '', $identifier);
+        $phone1 = $cleanPhone;
+        $phone2 = $cleanPhone;
+        if (strlen($cleanPhone) === 9) {
+            $phone2 = '258' . $cleanPhone;
+        } else if (strlen($cleanPhone) === 12 && strpos($cleanPhone, '258') === 0) {
+            $phone2 = substr($cleanPhone, 3);
+        }
+        
+        $stmt = $pdo->prepare("SELECT * FROM customers WHERE phone = ? OR phone = ? OR contact_no = ? OR contact_no = ? OR email = ? LIMIT 1");
+        $stmt->execute([$phone1, $phone2, $phone1, $phone2, $identifier]);
         $customer = $stmt->fetch();
         if ($customer) unset($customer['password']);
         echo json_encode($customer);
@@ -521,8 +594,17 @@ try {
 
     case 'auth_customer':
         $identifier = $input['identifier'] ?? '';
-        $stmt = $pdo->prepare("SELECT * FROM customers WHERE phone = ? OR contact_no = ? OR email = ?");
-        $stmt->execute([$identifier, $identifier, $identifier]);
+        $cleanPhone = preg_replace('/\D/', '', $identifier);
+        $phone1 = $cleanPhone;
+        $phone2 = $cleanPhone;
+        if (strlen($cleanPhone) === 9) {
+            $phone2 = '258' . $cleanPhone;
+        } else if (strlen($cleanPhone) === 12 && strpos($cleanPhone, '258') === 0) {
+            $phone2 = substr($cleanPhone, 3);
+        }
+        
+        $stmt = $pdo->prepare("SELECT * FROM customers WHERE phone = ? OR phone = ? OR contact_no = ? OR contact_no = ? OR email = ?");
+        $stmt->execute([$phone1, $phone2, $phone1, $phone2, $identifier]);
         $customer = $stmt->fetch();
         
         if ($customer) {
@@ -1321,19 +1403,28 @@ try {
         break;
 
     case 'save_contact_message':
-        $m = $input['message'] ?? $input;
+        $m = (isset($input['message']) && is_array($input['message'])) ? $input['message'] : $input;
         $id = $m['id'] ?? uniqid('msg_');
+        
+        // Safely extract fields with fallbacks to avoid PHP TypeErrors
+        $name = $m['name'] ?? 'Cliente Registado';
+        $phone = $m['phone'] ?? '';
+        $email = $m['email'] ?? null;
+        $msgContent = is_array($input['message']) ? ($m['message'] ?? '') : ($input['message'] ?? $m['message'] ?? '');
+        $folder = $m['folder'] ?? 'inbox';
+        $status = $m['status'] ?? 'new';
+        
         $sql = "INSERT INTO contact_messages (id, name, phone, email, message, folder, status) 
                 VALUES (?, ?, ?, ?, ?, ?, ?)";
         $stmt = $pdo->prepare($sql);
         $stmt->execute([
             $id, 
-            $m['name'], 
-            $m['phone'], 
-            $m['email'] ?? null, 
-            $m['message'], 
-            $m['folder'] ?? 'inbox', 
-            $m['status'] ?? 'new'
+            $name, 
+            $phone, 
+            $email, 
+            $msgContent, 
+            $folder, 
+            $status
         ]);
         echo json_encode(["success" => true, "id" => $id]);
         break;

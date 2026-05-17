@@ -165,9 +165,41 @@ function safe_query($sql, $params = []) {
 
 function map_ticket($ticket) {
     if (!$ticket) return $ticket;
-    $ticket['is_priority'] = isset($ticket['priority']) ? (bool)$ticket['priority'] : false;
+    
+    $isPriority = isset($ticket['priority']) ? (bool)$ticket['priority'] : false;
+    $ticket['is_priority'] = $isPriority;
+    
+    // Check if ticket_number is already formatted (contains letters/hyphens)
+    if (is_string($ticket['ticket_number']) && preg_match('/[a-zA-Z]/', $ticket['ticket_number'])) {
+        return $ticket;
+    }
+    
+    // Determine category code
+    $category = $ticket['category'] ?? 'Geral';
+    $catLower = mb_strtolower(trim($category));
+    $prefix = 'G';
+    
+    if ($catLower === 'padaria') {
+        $prefix = 'P';
+    } else if ($catLower === 'confeitaria') {
+        $prefix = 'C';
+    } else if ($catLower === 'café' || $catLower === 'cafe') {
+        $prefix = 'F';
+    } else if ($catLower === 'lanches') {
+        $prefix = 'L';
+    }
+    
+    $numStr = str_pad($ticket['ticket_number'], 2, '0', STR_PAD_LEFT);
+    
+    if ($isPriority) {
+        $ticket['ticket_number'] = "PR-" . $prefix . "-" . $numStr;
+    } else {
+        $ticket['ticket_number'] = $prefix . "-" . $numStr;
+    }
+    
     return $ticket;
 }
+
 
 $pdo = get_pdo_connection();
 
@@ -544,8 +576,17 @@ try {
 
     case 'get_customer_by_identifier':
         $identifier = $input['identifier'] ?? '';
-        $stmt = $pdo->prepare("SELECT * FROM customers WHERE phone = ? OR contact_no = ? OR email = ? LIMIT 1");
-        $stmt->execute([$identifier, $identifier, $identifier]);
+        $cleanPhone = preg_replace('/\D/', '', $identifier);
+        $phone1 = $cleanPhone;
+        $phone2 = $cleanPhone;
+        if (strlen($cleanPhone) === 9) {
+            $phone2 = '258' . $cleanPhone;
+        } else if (strlen($cleanPhone) === 12 && strpos($cleanPhone, '258') === 0) {
+            $phone2 = substr($cleanPhone, 3);
+        }
+        
+        $stmt = $pdo->prepare("SELECT * FROM customers WHERE phone = ? OR phone = ? OR contact_no = ? OR contact_no = ? OR email = ? LIMIT 1");
+        $stmt->execute([$phone1, $phone2, $phone1, $phone2, $identifier]);
         $customer = $stmt->fetch();
         if ($customer) unset($customer['password']);
         echo json_encode($customer);
@@ -553,8 +594,17 @@ try {
 
     case 'auth_customer':
         $identifier = $input['identifier'] ?? '';
-        $stmt = $pdo->prepare("SELECT * FROM customers WHERE phone = ? OR contact_no = ? OR email = ?");
-        $stmt->execute([$identifier, $identifier, $identifier]);
+        $cleanPhone = preg_replace('/\D/', '', $identifier);
+        $phone1 = $cleanPhone;
+        $phone2 = $cleanPhone;
+        if (strlen($cleanPhone) === 9) {
+            $phone2 = '258' . $cleanPhone;
+        } else if (strlen($cleanPhone) === 12 && strpos($cleanPhone, '258') === 0) {
+            $phone2 = substr($cleanPhone, 3);
+        }
+        
+        $stmt = $pdo->prepare("SELECT * FROM customers WHERE phone = ? OR phone = ? OR contact_no = ? OR contact_no = ? OR email = ?");
+        $stmt->execute([$phone1, $phone2, $phone1, $phone2, $identifier]);
         $customer = $stmt->fetch();
         
         if ($customer) {

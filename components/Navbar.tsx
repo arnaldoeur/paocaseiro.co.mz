@@ -294,9 +294,11 @@ export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
                 navigate('/menu');
                 setMobileMenuOpen(false);
               }}
-              className="w-full text-center px-4 py-3 rounded-xl bg-[#3b2f2f] text-[#d9a65a] font-black uppercase tracking-widest text-sm"
+              className={`text-2xl font-serif hover:text-[#d9a65a] transition-colors ${location.pathname === '/menu' ? 'text-[#d9a65a]' : ''}`}
+              title="Menu"
+              aria-label="Menu"
             >
-              {t.nav.menu}
+              Menu
             </button>
 
             <button
