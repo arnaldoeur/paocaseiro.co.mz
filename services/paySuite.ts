@@ -28,11 +28,14 @@ export const initiatePayment = async (data: PaymentRequest): Promise<PaymentResp
         formattedPhone = `258${formattedPhone}`;
     }
 
+    // PaySuite reference MUST be strictly alphanumeric (no hyphens, no special characters)
+    const cleanRef = data.reference.replace(/[^a-zA-Z0-9]/g, '');
+
     const payload: any = {
         action: 'initiate',
         amount: String(data.amount.toFixed(2)),
-        reference: data.reference,
-        description: `Pagamento ${data.reference}`,
+        reference: cleanRef,
+        description: `Pagamento ${cleanRef}`,
         first_name: data.customerName?.split(' ')[0] || 'Cliente',
         last_name: data.customerName?.split(' ').slice(1).join(' ') || 'Pão Caseiro',
         email: data.customerEmail || 'geral@paocaseiro.co.mz',

@@ -1863,6 +1863,24 @@ try {
             $paySuitePayload = $inputPayload;
             unset($paySuitePayload['action']); // Remove our internal action field
             
+            // Bulletproof: Sanitize reference and description to strictly alphanumeric characters for PaySuite
+            if ($txAction === 'initiate') {
+                if (isset($paySuitePayload['reference'])) {
+                    $originalRef = $paySuitePayload['reference'];
+                    // Strip anything that is NOT a letter or a digit
+                    $cleanRef = preg_replace('/[^a-zA-Z0-9]/', '', $originalRef);
+                    $paySuitePayload['reference'] = $cleanRef;
+                    
+                    // Also sanitize the description to contain only alphanumeric characters and spaces
+                    if (isset($paySuitePayload['description'])) {
+                        $paySuitePayload['description'] = preg_replace('/[^a-zA-Z0-9\s]/', '', $paySuitePayload['description']);
+                    } else {
+                        $paySuitePayload['description'] = "Pagamento " . $cleanRef;
+                    }
+                    debug_log("PaySuite Reference Sanitized from '$originalRef' to '$cleanRef'");
+                }
+            }
+            
             $url = "https://paysuite.tech/api/v1/payments";
             if ($txAction === 'verify') {
                 $id = $inputPayload['id'] ?? $inputPayload['reference'] ?? '';
