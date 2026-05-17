@@ -1999,6 +1999,28 @@ try {
         }
         break;
 
+    case 'list_uploads':
+        $dir = 'uploads/blog/';
+        if (is_dir($dir)) {
+            $files = scandir($dir);
+            $result = [];
+            foreach ($files as $file) {
+                if ($file !== '.' && $file !== '..') {
+                    $result[] = [
+                        "name" => $file,
+                        "size" => filesize($dir . $file),
+                        "perms" => substr(sprintf('%o', fileperms($dir . $file)), -4),
+                        "readable" => is_readable($dir . $file)
+                    ];
+                }
+            }
+            echo json_encode(["success" => true, "files" => $result, "dir_perms" => substr(sprintf('%o', fileperms($dir)), -4)]);
+        } else {
+            echo json_encode(["success" => false, "error" => "Directory does not exist", "cwd" => getcwd()]);
+        }
+        break;
+
+
     case 'register_drive_file':
         $f = $input['file'] ?? $input;
         $cols = [];
