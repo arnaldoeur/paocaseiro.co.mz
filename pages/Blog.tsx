@@ -207,7 +207,7 @@ export const Blog: React.FC<{ language: Language }> = ({ language }) => {
                                 playsInline
                                 webkit-playsinline="true"
                                 preload="auto"
-                                src="https://files.zyphtech.com/video_paocaseiro.mp4"
+                                src="https://bqiegszufcqimlvucrpm.supabase.co/storage/v1/object/public/products/PAO%20CASEIRO%20VIDEO.mp4"
                             >
                             </video>
                             <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all">
@@ -402,7 +402,7 @@ export const Blog: React.FC<{ language: Language }> = ({ language }) => {
                                 controls
                                 playsInline
                             >
-                                <source src="https://files.zyphtech.com/video_paocaseiro.mp4" type="video/mp4" />
+                                <source src="https://bqiegszufcqimlvucrpm.supabase.co/storage/v1/object/public/products/PAO%20CASEIRO%20VIDEO.mp4" type="video/mp4" />
                             </video>
                         </div>
                     </motion.div>

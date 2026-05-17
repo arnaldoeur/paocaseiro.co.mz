@@ -445,7 +445,7 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
                         playsInline
                         webkit-playsinline="true"
                         preload="metadata"
-                        src="https://files.zyphtech.com/video_paocaseiro.mp4"
+                        src="https://bqiegszufcqimlvucrpm.supabase.co/storage/v1/object/public/products/PAO%20CASEIRO%20VIDEO.mp4"
                     >
                     </video>
                     {/* Consistent overlay like hero - REMOVED placeholder image that was hiding the video */}
