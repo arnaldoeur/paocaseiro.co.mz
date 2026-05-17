@@ -1,12 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, MessageCircle, Sparkles, Loader, Trash2, Clock, Plus, ChevronRight, Menu, X, ChevronLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-
+import { hostingerService } from '../services/hostingerService';
 
 // OpenRouter API Configuration
-const OPENROUTER_API_KEY = (import.meta as any).env.VITE_OPENROUTER_API_KEY || "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";
+const OPENROUTER_API_KEY = (import.meta as any).env.VITE_OPENROUTER_API_KEY || "";
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-const AI_MODEL = "openrouter/free";
+const AI_MODEL = (import.meta as any).env.VITE_AI_MODEL || "nvidia/nemotron-3-super-120b-a12b:free";
 
 interface Message {
     id?: string;
@@ -41,6 +41,26 @@ export const AdminSupportAI: React.FC<AdminSupportAIProps> = ({ userName, stats 
     const [isLoading, setIsLoading] = useState(false);
     const [showSidebar, setShowSidebar] = useState(true); // For mobile toggle
     const containerRef = useRef<HTMLDivElement>(null);
+    const [apiKey, setApiKey] = useState<string>('');
+    const [aiModel, setAiModel] = useState<string>('');
+
+    // Fetch AI Settings from Hostinger DB on Mount
+    useEffect(() => {
+        const fetchAISettings = async () => {
+            try {
+                const settings = await hostingerService.getSettings();
+                if (Array.isArray(settings)) {
+                    const keySetting = settings.find((s: any) => s.key === 'openrouter_api_key');
+                    const modelSetting = settings.find((s: any) => s.key === 'ai_model');
+                    if (keySetting?.value) setApiKey(keySetting.value);
+                    if (modelSetting?.value) setAiModel(modelSetting.value);
+                }
+            } catch (err) {
+                console.error("Failed to load AI settings from database:", err);
+            }
+        };
+        fetchAISettings();
+    }, []);
 
     const quickQuestions = [
         "Resumo de hoje?",
@@ -230,15 +250,18 @@ export const AdminSupportAI: React.FC<AdminSupportAIProps> = ({ userName, stats 
                 }
             ];
 
+            const activeKey = apiKey || OPENROUTER_API_KEY;
+            const activeModel = aiModel || AI_MODEL;
+
             const response = await fetch(OPENROUTER_URL, {
                 method: 'POST',
                 mode: 'cors',
                 headers: { 
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+                    'Authorization': `Bearer ${activeKey}`,
                 },
                 body: JSON.stringify({ 
-                    model: AI_MODEL,
+                    model: activeModel,
                     messages: finalMessages,
                     stream: true,
                     temperature: 0.7,

@@ -45,3 +45,4 @@ capacitor-cordova-android-plugins/
 .edge-debug/
 logs_and_debug/
 supabase/.temp/
+scratch/

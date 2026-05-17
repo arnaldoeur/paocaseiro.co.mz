@@ -393,6 +393,7 @@ export const Admin: React.FC = () => {
         }
     };
     const [currentSession, setCurrentSession] = useState<any>(null);
+    const [loadingSession, setLoadingSession] = useState(true);
     const [posTab, setPosTab] = useState<'sales' | 'dashboard'>('sales');
     const [isOpeningSession, setIsOpeningSession] = useState(false);
     const [initialBalance, setInitialBalance] = useState('');
@@ -420,8 +421,11 @@ export const Admin: React.FC = () => {
     }, [isPrinterConnected]);
 
     useEffect(() => {
-        if (activeView === 'pos' && searchInputRef.current) {
-            searchInputRef.current.focus();
+        if (activeView === 'pos') {
+            loadActiveCashSession();
+            if (searchInputRef.current) {
+                searchInputRef.current.focus();
+            }
         }
     }, [activeView]);
 
@@ -757,6 +761,25 @@ export const Admin: React.FC = () => {
         }
     };
 
+    const loadActiveCashSession = async () => {
+        setLoadingSession(true);
+        try {
+            const sessions = await hostingerService.getCashSessions();
+            if (sessions && Array.isArray(sessions)) {
+                const activeSession = sessions.find((s: any) => s.status === 'open');
+                if (activeSession) {
+                    setCurrentSession(activeSession);
+                } else {
+                    setCurrentSession(null);
+                }
+            }
+        } catch (error) {
+            console.error("Error loading active cash session:", error);
+        } finally {
+            setLoadingSession(false);
+        }
+    };
+
     const mockDevices: { [key: string]: { [key: string]: string[] } } = {
         barcode: {
             bluetooth: ['Scanner BT-700', 'Netum E800', 'Eyoyo 2D'],
@@ -1078,6 +1101,7 @@ export const Admin: React.FC = () => {
     useEffect(() => {
         loadProducts();
         loadReceipts();
+        loadActiveCashSession();
 
         // Legacy persistent local state removed - handled by reactive hooks.
         // Notifications and other real-time data now sync via Hostinger bridge polling.
@@ -2148,7 +2172,20 @@ export const Admin: React.FC = () => {
             
             const prompt = `Analisa os detalhes do nosso negócio e dá um insight conciso (2 parágrafos no máximo) focado em ações práticas para melhorarmos. Hoje tivemos: ${performanceMetrics.ordersToday} pedidos, produtividade de ${performanceMetrics.productivityScore}%. Equipa em serviço: ${performanceMetrics.activeStaff} pessoas trabalhando um total estimado de ${performanceMetrics.totalHours} horas. O funcionário destaque foi ${computedAiInsights?.topPerformer?.member?.name || 'nenhum destacado ainda'} com ${computedAiInsights?.topPerformer?.count || 0} pedidos. Pico detetado às ${computedAiInsights?.peakHour?.label || 'N/A'}. Mantém um tom muito profissional em português de Portugal.`;
             
-            const apiKey = import.meta.env.VITE_OPENROUTER_API_KEY || "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";
+            let apiKey = import.meta.env.VITE_OPENROUTER_API_KEY || "";
+            let aiModel = import.meta.env.VITE_AI_MODEL || "nvidia/nemotron-3-super-120b-a12b:free";
+            
+            try {
+                const settings = await hostingerService.getSettings();
+                if (Array.isArray(settings)) {
+                    const keySetting = settings.find((s: any) => s.key === 'openrouter_api_key');
+                    const modelSetting = settings.find((s: any) => s.key === 'ai_model');
+                    if (keySetting?.value) apiKey = keySetting.value;
+                    if (modelSetting?.value) aiModel = modelSetting.value;
+                }
+            } catch (err) {
+                console.error("Failed to load dynamic settings for AI report:", err);
+            }
             const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
                 method: "POST",
                 headers: {
@@ -2156,7 +2193,7 @@ export const Admin: React.FC = () => {
                     "Content-Type": "application/json"
                 },
                 body: JSON.stringify({
-                    model: "openrouter/free",
+                    model: aiModel,
                     messages: [
                         { role: "system", content: "You are an expert business analytics AI for a bakery." },
                         { role: "user", content: prompt }
@@ -5442,7 +5479,12 @@ export const Admin: React.FC = () => {
                 {activeView === 'pos' && (
                     <div className="flex flex-col flex-1 h-[calc(100vh-140px)] animate-fade-in overflow-hidden">
                         {/* Session Management Banner */}
-                        {!currentSession ? (
+                        {loadingSession ? (
+                            <div className="flex flex-col items-center justify-center flex-1 bg-[#3b2f2f]/5 p-8 rounded-3xl border border-[#d9a65a]/10 min-h-[300px]">
+                                <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#d9a65a] border-t-transparent mb-4"></div>
+                                <p className="text-gray-500 font-serif font-bold text-lg animate-pulse text-center">A carregar sessão de caixa...</p>
+                            </div>
+                        ) : !currentSession ? (
                             <div className="bg-[#3b2f2f] p-8 rounded-3xl text-center mb-6 shadow-2xl border border-[#d9a65a]/20 animate-scale-in">
                                 <div className="bg-[#d9a65a]/10 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 border border-[#d9a65a]/30">
                                     <Lock size={40} className="text-[#d9a65a]" />
@@ -5514,7 +5556,7 @@ export const Admin: React.FC = () => {
                                 {(() => {
                                     // Compute Session Statistics
                                     const sessionOrders = orders.filter((o: any) => o.cash_session_id === currentSession.id && o.status === 'completed');
-                                    const initialBalanceValue = Number(currentSession.initial_balance) || 0;
+                                    const initialBalanceValue = Number(currentSession.opening_balance || currentSession.initial_balance) || 0;
                                     
                                     // Helper to identify cash vs electronic payments
                                     const isCashPayment = (method?: string) => {
@@ -5754,7 +5796,7 @@ export const Admin: React.FC = () => {
                                 })()}
                             </div>
                         ) : (
-                            <div className={`flex flex-col lg:flex-row gap-6 flex-1 overflow-hidden transition-all duration-500 ${!currentSession ? 'blur-md pointer-events-none grayscale opacity-40' : ''}`}>
+                            <div className={`flex flex-col lg:flex-row gap-6 flex-1 overflow-hidden transition-all duration-500 ${(!currentSession || loadingSession) ? 'opacity-0 pointer-events-none' : ''}`}>
                             {/* Product Selection Side */}
                             <div className="flex-1 flex flex-col gap-6 overflow-hidden">
                                 {/* POS Header & Search */}

@@ -1472,6 +1472,52 @@ try {
 
     case 'get_cash_registers':
     case 'get_cash_sessions':
+        try {
+            // 1. Fetch all open sessions
+            $stmt = $pdo->query("SELECT * FROM cash_sessions WHERE status = 'open' ORDER BY opened_at DESC");
+            $openSessions = $stmt->fetchAll();
+            
+            if (count($openSessions) > 1) {
+                // Keep the absolute newest one, close all others
+                $newestSessionId = $openSessions[0]['id'];
+                for ($i = 1; $i < count($openSessions); $i++) {
+                    $oldSessionId = $openSessions[$i]['id'];
+                    $stmtClose = $pdo->prepare("UPDATE cash_sessions SET status = 'closed', closed_at = NOW(), notes = 'Auto-fechado por auto-correção' WHERE id = ?");
+                    $stmtClose->execute([$oldSessionId]);
+                }
+            }
+            
+            // 2. Fetch the active session
+            $stmtActive = $pdo->query("SELECT id FROM cash_sessions WHERE status = 'open' ORDER BY opened_at DESC LIMIT 1");
+            $activeSession = $stmtActive->fetch();
+            if ($activeSession) {
+                $activeSessionId = $activeSession['id'];
+                // 3. Self-heal: associate any POS orders created today that have NULL cash_session_id
+                $todayStart = date('Y-m-d 00:00:00');
+                $todayEnd = date('Y-m-d 23:59:59');
+                $updateSql = "UPDATE orders 
+                              SET cash_session_id = :session_id 
+                              WHERE cash_session_id IS NULL 
+                                AND created_at BETWEEN :start AND :end
+                                AND (
+                                    customer_name LIKE '%POS%' 
+                                    OR customer_name LIKE '%Local%' 
+                                    OR delivery_type IN ('pickup', 'dine_in')
+                                    OR delivery_address = 'LOCAL'
+                                    OR delivery_address = 'TAKEAWAY'
+                                )";
+                $stmtUpdate = $pdo->prepare($updateSql);
+                $stmtUpdate->execute([
+                    'session_id' => $activeSessionId,
+                    'start' => $todayStart,
+                    'end' => $todayEnd
+                ]);
+            }
+        } catch (Exception $e) {
+            // Log error but continue to return the sessions
+            debug_log("Error during self-healing: " . $e->getMessage());
+        }
+
         $stmt = $pdo->query("SELECT * FROM cash_sessions ORDER BY opened_at DESC LIMIT 50");
         echo json_encode($stmt->fetchAll());
         break;
