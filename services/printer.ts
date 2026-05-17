@@ -125,6 +125,67 @@ export class PrinterService {
         return this.printReceipt(order, items);
     }
 
+    async printClosingReport(session: any, orders: any[], username: string) {
+        const encoder = new TextEncoder();
+        let commands = new Uint8Array([0x1B, 0x40]); // Initialize
+
+        const addText = (text: string) => {
+            const encoded = encoder.encode(text + '\n');
+            const newCommands = new Uint8Array(commands.length + encoded.length);
+            newCommands.set(commands);
+            newCommands.set(encoded, commands.length);
+            commands = newCommands;
+        };
+
+        // Header
+        addText('     PAO CASEIRO');
+        addText('  RELATORIO DE FECHO');
+        addText('-----------------------');
+        addText(`Sessao: ${session.id.substring(3).toUpperCase()}`);
+        addText(`Operador: ${username}`);
+        addText(`Abertura: ${new Date(session.opened_at).toLocaleString()}`);
+        addText(`Fecho: ${new Date().toLocaleString()}`);
+        addText('-----------------------');
+
+        // Balances
+        const totalCashSales = orders.reduce((sum: number, o: any) => {
+            if (o.payment_method === 'cash' || o.payment_method === 'DINHEIRO') {
+                return sum + Number(o.total_amount);
+            }
+            return sum;
+        }, 0);
+
+        const totalOtherSales = orders.reduce((sum: number, o: any) => {
+            if (o.payment_method !== 'cash' && o.payment_method !== 'DINHEIRO') {
+                return sum + Number(o.total_amount);
+            }
+            return sum;
+        }, 0);
+
+        const expectedBalance = Number(session.opening_balance) + totalCashSales;
+        const closingBal = Number(session.closing_balance || expectedBalance);
+
+        addText(`Saldo Inicial: ${session.opening_balance} MT`);
+        addText(`Vendas Dinheiro: ${totalCashSales} MT`);
+        addText(`Outras Vendas: ${totalOtherSales} MT`);
+        addText(`Saldo Esperado: ${expectedBalance} MT`);
+        addText(`Saldo Declarado: ${closingBal} MT`);
+        addText(`Diferenca: ${closingBal - expectedBalance} MT`);
+        addText('-----------------------');
+        addText(`Notas: ${session.notes || 'Nenhuma'}`);
+        addText('\n\n\n');
+
+        // Cut command
+        const cut = new Uint8Array([0x1D, 0x56, 0x41, 0x10]);
+        const final = new Uint8Array(commands.length + cut.length);
+        final.set(commands);
+        final.set(cut, commands.length);
+
+        if (this.characteristic) {
+            await this.characteristic.writeValue(final);
+        }
+    }
+
 
     async printTicket(ticket: any) {
         const encoder = new TextEncoder();

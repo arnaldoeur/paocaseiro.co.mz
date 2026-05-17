@@ -70,6 +70,30 @@ function get_pdo_connection() {
                         $conn->exec("ALTER TABLE queue_tickets ADD COLUMN priority TINYINT(1) DEFAULT 0 AFTER ticket_number");
                     }
                 }
+
+                // Ensure cash_sessions table exists
+                $sessionCheck = $conn->query("SHOW TABLES LIKE 'cash_sessions'")->rowCount();
+                if ($sessionCheck === 0) {
+                    $conn->exec("CREATE TABLE cash_sessions (
+                        id VARCHAR(50) PRIMARY KEY,
+                        opened_by VARCHAR(50) NOT NULL,
+                        opening_balance DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+                        closing_balance DECIMAL(10,2) DEFAULT NULL,
+                        status VARCHAR(20) NOT NULL DEFAULT 'open',
+                        notes TEXT DEFAULT NULL,
+                        opened_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        closed_at TIMESTAMP NULL DEFAULT NULL
+                    )");
+                }
+
+                // Ensure orders table has cash_session_id column
+                $ordersCheck = $conn->query("SHOW TABLES LIKE 'orders'")->rowCount();
+                if ($ordersCheck > 0) {
+                    $orderColCheck = $conn->query("SHOW COLUMNS FROM orders LIKE 'cash_session_id'")->rowCount();
+                    if ($orderColCheck === 0) {
+                        $conn->exec("ALTER TABLE orders ADD COLUMN cash_session_id VARCHAR(50) NULL AFTER user_id");
+                    }
+                }
             } catch (Exception $e) {
                 // Silently ignore schema check errors
                 error_log("[PaoCaseiro Schema Auto-Heal Error] " . $e->getMessage());
@@ -421,9 +445,9 @@ try {
             }
 
             // 2. Insert/Update Order
-            $sql = "INSERT INTO orders (id, short_id, customer_id, customer_name, customer_phone, customer_email, total_amount, status, delivery_type, delivery_address, notes, payment_method, payment_status, payment_reference, transaction_id, estimated_ready_at) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ON DUPLICATE KEY UPDATE status=VALUES(status), payment_status=VALUES(payment_status), payment_reference=VALUES(payment_reference), transaction_id=VALUES(transaction_id), notes=VALUES(notes), estimated_ready_at=VALUES(estimated_ready_at)";
+            $sql = "INSERT INTO orders (id, short_id, customer_id, customer_name, customer_phone, customer_email, total_amount, status, delivery_type, delivery_address, notes, payment_method, payment_status, payment_reference, transaction_id, estimated_ready_at, cash_session_id) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE status=VALUES(status), payment_status=VALUES(payment_status), payment_reference=VALUES(payment_reference), transaction_id=VALUES(transaction_id), notes=VALUES(notes), estimated_ready_at=VALUES(estimated_ready_at), cash_session_id=VALUES(cash_session_id)";
             
             $stmt = $pdo->prepare($sql);
             $stmt->execute([
@@ -442,7 +466,8 @@ try {
                 $o['payment_status'] ?? 'pending',
                 $o['payment_reference'] ?? $o['payment_ref'] ?? null,
                 $o['transaction_id'] ?? null,
-                $o['estimated_ready_at'] ?? null
+                $o['estimated_ready_at'] ?? null,
+                $o['cash_session_id'] ?? null
             ]);
 
             // 3. Save items

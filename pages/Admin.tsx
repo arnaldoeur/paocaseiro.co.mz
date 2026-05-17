@@ -393,6 +393,7 @@ export const Admin: React.FC = () => {
         }
     };
     const [currentSession, setCurrentSession] = useState<any>(null);
+    const [posTab, setPosTab] = useState<'sales' | 'dashboard'>('sales');
     const [isOpeningSession, setIsOpeningSession] = useState(false);
     const [initialBalance, setInitialBalance] = useState('');
     const [currentBalance, setCurrentBalance] = useState(0);
@@ -742,6 +743,7 @@ export const Admin: React.FC = () => {
             
             if (result.success) {
                 setCurrentSession(null);
+                setPosTab('sales');
                 setShowCloseSessionModal(false);
                 setCurrentBalance(0);
                 setCloseNotes('');
@@ -5490,7 +5492,269 @@ export const Admin: React.FC = () => {
                             </div>
                         )}
 
-                        <div className={`flex flex-col lg:flex-row gap-6 flex-1 overflow-hidden transition-all duration-500 ${!currentSession ? 'blur-md pointer-events-none grayscale opacity-40' : ''}`}>
+                        {currentSession && (
+                            <div className="flex gap-2 mb-4 bg-white/50 backdrop-blur-md p-1.5 rounded-2xl border border-gray-200/40">
+                                <button
+                                    onClick={() => setPosTab('sales')}
+                                    className={`flex-1 py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${posTab === 'sales' ? 'bg-[#3b2f2f] text-[#d9a65a] shadow-md scale-[1.02]' : 'text-gray-500 hover:text-[#3b2f2f] hover:bg-white/40'}`}
+                                >
+                                    🛒 1. POS / Balcão
+                                </button>
+                                <button
+                                    onClick={() => setPosTab('dashboard')}
+                                    className={`flex-1 py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${posTab === 'dashboard' ? 'bg-[#3b2f2f] text-[#d9a65a] shadow-md scale-[1.02]' : 'text-gray-500 hover:text-[#3b2f2f] hover:bg-white/40'}`}
+                                >
+                                    📊 2. Dashboard ({orders.filter((o: any) => o.cash_session_id === currentSession.id && o.status === 'completed').length} Vendas)
+                                </button>
+                            </div>
+                        )}
+
+                        {currentSession && posTab === 'dashboard' ? (
+                            <div className="flex-1 overflow-y-auto pr-1 thin-scrollbar">
+                                {(() => {
+                                    // Compute Session Statistics
+                                    const sessionOrders = orders.filter((o: any) => o.cash_session_id === currentSession.id && o.status === 'completed');
+                                    const initialBalanceValue = Number(currentSession.initial_balance) || 0;
+                                    
+                                    // Helper to identify cash vs electronic payments
+                                    const isCashPayment = (method?: string) => {
+                                        if (!method) return true; // Default to cash if empty
+                                        const m = method.toLowerCase();
+                                        return m === 'cash' || m === 'dinheiro' || m.includes('cash') || m.includes('dinheiro');
+                                    };
+
+                                    // Totals
+                                    const totalSalesValue = sessionOrders.reduce((sum: number, o: any) => sum + (Number(o.total_amount) || Number(o.total) || 0), 0);
+                                    
+                                    const totalCashSalesValue = sessionOrders
+                                        .filter((o: any) => isCashPayment(o.payment_method))
+                                        .reduce((sum: number, o: any) => sum + (Number(o.total_amount) || Number(o.total) || 0), 0);
+                                        
+                                    const totalOtherSales = sessionOrders
+                                        .filter((o: any) => !isCashPayment(o.payment_method))
+                                        .reduce((sum: number, o: any) => sum + (Number(o.total_amount) || Number(o.total) || 0), 0);
+
+                                    const expectedBalance = initialBalanceValue + totalCashSalesValue;
+
+                                    // Splits
+                                    const cashSalesCount = sessionOrders.filter((o: any) => isCashPayment(o.payment_method)).length;
+                                    const electronicSalesCount = sessionOrders.length - cashSalesCount;
+                                    const totalCount = sessionOrders.length || 1;
+                                    const cashPercent = Math.round((cashSalesCount / totalCount) * 100);
+                                    const electronicPercent = 100 - cashPercent;
+
+                                    const averageTicket = sessionOrders.length ? Math.round(totalSalesValue / sessionOrders.length) : 0;
+
+                                    // Total items sold in this session
+                                    const totalItemsSold = sessionOrders.reduce((sum: number, o: any) => {
+                                        const items = o.items || [];
+                                        return sum + items.reduce((iSum: number, item: any) => iSum + (Number(item.quantity) || 0), 0);
+                                    }, 0);
+
+                                    return (
+                                        <div className="flex flex-col gap-6 p-1">
+                                            {/* Premium 4-Card Metrics Grid */}
+                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                                                {/* Saldo Inicial */}
+                                                <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex flex-col justify-between hover:shadow-md transition-all border-l-4 border-l-gray-400">
+                                                    <div className="flex justify-between items-start">
+                                                        <div>
+                                                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block mb-1">Saldo Inicial</span>
+                                                            <span className="text-2xl font-black text-gray-700">{initialBalanceValue.toLocaleString('pt-PT')} MT</span>
+                                                        </div>
+                                                        <div className="bg-gray-50 text-gray-500 p-2.5 rounded-xl">
+                                                            <Lock size={20} />
+                                                        </div>
+                                                    </div>
+                                                    <span className="text-[10px] text-gray-500 font-medium border-t border-gray-50 pt-2 block mt-4">Abertura de Caixa</span>
+                                                </div>
+
+                                                {/* Total Vendas Volume */}
+                                                <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex flex-col justify-between hover:shadow-md transition-all border-l-4 border-l-[#d9a65a]">
+                                                    <div className="flex justify-between items-start">
+                                                        <div>
+                                                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block mb-1">Faturação Total</span>
+                                                            <span className="text-2xl font-black text-[#3b2f2f]">{totalSalesValue.toLocaleString('pt-PT')} MT</span>
+                                                        </div>
+                                                        <div className="bg-[#d9a65a]/10 text-[#d9a65a] p-2.5 rounded-xl">
+                                                            <TrendingUp size={20} />
+                                                        </div>
+                                                    </div>
+                                                    <span className="text-[10px] text-gray-500 font-medium border-t border-gray-50 pt-2 block mt-4">{sessionOrders.length} Transações Concluídas</span>
+                                                </div>
+
+                                                {/* Saldo Actual (Esperado em Caixa) */}
+                                                <div className="bg-[#3b2f2f] p-6 rounded-3xl shadow-xl flex flex-col justify-between hover:-translate-y-1 transition-all relative overflow-hidden border border-[#d9a65a]/20">
+                                                    <div className="absolute right-0 top-0 translate-x-4 -translate-y-4 w-32 h-32 bg-[#d9a65a]/5 rounded-full blur-2xl"></div>
+                                                    <div className="flex justify-between items-start relative z-10">
+                                                        <div>
+                                                            <span className="text-[10px] font-bold text-[#d9a65a] uppercase tracking-widest block mb-1">Saldo Actual</span>
+                                                            <span className="text-2xl font-black text-[#d9a65a]">{expectedBalance.toLocaleString('pt-PT')} MT</span>
+                                                        </div>
+                                                        <div className="bg-[#d9a65a] text-[#3b2f2f] p-2.5 rounded-xl shadow-md">
+                                                            <Banknote size={20} />
+                                                        </div>
+                                                    </div>
+                                                    <span className="text-[10px] text-gray-300 font-medium border-t border-white/10 pt-2 block mt-4 relative z-10 flex items-center gap-1.5">
+                                                        <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-ping"></span>
+                                                        Valor esperado em Caixa
+                                                    </span>
+                                                </div>
+
+                                                {/* Outras Vendas */}
+                                                <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex flex-col justify-between hover:shadow-md transition-all border-l-4 border-l-purple-500">
+                                                    <div className="flex justify-between items-start">
+                                                        <div>
+                                                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block mb-1">Outros Pagamentos</span>
+                                                            <span className="text-2xl font-black text-purple-600">+{totalOtherSales.toLocaleString('pt-PT')} MT</span>
+                                                        </div>
+                                                        <div className="bg-purple-50 text-purple-600 p-2.5 rounded-xl">
+                                                            <CreditCard size={20} />
+                                                        </div>
+                                                    </div>
+                                                    <span className="text-[10px] text-gray-500 font-medium border-t border-gray-50 pt-2 block mt-4">M-Pesa, e-Mola, Cartões</span>
+                                                </div>
+                                            </div>
+
+                                            {/* Analytical Progress & Statistics Split */}
+                                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                                {/* Payments split progress bar */}
+                                                <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex flex-col gap-4">
+                                                    <div className="flex justify-between items-center text-xs font-bold text-gray-500">
+                                                        <span className="uppercase tracking-wider">Composição dos Pagamentos</span>
+                                                        <span>{cashSalesCount} Vendas Dinheiro vs {electronicSalesCount} Eletrónico</span>
+                                                    </div>
+                                                    <div className="h-4 w-full bg-gray-100 rounded-full overflow-hidden flex">
+                                                        <div style={{ width: `${cashPercent}%` }} className="bg-emerald-500 h-full transition-all duration-500" title={`Dinheiro: ${cashPercent}%`}></div>
+                                                        <div style={{ width: `${electronicPercent}%` }} className="bg-purple-500 h-full transition-all duration-500" title={`Eletrónico: ${electronicPercent}%`}></div>
+                                                    </div>
+                                                    <div className="flex justify-between items-center text-[10px] font-bold mt-2">
+                                                        <div className="flex items-center gap-1.5 text-emerald-600">
+                                                            <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full"></span> Dinheiro ({cashPercent}%)
+                                                        </div>
+                                                        <div className="flex items-center gap-1.5 text-purple-600">
+                                                            <span className="w-2.5 h-2.5 bg-purple-500 rounded-full"></span> Eletrónico ({electronicPercent}%)
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* Micro statistics */}
+                                                <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm grid grid-cols-2 gap-6">
+                                                    <div className="flex flex-col justify-center">
+                                                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Ticket Médio</span>
+                                                        <span className="text-xl font-black text-[#3b2f2f]">{averageTicket.toLocaleString('pt-PT')} MT</span>
+                                                    </div>
+                                                    <div className="flex flex-col justify-center border-l border-gray-100 pl-6">
+                                                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Itens Vendidos</span>
+                                                        <span className="text-xl font-black text-[#d9a65a]">{totalItemsSold} Qtd</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Movimentos (Real-Time Transactions List) */}
+                                            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex flex-col min-h-[250px]">
+                                                <div className="flex justify-between items-center mb-4 pb-3 border-b border-gray-100">
+                                                    <div className="flex items-center gap-2">
+                                                        <Clock size={16} className="text-[#d9a65a]" />
+                                                        <h4 className="font-serif font-black text-sm text-[#3b2f2f] uppercase tracking-wider">Histórico de Movimentos</h4>
+                                                    </div>
+                                                    <span className="text-[10px] font-bold bg-[#3b2f2f]/5 text-[#3b2f2f] px-3 py-1 rounded-full uppercase tracking-wider">{sessionOrders.length} Lançamentos</span>
+                                                </div>
+
+                                                <div className="overflow-y-auto max-h-[400px] pr-1 thin-scrollbar">
+                                                    <div className="flex flex-col gap-3">
+                                                        {sessionOrders.length === 0 ? (
+                                                            <div className="flex flex-col items-center justify-center py-12 text-center text-gray-400">
+                                                                <ShoppingCart size={40} className="stroke-[1.5] mb-3 text-gray-300" />
+                                                                <p className="font-bold text-sm">Sem movimentos registados</p>
+                                                                <p className="text-xs max-w-xs mt-1">Todas as vendas concluídas nesta sessão aparecerão aqui instantaneamente.</p>
+                                                            </div>
+                                                        ) : (
+                                                            sessionOrders.map((o: any) => (
+                                                                <div key={o.id || o.orderId} className="hover:scale-[1.005] transition-all duration-300">
+                                                                    <div className="bg-white border border-gray-100 p-4 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:shadow-md hover:border-gray-200 transition-all">
+                                                                        <div className="flex flex-col gap-1.5">
+                                                                            <div className="flex items-center gap-2">
+                                                                                <span className="text-[9px] font-black uppercase tracking-wider text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-100">Venda Realizada</span>
+                                                                                <span className="font-black text-xs text-[#3b2f2f]">#{o.short_id || o.id?.substring(0, 6).toUpperCase() || 'POS'}</span>
+                                                                            </div>
+                                                                            <h5 className="font-bold text-sm text-[#3b2f2f]">{o.customer_name || 'Consumidor Final'}</h5>
+                                                                            <div className="flex items-center gap-3 text-xs text-gray-400">
+                                                                                <span>Hora: {new Date(o.created_at || o.date).toLocaleTimeString('pt-PT')}</span>
+                                                                                <span>•</span>
+                                                                                <span className="capitalize">Serviço: {o.delivery_address || 'Presencial'}</span>
+                                                                            </div>
+                                                                        </div>
+                                                                        <div className="flex sm:flex-col items-end justify-between sm:justify-start w-full sm:w-auto gap-3">
+                                                                            <div className="text-right">
+                                                                                <p className="font-black text-base text-[#3b2f2f]">{Number(o.total_amount || o.total).toLocaleString('pt-PT')} MT</p>
+                                                                                <div className="mt-1 flex justify-end">
+                                                                                    {(() => {
+                                                                                        const m = (o.payment_method || 'cash').toLowerCase();
+                                                                                        if (m.includes('cash') || m.includes('dinheiro')) {
+                                                                                            return <span className="text-[9px] font-black uppercase tracking-wider text-emerald-600 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">Dinheiro</span>;
+                                                                                        }
+                                                                                        if (m.includes('mpesa')) {
+                                                                                            return <span className="text-[9px] font-black uppercase tracking-wider text-red-600 bg-red-50 border border-red-200 px-2.5 py-0.5 rounded-full">M-Pesa</span>;
+                                                                                        }
+                                                                                        if (m.includes('emola')) {
+                                                                                            return <span className="text-[9px] font-black uppercase tracking-wider text-orange-600 bg-orange-50 border border-orange-200 px-2.5 py-0.5 rounded-full">e-Mola</span>;
+                                                                                        }
+                                                                                        return <span className="text-[9px] font-black uppercase tracking-wider text-purple-600 bg-purple-50 border border-purple-200 px-2.5 py-0.5 rounded-full">{o.payment_method || 'Outro'}</span>;
+                                                                                    })()}
+                                                                                </div>
+                                                                            </div>
+                                                                            <button
+                                                                                onClick={async () => {
+                                                                                    try {
+                                                                                        const items = o.items || [];
+                                                                                        await printerService.printReceipt(o, items, printerConfig.paperSize);
+                                                                                        alert("Recibo impresso com sucesso!");
+                                                                                    } catch (e: any) {
+                                                                                        alert("Erro ao imprimir: " + e.message);
+                                                                                    }
+                                                                                }}
+                                                                                className="px-4 py-2 bg-[#3b2f2f] text-[#d9a65a] rounded-xl text-[10px] font-black uppercase tracking-wider hover:brightness-110 active:scale-95 transition-all shadow-sm flex items-center gap-1.5"
+                                                                            >
+                                                                                <Printer size={12} /> Re-imprimir
+                                                                            </button>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            ))
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Active Session Management Actions */}
+                                            <div className="flex flex-col sm:flex-row gap-4 justify-end mt-4">
+                                                <button
+                                                    onClick={async () => {
+                                                        try {
+                                                            await printerService.openCashDrawer();
+                                                        } catch (e) {
+                                                            alert('Erro ao abrir gaveta: ' + (e as Error).message);
+                                                        }
+                                                    }}
+                                                    disabled={!isPrinterConnected}
+                                                    className={`px-8 py-4 rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-md flex items-center gap-2 justify-center ${isPrinterConnected ? 'bg-white border border-gray-200 text-[#3b2f2f] hover:bg-gray-50' : 'bg-gray-100 text-gray-400 cursor-not-allowed grayscale'}`}
+                                                >
+                                                    <Banknote size={16} /> Abrir Gaveta
+                                                </button>
+                                                <button
+                                                    onClick={handleCloseSession}
+                                                    className="bg-red-500 hover:bg-red-600 text-white px-8 py-4 rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-md flex items-center gap-2 justify-center"
+                                                >
+                                                    <XCircle size={16} /> Encerrar Turno & Fechar Caixa
+                                                </button>
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
+                            </div>
+                        ) : (
+                            <div className={`flex flex-col lg:flex-row gap-6 flex-1 overflow-hidden transition-all duration-500 ${!currentSession ? 'blur-md pointer-events-none grayscale opacity-40' : ''}`}>
                             {/* Product Selection Side */}
                             <div className="flex-1 flex flex-col gap-6 overflow-hidden">
                                 {/* POS Header & Search */}
@@ -5742,6 +6006,7 @@ export const Admin: React.FC = () => {
                                 </div>
                             </div>
                         </div>
+                        )}
                     </div>
                 )}
 
