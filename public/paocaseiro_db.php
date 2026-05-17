@@ -134,8 +134,8 @@ if (isset($all_headers['Authorization'])) {
 $token = trim(str_ireplace('Bearer ', '', $auth));
 
 // Debug log for troubleshooting (can be removed later)
-debug_log("Headers received: " . json_encode($all_headers));
-debug_log("Auth token extracted: " . $token);
+// debug_log("Headers received: " . json_encode($all_headers));
+// debug_log("Auth token extracted: " . $token);
 
 if ($action !== 'paysuite_webhook' && $token !== $API_KEY) {
     http_response_code(401);
