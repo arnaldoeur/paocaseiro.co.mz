@@ -259,85 +259,102 @@ export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
             initial={{ opacity: 0, x: '100%' }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: '100%' }}
-            className="fixed inset-0 z-[60] bg-[#3b2f2f] text-[#f7f1eb] flex flex-col items-center justify-start gap-4 overflow-y-auto pt-12 pb-10"
+            onClick={() => setMobileMenuOpen(false)}
+            className="fixed inset-0 z-[60] bg-[#3b2f2f]/95 backdrop-blur-md text-[#f7f1eb] flex flex-col items-center justify-start overflow-y-auto cursor-pointer"
           >
             <button
               id="mobile-menu-close"
-              className="absolute top-8 right-8 p-3 bg-white/20 text-white rounded-full z-[70] hover:bg-white/30 active:scale-95 transition-all shadow-lg"
-              onClick={() => setMobileMenuOpen(false)}
+              className="absolute top-8 right-8 p-3 bg-white/10 text-white rounded-full z-[70] hover:bg-white/20 active:scale-95 transition-all shadow-lg cursor-pointer"
+              onClick={(e) => {
+                e.stopPropagation();
+                setMobileMenuOpen(false);
+              }}
               title={t.nav.closeMenu}
               aria-label={t.nav.closeMenu}
             >
               <X className="w-8 h-8" />
             </button>
 
-            <Logo className="h-20 mb-4" />
-
-            {NAV_ITEMS.map((item) => {
-              const isActive = (item.id === 'hero' && location.pathname === '/') || 
-                               (item.id === 'blog' && location.pathname.startsWith('/blog'));
-              return (
-              <button
-                key={item.id}
-                id={`mobile-nav-${item.id}`}
-                onClick={() => handleNavigation(item.id)}
-                className={`text-2xl font-serif hover:text-[#d9a65a] transition-colors ${isActive ? 'text-[#d9a65a]' : ''}`}
-                title={t.nav[item.labelKey]}
-                aria-label={t.nav[item.labelKey]}
-              >
-                {t.nav[item.labelKey]}
-              </button>
-              );
-            })}
-            <button
-              onClick={() => {
-                navigate('/menu');
-                setMobileMenuOpen(false);
-              }}
-              className={`text-2xl font-serif hover:text-[#d9a65a] transition-colors ${location.pathname === '/menu' ? 'text-[#d9a65a]' : ''}`}
-              title="Menu"
-              aria-label="Menu"
+            {/* Inner Content Wrapper that stops propagation to background */}
+            <div 
+              className="flex flex-col items-center justify-start gap-5 w-full max-w-md pt-20 pb-12 px-6 cursor-default"
+              onClick={(e) => e.stopPropagation()}
             >
-              Menu
-            </button>
-
-            <button
-              onClick={() => { toggleLanguage(); setMobileMenuOpen(false); }}
-              className="flex items-center gap-3 px-6 py-2.5 rounded-full border border-white/20 hover:border-[#d9a65a] hover:text-[#d9a65a] transition-all mt-2"
-              title={language === 'pt' ? 'Mudar para Inglês' : 'Change to Portuguese'}
-            >
-              {language === 'pt' ? (
-                <img src="https://flagcdn.com/mz.svg" alt="MZ" className="w-6 h-auto drop-shadow-md rounded-sm" />
-              ) : (
-                <img src="https://flagcdn.com/us.svg" alt="US" className="w-6 h-auto drop-shadow-md rounded-sm" />
-              )}
-              <span className="text-lg font-bold uppercase tracking-wider">{language === 'pt' ? 'English' : 'Português'}</span>
-            </button>
-
-            {/* Mobile Login/Account Button */}
-            {(user || manualUserPhone) ? (
-              <button
-                onClick={() => { navigate('/dashboard'); setMobileMenuOpen(false); }}
-                className="flex items-center gap-3 bg-[#f7f1eb]/10 px-8 py-3 rounded-full border border-white/20 hover:border-[#d9a65a] transition-all"
-                title={t.nav.myAccount}
+              <div 
+                className="cursor-pointer hover:scale-105 transition-transform mb-4"
+                onClick={() => handleNavigation('hero')}
               >
-                <div className="w-8 h-8 rounded-full bg-[#d9a65a] flex items-center justify-center text-[#3b2f2f]">
-                  <span className="text-xs font-black uppercase">
-                    {(user?.email || manualUserPhone || '?')[0].toUpperCase()}
-                  </span>
-                </div>
-                <span className="font-bold">{t.nav.myAccount}</span>
-              </button>
-            ) : (
+                <Logo className="h-20" />
+              </div>
+
+              {NAV_ITEMS.map((item) => {
+                const isActive = (item.id === 'hero' && location.pathname === '/') || 
+                                 (item.id === 'blog' && location.pathname.startsWith('/blog'));
+                return (
+                <button
+                  key={item.id}
+                  id={`mobile-nav-${item.id}`}
+                  onClick={() => handleNavigation(item.id)}
+                  className={`text-2xl font-serif hover:text-[#d9a65a] transition-colors cursor-pointer py-1 ${isActive ? 'text-[#d9a65a]' : ''}`}
+                  title={t.nav[item.labelKey]}
+                  aria-label={t.nav[item.labelKey]}
+                >
+                  {t.nav[item.labelKey]}
+                </button>
+                );
+              })}
               <button
-                onClick={() => { setIsLoginModalOpen(true); setMobileMenuOpen(false); }}
-                className="flex items-center gap-3 bg-[#d9a65a] text-[#3b2f2f] px-8 py-3 rounded-full font-bold hover:bg-white transition-all shadow-lg"
-                title={t.nav.login}
+                onClick={() => {
+                  navigate('/menu');
+                  setMobileMenuOpen(false);
+                }}
+                className={`text-2xl font-serif hover:text-[#d9a65a] transition-colors cursor-pointer py-1 ${location.pathname === '/menu' ? 'text-[#d9a65a]' : ''}`}
+                title="Menu"
+                aria-label="Menu"
               >
-                <User className="w-6 h-6" />
-                <span>{t.nav.login}</span>
+                Menu
               </button>
-            )}
+
+              <button
+                onClick={() => { toggleLanguage(); setMobileMenuOpen(false); }}
+                className="flex items-center gap-3 px-6 py-2.5 rounded-full border border-white/20 hover:border-[#d9a65a] hover:text-[#d9a65a] transition-all mt-3 cursor-pointer"
+                title={language === 'pt' ? 'Mudar para Inglês' : 'Change to Portuguese'}
+              >
+                {language === 'pt' ? (
+                  <img src="https://flagcdn.com/mz.svg" alt="MZ" className="w-6 h-auto drop-shadow-md rounded-sm" />
+                ) : (
+                  <img src="https://flagcdn.com/us.svg" alt="US" className="w-6 h-auto drop-shadow-md rounded-sm" />
+                )}
+                <span className="text-lg font-bold uppercase tracking-wider">{language === 'pt' ? 'English' : 'Português'}</span>
+              </button>
+
+              {/* Mobile Login/Account Button */}
+              <div className="mt-4 w-full flex justify-center">
+                {(user || manualUserPhone) ? (
+                  <button
+                    onClick={() => { navigate('/dashboard'); setMobileMenuOpen(false); }}
+                    className="flex items-center gap-3 bg-white/10 hover:bg-white/20 px-8 py-3 rounded-full border border-white/20 hover:border-[#d9a65a] transition-all cursor-pointer shadow-lg active:scale-95"
+                    title={t.nav.myAccount}
+                  >
+                    <div className="w-8 h-8 rounded-full bg-[#d9a65a] flex items-center justify-center text-[#3b2f2f]">
+                      <span className="text-xs font-black uppercase">
+                        {(user?.email || manualUserPhone || '?')[0].toUpperCase()}
+                      </span>
+                    </div>
+                    <span className="font-bold">{t.nav.myAccount}</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => { setIsLoginModalOpen(true); setMobileMenuOpen(false); }}
+                    className="flex items-center gap-3 bg-[#d9a65a] hover:bg-white text-[#3b2f2f] px-8 py-3 rounded-full font-bold hover:bg-white transition-all shadow-lg cursor-pointer active:scale-95"
+                    title={t.nav.login}
+                  >
+                    <User className="w-6 h-6" />
+                    <span>{t.nav.login}</span>
+                  </button>
+                )}
+              </div>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
