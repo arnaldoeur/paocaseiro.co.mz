@@ -94,6 +94,38 @@ function get_pdo_connection() {
                         $conn->exec("ALTER TABLE orders ADD COLUMN cash_session_id VARCHAR(50) NULL AFTER user_id");
                     }
                 }
+
+                // Ensure contact_messages table exists and has all required columns
+                $contactCheck = $conn->query("SHOW TABLES LIKE 'contact_messages'")->rowCount();
+                if ($contactCheck === 0) {
+                    $conn->exec("CREATE TABLE contact_messages (
+                        id VARCHAR(50) PRIMARY KEY,
+                        name VARCHAR(255) NOT NULL,
+                        phone VARCHAR(50) NOT NULL,
+                        email VARCHAR(255) NULL,
+                        message TEXT NOT NULL,
+                        folder VARCHAR(50) DEFAULT 'inbox',
+                        status VARCHAR(50) DEFAULT 'new',
+                        reply_content TEXT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )");
+                } else {
+                    // Check and add missing columns
+                    $colFolder = $conn->query("SHOW COLUMNS FROM contact_messages LIKE 'folder'")->rowCount();
+                    if ($colFolder === 0) {
+                        $conn->exec("ALTER TABLE contact_messages ADD COLUMN folder VARCHAR(50) DEFAULT 'inbox' AFTER message");
+                    }
+                    
+                    $colStatus = $conn->query("SHOW COLUMNS FROM contact_messages LIKE 'status'")->rowCount();
+                    if ($colStatus === 0) {
+                        $conn->exec("ALTER TABLE contact_messages ADD COLUMN status VARCHAR(50) DEFAULT 'new' AFTER folder");
+                    }
+
+                    $colReply = $conn->query("SHOW COLUMNS FROM contact_messages LIKE 'reply_content'")->rowCount();
+                    if ($colReply === 0) {
+                        $conn->exec("ALTER TABLE contact_messages ADD COLUMN reply_content TEXT NULL AFTER status");
+                    }
+                }
             } catch (Exception $e) {
                 // Silently ignore schema check errors
                 error_log("[PaoCaseiro Schema Auto-Heal Error] " . $e->getMessage());
@@ -1321,19 +1353,28 @@ try {
         break;
 
     case 'save_contact_message':
-        $m = $input['message'] ?? $input;
+        $m = (isset($input['message']) && is_array($input['message'])) ? $input['message'] : $input;
         $id = $m['id'] ?? uniqid('msg_');
+        
+        // Safely extract fields with fallbacks to avoid PHP TypeErrors
+        $name = $m['name'] ?? 'Cliente Registado';
+        $phone = $m['phone'] ?? '';
+        $email = $m['email'] ?? null;
+        $msgContent = is_array($input['message']) ? ($m['message'] ?? '') : ($input['message'] ?? $m['message'] ?? '');
+        $folder = $m['folder'] ?? 'inbox';
+        $status = $m['status'] ?? 'new';
+        
         $sql = "INSERT INTO contact_messages (id, name, phone, email, message, folder, status) 
                 VALUES (?, ?, ?, ?, ?, ?, ?)";
         $stmt = $pdo->prepare($sql);
         $stmt->execute([
             $id, 
-            $m['name'], 
-            $m['phone'], 
-            $m['email'] ?? null, 
-            $m['message'], 
-            $m['folder'] ?? 'inbox', 
-            $m['status'] ?? 'new'
+            $name, 
+            $phone, 
+            $email, 
+            $msgContent, 
+            $folder, 
+            $status
         ]);
         echo json_encode(["success" => true, "id" => $id]);
         break;
