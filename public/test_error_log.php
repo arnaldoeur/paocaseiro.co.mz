@@ -2,7 +2,9 @@
 // public/test_error_log.php
 header('Content-Type: text/plain; charset=utf-8');
 
+$logMsg = "[" . date('Y-m-d H:i:s') . " UTC] [PaoCaseiro Test] Forcing error log write!\n";
 error_log("[PaoCaseiro Test] Forcing error log write!");
+@file_put_contents(__DIR__ . '/error_log', $logMsg, FILE_APPEND);
 
 $ini_log = ini_get('error_log');
 echo "ini_get('error_log') = " . $ini_log . "\n";

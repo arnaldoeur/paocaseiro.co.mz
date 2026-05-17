@@ -17,7 +17,12 @@ $PAYSUITE_WEBHOOK_SECRET = "whsec_c6df7d4376c281e30536e1aa4580807a9783362a858265
 
 // Log function for debugging
 function debug_log($message) {
-    error_log("[PaoCaseiro DB] " . (is_array($message) || is_object($message) ? json_encode($message) : $message));
+    $formatted = (is_array($message) || is_object($message)) ? json_encode($message) : $message;
+    // Standard server logging
+    error_log("[PaoCaseiro DB] " . $formatted);
+    // Explicit local file fallback to guarantee access on shared hosting
+    $logMsg = "[" . date('Y-m-d H:i:s') . " UTC] [PaoCaseiro DB] " . $formatted . "\n";
+    @file_put_contents(__DIR__ . '/error_log', $logMsg, FILE_APPEND);
 }
 
 // CREDENCIAIS DA HOSTINGER
@@ -134,8 +139,8 @@ if (isset($all_headers['Authorization'])) {
 $token = trim(str_ireplace('Bearer ', '', $auth));
 
 // Debug log for troubleshooting (can be removed later)
-debug_log("Headers received: " . json_encode($all_headers));
-debug_log("Auth token extracted: " . $token);
+// debug_log("Headers received: " . json_encode($all_headers));
+// debug_log("Auth token extracted: " . $token);
 
 if ($action !== 'paysuite_webhook' && $token !== $API_KEY) {
     http_response_code(401);

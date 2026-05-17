@@ -17,7 +17,12 @@ $PAYSUITE_WEBHOOK_SECRET = "whsec_c6df7d4376c281e30536e1aa4580807a9783362a858265
 
 // Log function for debugging
 function debug_log($message) {
-    error_log("[PaoCaseiro DB] " . (is_array($message) || is_object($message) ? json_encode($message) : $message));
+    $formatted = (is_array($message) || is_object($message)) ? json_encode($message) : $message;
+    // Standard server logging
+    error_log("[PaoCaseiro DB] " . $formatted);
+    // Explicit local file fallback to guarantee access on shared hosting
+    $logMsg = "[" . date('Y-m-d H:i:s') . " UTC] [PaoCaseiro DB] " . $formatted . "\n";
+    @file_put_contents(__DIR__ . '/error_log', $logMsg, FILE_APPEND);
 }
 
 // CREDENCIAIS DA HOSTINGER
