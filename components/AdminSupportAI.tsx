@@ -43,8 +43,11 @@ export const AdminSupportAI: React.FC<AdminSupportAIProps> = ({ userName, stats 
     const containerRef = useRef<HTMLDivElement>(null);
     const [apiKey, setApiKey] = useState<string>('');
     const [aiModel, setAiModel] = useState<string>('');
+    const [dbProducts, setDbProducts] = useState<any[]>([]);
+    const [dbOrders, setDbOrders] = useState<any[]>([]);
+    const [dbShifts, setDbShifts] = useState<any[]>([]);
 
-    // Fetch AI Settings from Hostinger DB on Mount
+    // Fetch AI Settings and System Data from Hostinger DB on Mount
     useEffect(() => {
         const fetchAISettings = async () => {
             try {
@@ -60,7 +63,105 @@ export const AdminSupportAI: React.FC<AdminSupportAIProps> = ({ userName, stats 
             }
         };
         fetchAISettings();
+
+        const loadAllSystemData = async () => {
+            try {
+                const products = await hostingerService.getProducts();
+                if (Array.isArray(products)) {
+                    setDbProducts(products);
+                }
+
+                const orders = await hostingerService.getOrders();
+                if (Array.isArray(orders)) {
+                    setDbOrders(orders);
+                }
+
+                const shifts = await hostingerService.getWorkSessions(undefined, 'open');
+                if (Array.isArray(shifts)) {
+                    setDbShifts(shifts);
+                }
+            } catch (err) {
+                console.error("Failed to load rich system data for AI:", err);
+            }
+        };
+        loadAllSystemData();
     }, []);
+
+    const computeAIContext = () => {
+        const productsSummary = dbProducts.map(p => {
+            const availability = p.isAvailable ? 'Disponivel' : 'Esgotado';
+            return `- ${p.name}: ${p.price} MT (Stock: ${p.stock}, Estado: ${availability})`;
+        }).join('\n');
+
+        const today = new Date().toISOString().split('T')[0];
+        const todayOrders = dbOrders.filter(o => {
+            if (!o.created_at) return false;
+            const orderDate = o.created_at.split(' ')[0].split('T')[0];
+            return orderDate === today;
+        });
+        
+        const todayCompleted = todayOrders.filter(o => o.status === 'completed');
+        const todayTotalSales = todayCompleted.reduce((acc, o) => acc + parseFloat(o.total_amount || 0), 0);
+
+        const productOverallCounts: { [key: string]: number } = {};
+        const productTodayCounts: { [key: string]: number } = {};
+        
+        dbOrders.filter(o => o.status === 'completed').forEach(o => {
+            try {
+                const items = typeof o.items === 'string' ? JSON.parse(o.items) : o.items;
+                if (Array.isArray(items)) {
+                    items.forEach(item => {
+                        productOverallCounts[item.name] = (productOverallCounts[item.name] || 0) + Number(item.quantity || 1);
+                    });
+                }
+            } catch (e) {}
+        });
+
+        todayCompleted.forEach(o => {
+            try {
+                const items = typeof o.items === 'string' ? JSON.parse(o.items) : o.items;
+                if (Array.isArray(items)) {
+                    items.forEach(item => {
+                        productTodayCounts[item.name] = (productTodayCounts[item.name] || 0) + Number(item.quantity || 1);
+                    });
+                }
+            } catch (e) {}
+        });
+
+        let overallBestProduct = 'Nenhum';
+        let overallBestQty = 0;
+        Object.entries(productOverallCounts).forEach(([name, qty]) => {
+            if (qty > overallBestQty) {
+                overallBestQty = qty;
+                overallBestProduct = name;
+            }
+        });
+
+        let todayBestProduct = 'Nenhum';
+        let todayBestQty = 0;
+        Object.entries(productTodayCounts).forEach(([name, qty]) => {
+            if (qty > todayBestQty) {
+                todayBestQty = qty;
+                todayBestProduct = name;
+            }
+        });
+
+        const recentOrdersSummary = dbOrders.slice(0, 5).map(o => {
+            return `- Pedido #${o.short_id || o.id}: ${o.customer_name || 'Cliente POS'} (${o.total_amount} MT, Estado: ${o.status})`;
+        }).join('\n');
+
+        const activeStaffList = dbShifts.map(s => `- ${s.member_id} (Entrada: ${s.clock_in})`).join('\n') || 'Nenhum funcionario com sessao ativa no momento.';
+
+        return {
+            products: productsSummary || 'Sem produtos registados.',
+            todaySalesTotal: todayTotalSales,
+            todayOrdersCount: todayOrders.length,
+            overallBestSelling: `${overallBestProduct} (${overallBestQty} unidades vendidas no total global)`,
+            todayBestSelling: `${todayBestProduct} (${todayBestQty} unidades vendidas hoje)`,
+            recentOrders: recentOrdersSummary || 'Sem pedidos recentes.',
+            activeStaff: activeStaffList
+        };
+    };
 
     const quickQuestions = [
         "Resumo de hoje?",
@@ -202,35 +303,40 @@ export const AdminSupportAI: React.FC<AdminSupportAIProps> = ({ userName, stats 
             saveMessageIndex(userMsg, targetSessionId);
         }
 
-        const systemContext = JSON.stringify({
-            identity: "Zyph AI",
-            creator: "Zyph Tech, Lda",
-            localized_context: {
-                country: "Moçambique",
-                city: "Lichinga",
-                business_type: "Padaria e Pastelaria (Pão Caseiro)",
-                admin_name: userName
-            },
-            data_context: {
-                today_sales: `${stats.totalSales} MT`,
-                total_orders: stats.totalOrders,
-                pending_orders: stats.pendingOrders,
-                low_stock: stats.lowStockCount,
-                unavailable_items: stats.unavailableProducts
-            },
-            instructions: [
-                "Você é a 'Zyph AI'. Nunca use outros nomes.",
-                "Respostas extremamente curtas, humanas e objetivas.",
-                "Português de Moçambique.",
-                "Sem saudações repetitivas. Se já disse 'Olá', pule para a resposta nas próximas interações.",
-                "Foco total na realidade da Padaria Pão Caseiro em Lichinga.",
-                "Não use negrito (**). Use texto simples."
-            ],
-            style: "concise"
-        });
+        const richData = computeAIContext();
 
-        // Add a hint for the AI about previous messages
-        const conversationHint = messages.length > 2 ? "\n(Note: This is a continuing conversation. No need for greetings or introductions.)" : "";
+        const systemPrompt = `Você é a "Zyph AI", o cérebro e assistente de inteligência artificial oficial da "Padaria Pão Caseiro", desenvolvida pela "Zyph Tech, Lda". Você atua na cidade de Lichinga, Moçambique.
+
+Você tem acesso DIRETO e em tempo real a todos os dados do painel administrador, base de dados e vendas do sistema Pão Caseiro. Use os dados abaixo para responder a quaisquer perguntas de forma extremamente precisa, profissional, e com dados reais da empresa:
+
+--- DADOS DA BASE DE DADOS EM TEMPO REAL ---
+
+[INFORMAÇÕES GERAIS DE HOJE]
+- Vendas Totais Hoje: ${richData.todaySalesTotal} MT
+- Total de Pedidos Hoje: ${richData.todayOrdersCount}
+- Pedidos Pendentes Agora: ${stats.pendingOrders}
+- Produtos em Baixo Stock: ${stats.lowStockCount}
+
+[PRODUTO COM MAIS SAÍDA (MAIS VENDIDO)]
+- Global: ${richData.overallBestSelling}
+- Hoje: ${richData.todayBestSelling}
+
+[LISTA DE PRODUTOS, PREÇOS E STOCK ACTUAL]
+${richData.products}
+
+[ÚLTIMOS PEDIDOS REGISTADOS]
+${richData.recentOrders}
+
+[EQUIPA EM SERVIÇO (SESSÕES ATIVAS)]
+${richData.activeStaff}
+
+--- REGRAS DE COMPORTAMENTO ---
+1. Responda em Português de Moçambique, com um tom profissional, amigável e focado no negócio da padaria.
+2. Seja EXTREMAMENTE conciso, direto e natural. Não use saudações longas ou repetitivas.
+3. Use os dados reais fornecidos acima. Se perguntarem sobre vendas de hoje, produtos mais vendidos, stock ou equipe em serviço, utilize estes números exatos com total propriedade.
+4. Nunca admita que não consegue ver a base de dados em tempo real ou que é apenas um modelo de linguagem genérico; responda com total autoridade sobre o ecossistema Pão Caseiro.
+5. Se for perguntado sobre fecho de caixa ou processos, explique de forma simples e técnica de acordo com o painel administrador: Abrir Sessão -> Vender no POS -> Imprimir Relatório de Fecho.
+6. Nunca use negritos (**) na sua resposta final. Use apenas texto simples.`;
 
         try {
             const historyMessages = messages
@@ -238,15 +344,15 @@ export const AdminSupportAI: React.FC<AdminSupportAIProps> = ({ userName, stats 
                 .slice(-6)
                 .map(m => ({
                     role: m.role === 'assistant' ? 'assistant' : 'user',
-                    content: m.content,
-                    reasoning_details: m.reasoning_details // Pass back for Gemma 4
+                    content: m.content
                 }));
 
             const finalMessages = [
+                { role: 'system', content: systemPrompt },
                 ...historyMessages,
                 { 
                     role: 'user', 
-                    content: `INSTRUÇÕES: Zyph AI da Padaria Pão Caseiro. Resposta curta. Moçambique.\n\nPERGUNTA: ${text}` 
+                    content: text 
                 }
             ];
 
