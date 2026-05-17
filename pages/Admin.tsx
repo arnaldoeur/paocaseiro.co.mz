@@ -2097,7 +2097,7 @@ export const Admin: React.FC = () => {
                 id: sessionId,
                 member_id: userId,
                 member_name: username || 'Admin',
-                clock_in: new Date().toISOString(),
+                clock_in: new Date().toISOString().slice(0, 19).replace('T', ' '),
                 status: 'active'
             });
             

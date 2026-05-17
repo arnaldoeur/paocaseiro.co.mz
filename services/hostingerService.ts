@@ -151,15 +151,26 @@ export const hostingerService = {
 
     // --- WORK SESSIONS ---
     async getWorkSessions(memberId?: string, status?: string) {
-        return this.fetch('get_work_sessions', { member_id: memberId, status });
+        return this.fetch('get_work_shifts', { member_id: memberId, status });
     },
 
     async saveWorkSession(sessionData: any) {
-        return this.fetch('save_work_session', { session: sessionData });
+        const res = await this.fetch('save_work_shift', { shift: sessionData });
+        if (res.success) {
+            return {
+                success: true,
+                id: res.id,
+                session: {
+                    id: res.id,
+                    ...sessionData
+                }
+            };
+        }
+        return res;
     },
 
     async updateWorkSession(id: string, status: string, clockOut?: string) {
-        return this.fetch('update_work_session', { id, status, clock_out: clockOut });
+        return this.fetch('update_work_shift', { id, status, clock_out: clockOut });
     },
 
     // --- AUTH ---
@@ -289,15 +300,28 @@ export const hostingerService = {
     },
 
     async getCashSessions() {
-        return this.fetch('get_cash_sessions');
+        return this.fetch('get_cash_registers');
     },
 
     async openCashSession(openedBy: string, openingBalance: number) {
-        return this.fetch('save_cash_session', { opened_by: openedBy, opening_balance: openingBalance });
+        const res = await this.fetch('save_cash_register', { opened_by: openedBy, opening_balance: openingBalance });
+        if (res.success) {
+            return {
+                success: true,
+                session: {
+                    id: res.id,
+                    opened_by: openedBy,
+                    opening_balance: openingBalance,
+                    status: 'open',
+                    opened_at: new Date().toISOString()
+                }
+            };
+        }
+        return res;
     },
 
     async closeCashSession(id: string, closingBalance: number, notes: string) {
-        return this.fetch('update_cash_session', { id, closing_balance: closingBalance, notes, status: 'closed' });
+        return this.fetch('update_cash_register', { id, closing_balance: closingBalance, notes, status: 'closed' });
     },
 
     // --- CUSTOMER AUTH ---
@@ -359,7 +383,7 @@ export const hostingerService = {
     },
 
     async getActiveWorkSession(memberId: string) {
-        return this.fetch('get_active_work_session', { member_id: memberId });
+        return this.fetch('get_active_work_shift', { member_id: memberId });
     },
 
     async subscribeNewsletter(name: string, email: string) {

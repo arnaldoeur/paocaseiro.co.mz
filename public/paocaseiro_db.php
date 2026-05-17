@@ -962,6 +962,7 @@ try {
         break;
 
     // --- WORK SESSIONS ---
+    case 'get_active_work_shift':
     case 'get_active_work_session':
         $memberId = $input['member_id'] ?? '';
         $stmt = $pdo->prepare("SELECT * FROM work_sessions WHERE member_id = ? AND status = 'active' ORDER BY clock_in DESC LIMIT 1");
@@ -969,8 +970,9 @@ try {
         echo json_encode($stmt->fetch());
         break;
 
+    case 'save_work_shift':
     case 'save_work_session':
-        $s = $input['session'] ?? $input;
+        $s = $input['shift'] ?? $input['session'] ?? $input;
         $id = $s['id'] ?? uniqid('ws_');
         
         $memberId = $s['member_id'] ?? null;
@@ -1029,6 +1031,7 @@ try {
         echo json_encode(['success' => true, 'id' => $id]);
         break;
 
+    case 'get_work_shifts':
     case 'get_work_sessions':
         $member_id = $input['member_id'] ?? null;
         $status = $input['status'] ?? null;
@@ -1042,6 +1045,7 @@ try {
         echo json_encode($stmt->fetchAll());
         break;
 
+    case 'update_work_shift':
     case 'update_work_session':
         $id = $input['id'] ?? '';
         $status = $input['status'] ?? 'completed';
@@ -1402,11 +1406,13 @@ try {
         echo json_encode(['success' => true]);
         break;
 
+    case 'get_cash_registers':
     case 'get_cash_sessions':
         $stmt = $pdo->query("SELECT * FROM cash_sessions ORDER BY opened_at DESC LIMIT 50");
         echo json_encode($stmt->fetchAll());
         break;
 
+    case 'save_cash_register':
     case 'save_cash_session':
         try {
             $openedBy = $input['opened_by'] ?? null;
@@ -1439,10 +1445,11 @@ try {
             $stmt->execute(array_values($finalData));
             echo json_encode(['success' => true, 'id' => $id]);
         } catch (Exception $e) {
-            throw $e;
+            echo json_encode(['success' => false, 'error' => $e->getMessage()]);
         }
         break;
 
+    case 'update_cash_register':
     case 'update_cash_session':
         $id = $input['id'];
         $stmt = $pdo->query("DESCRIBE cash_sessions");
