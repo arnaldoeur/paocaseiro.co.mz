@@ -145,32 +145,89 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
     useEffect(() => {
         const fetchGallery = async () => {
             try {
+                const isDrink = (name: string, category?: string) => {
+                    const lowerName = (name || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                    const lowerCat = (category || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                    const drinkKeywords = [
+                        'coca-cola', 'coca cola', 'coca', 'fanta', 'sprite', 'compal', 'agua', 'sumo', 
+                        'namaacha', 'refrigerante', 'bebida', 'suco', 'cha', 'cappuccino', 
+                        'cafe', 'cerveja', 'nemaacha', 'refresco', 'refrescos', 'fizz', 'schweppes', 
+                        'frugal', 'minute maid', 'red bull', 'monster', 'coffee', 'coffe', 'latte', 
+                        'macchiato', 'espresso', 'expresso', 'bebidas', 'refrigerantes'
+                    ];
+                    return (
+                        drinkKeywords.some(keyword => lowerName.includes(keyword)) ||
+                        lowerCat.includes('bebida') ||
+                        lowerCat.includes('refrigerante') ||
+                        lowerCat.includes('refresco')
+                    );
+                };
+
+                const isClassic = (name: string, category?: string) => {
+                    if (isDrink(name, category)) return false;
+
+                    const lowerName = (name || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                    const lowerCat = (category || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+                    const classicKeywords = [
+                        'pao', 'paes', 'bolo', 'sobremesa', 'folhado', 'salgado', 'doce', 'pastelaria', 'lanche', 
+                        'croissant', 'torta', 'hamburguer', 'pizza', 'empada', 'samosa', 'chamuça', 'pudim'
+                    ];
+
+                    const hasClassicKeyword = classicKeywords.some(keyword => 
+                        lowerName.includes(keyword) || lowerCat.includes(keyword)
+                    );
+
+                    const allowedCategories = [
+                        'bolos & sobremesas', 'folhados & salgados', 'doces & pastelaria', 'lanches', 'pães',
+                        'bolos', 'sobremesas', 'folhados', 'salgados', 'doces', 'pastelaria', 'pães', 'paes'
+                    ];
+                    const isAllowedCategory = allowedCategories.some(cat => lowerCat.includes(cat));
+
+                    return hasClassicKeyword || isAllowedCategory;
+                };
+
                 // Tenta carregar imagens específicas da galeria (se houver)
                 const data = await hostingerService.getGallery();
                 if (data && data.length > 0) {
-                    const mappedGallery = data.map((item: any) => ({
-                        src: hostingerService.resolveProductImage(item.title || '', item.image_url),
-                        caption: item.title || item.description || ''
-                    }));
-                    setGalleryItems(mappedGallery);
-                } else {
-                    // Fallback: Usa as fotos dos produtos ativos como galeria
-                    const products = await hostingerService.getProducts();
-                    if (products && products.length > 0) {
-                        const productGallery = products
-                            .filter((p: any) => p.image)
-                            .slice(0, 12) // Pega as primeiras 12 para não sobrecarregar
-                            .map((p: any) => ({
-                                src: p.image, // Already resolved by getProducts()
-                                caption: p.name
-                            }));
-                        if (productGallery.length > 0) {
-                            setGalleryItems(productGallery);
-                        }
+                    const mappedGallery = data
+                        .filter((item: any) => {
+                            const title = item.title || '';
+                            const desc = item.description || '';
+                            const cat = item.category || '';
+                            return isClassic(title, cat) && (desc ? isClassic(desc, cat) : true);
+                        })
+                        .map((item: any) => ({
+                            src: hostingerService.resolveProductImage(item.title || '', item.image_url),
+                            caption: item.title || item.description || ''
+                        }));
+                    if (mappedGallery.length >= 4) {
+                        setGalleryItems(mappedGallery);
+                        return;
                     }
                 }
+
+                // Fallback: Usa as fotos dos produtos ativos como galeria
+                const products = await hostingerService.getProducts();
+                if (products && products.length > 0) {
+                    const productGallery = products
+                        .filter((p: any) => p.image && isClassic(p.name, p.category))
+                        .slice(0, 12) // Pega as primeiras 12 para não sobrecarregar
+                        .map((p: any) => ({
+                            src: p.image, // Already resolved by getProducts()
+                            caption: p.name
+                        }));
+                    if (productGallery.length >= 4) {
+                        setGalleryItems(productGallery);
+                        return;
+                    }
+                }
+
+                // Se nada der certo ou tiver poucos elementos, usa o default hardcoded completo de clássicos
+                setGalleryItems(DEFAULT_GALLERY_ITEMS);
             } catch (err) {
                 console.error("Gallery fetch error:", err);
+                setGalleryItems(DEFAULT_GALLERY_ITEMS);
             }
         };
         fetchGallery();
