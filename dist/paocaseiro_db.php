@@ -25,6 +25,28 @@ function debug_log($message) {
     @file_put_contents(__DIR__ . '/error_log', $logMsg, FILE_APPEND);
 }
 
+// Helper function to resolve the persistent uploads directory
+function get_persistent_upload_dir($targetFolder = 'drive') {
+    $isLocal = (strpos($_SERVER['HTTP_HOST'] ?? '', 'localhost') !== false) || 
+               (strpos($_SERVER['HTTP_HOST'] ?? '', '127.0.0.1') !== false);
+               
+    if ($isLocal) {
+        $dir = __DIR__ . '/uploads/' . $targetFolder . '/';
+    } else {
+        $dirPath = __DIR__;
+        if (strpos($dirPath, 'public_html') !== false) {
+            $parts = explode('public_html', $dirPath);
+            $parentOfPublicHtml = rtrim($parts[0], '/\\');
+            $dir = $parentOfPublicHtml . '/paocaseiro_uploads/' . $targetFolder . '/';
+        } else {
+            $dir = dirname(dirname(__DIR__)) . '/paocaseiro_uploads/' . $targetFolder . '/';
+        }
+    }
+    
+    $dir = str_replace('\\', '/', $dir);
+    return $dir;
+}
+
 // CREDENCIAIS DA HOSTINGER
 $isLocal = strpos($_SERVER['HTTP_HOST'] ?? '', 'localhost') !== false;
 $host = $isLocal ? "72.60.122.110" : "127.0.0.1";
@@ -316,7 +338,7 @@ $token = trim(str_ireplace('Bearer ', '', $auth));
 // debug_log("Headers received: " . json_encode($all_headers));
 // debug_log("Auth token extracted: " . $token);
 
-if ($action !== 'paysuite_webhook' && $token !== $API_KEY) {
+if ($action !== 'paysuite_webhook' && $action !== 'serve_file' && $token !== $API_KEY) {
     http_response_code(401);
     debug_log("Unauthorized access attempt. Action: $action, Token: $token");
     die(json_encode(["error" => "Acesso não autorizado."]));
@@ -359,6 +381,51 @@ try {
     case 'ping':
         echo json_encode(["success" => true, "message" => "Pong! Conectado com sucesso.", "time" => date('Y-m-d H:i:s')]);
         break;
+
+    case 'serve_file':
+        $fileId = $_GET['id'] ?? $input['id'] ?? '';
+        if (empty($fileId)) {
+            http_response_code(400);
+            die(json_encode(["error" => "File ID missing"]));
+        }
+        $stmt = $pdo->prepare("SELECT * FROM drive_files WHERE id = ?");
+        $stmt->execute([$fileId]);
+        $fileRecord = $stmt->fetch();
+        if (!$fileRecord) {
+            http_response_code(404);
+            die(json_encode(["error" => "File not found"]));
+        }
+        
+        $filePath = $fileRecord['path'];
+        $parts = explode('/', $filePath);
+        $folder = (count($parts) >= 2) ? $parts[count($parts)-2] : 'drive';
+        $fileName = basename($filePath);
+        
+        $absoluteDir = get_persistent_upload_dir($folder);
+        $resolvedPath = $absoluteDir . $fileName;
+        
+        // If the file doesn't exist in the persistent directory, try the relative path as a fallback
+        if (!file_exists($resolvedPath)) {
+            $resolvedPath = __DIR__ . '/' . $filePath;
+        }
+        
+        if (!file_exists($resolvedPath)) {
+            http_response_code(404);
+            die("File content not found on disk: " . $resolvedPath);
+        }
+        
+        // Clear headers to avoid any JSON header leak from previous outputs
+        while (ob_get_level()) {
+            ob_end_clean();
+        }
+        
+        // Serve the file with correct content type
+        header("Content-Type: " . ($fileRecord['type'] ?? 'application/octet-stream'));
+        header("Content-Length: " . filesize($resolvedPath));
+        header("Content-Disposition: inline; filename=\"" . basename($fileRecord['name']) . "\"");
+        header("Cache-Control: public, max-age=86400");
+        readfile($resolvedPath);
+        exit;
 
     case 'bulk_save_products':
         try {
@@ -2016,12 +2083,18 @@ try {
         break;
 
     case 'get_drive_files':
-        $folderId = $input['folder_id'] ?? null;
+        $folderId = $input['folder_id'] ?? $_GET['folder_id'] ?? null;
         $sql = $folderId ? "SELECT * FROM drive_files WHERE folder_id = ? ORDER BY created_at DESC" : "SELECT * FROM drive_files WHERE folder_id IS NULL ORDER BY created_at DESC";
         $stmt = $pdo->prepare($sql);
         if ($folderId) $stmt->execute([$folderId]);
         else $stmt->execute();
-        echo json_encode(["success" => true, "data" => $stmt->fetchAll()]);
+        $filesList = $stmt->fetchAll();
+        
+        // Rewrite path to use the serve_file action for client consumption
+        foreach ($filesList as &$fileItem) {
+            $fileItem['path'] = "paocaseiro_db.php?action=serve_file&id=" . $fileItem['id'];
+        }
+        echo json_encode(["success" => true, "data" => $filesList]);
         break;
 
     case 'save_drive_file':
@@ -2044,7 +2117,31 @@ try {
 
     case 'delete_drive_file':
         $id = $input['id'];
-        // Note: Real file deletion from disk could be added here if needed
+        
+        // Fetch path to delete the physical file
+        $stmtFile = $pdo->prepare("SELECT path FROM drive_files WHERE id = ?");
+        $stmtFile->execute([$id]);
+        $filePath = $stmtFile->fetchColumn();
+        
+        if ($filePath) {
+            $parts = explode('/', $filePath);
+            $folder = (count($parts) >= 2) ? $parts[count($parts)-2] : 'drive';
+            $fileName = basename($filePath);
+            
+            $absoluteDir = get_persistent_upload_dir($folder);
+            $resolvedPath = $absoluteDir . $fileName;
+            
+            if (file_exists($resolvedPath)) {
+                @unlink($resolvedPath);
+            } else {
+                // Try fallback to relative path
+                $fallbackPath = __DIR__ . '/' . $filePath;
+                if (file_exists($fallbackPath)) {
+                    @unlink($fallbackPath);
+                }
+            }
+        }
+        
         $stmt = $pdo->prepare("DELETE FROM drive_files WHERE id = ?");
         $stmt->execute([$id]);
         echo json_encode(["success" => true]);
@@ -2061,25 +2158,31 @@ try {
         $targetFolder = preg_replace('/[^a-zA-Z0-9_\-]/', '', $_POST['target_folder'] ?? 'drive');
         if (empty($targetFolder)) $targetFolder = 'drive';
         
-        $uploadDir = 'uploads/' . $targetFolder . '/';
-        if (!is_dir($uploadDir)) mkdir($uploadDir, 0777, true);
+        $uploadDir = get_persistent_upload_dir($targetFolder);
+        if (!is_dir($uploadDir)) {
+            mkdir($uploadDir, 0777, true);
+        }
         
         $fileName = time() . '_' . basename($file['name']);
         $targetPath = $uploadDir . $fileName;
         
         if (move_uploaded_file($file['tmp_name'], $targetPath)) {
             $id = uniqid();
+            $dbPath = 'uploads/' . $targetFolder . '/' . $fileName;
+            
             $stmt = $pdo->prepare("INSERT INTO drive_files (id, name, path, size, type, folder_id, uploaded_by) VALUES (?, ?, ?, ?, ?, ?, ?)");
             $stmt->execute([
                 $id,
                 $file['name'],
-                $targetPath,
+                $dbPath,
                 $file['size'],
                 $file['type'],
                 $folderId,
                 $uploadedBy
             ]);
-            echo json_encode(["success" => true, "id" => $id, "path" => $targetPath]);
+            
+            $proxyPath = "paocaseiro_db.php?action=serve_file&id=" . $id;
+            echo json_encode(["success" => true, "id" => $id, "path" => $proxyPath]);
         } else {
             echo json_encode(["error" => "Failed to move uploaded file"]);
         }

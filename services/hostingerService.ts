@@ -260,7 +260,8 @@ export const hostingerService = {
 
     // --- HOME / CONTACT ---
     async getGallery() {
-        return this.fetch('get_gallery');
+        const data = await this.fetch('get_gallery');
+        return data.success && Array.isArray(data.data) ? data.data : [];
     },
 
     async saveContactMessage(message: { name: string, phone: string, email: string, message: string }) {
@@ -546,6 +547,13 @@ export const hostingerService = {
         if (!path) return '';
         if (path.startsWith('http')) return path;
         
+        // Handle database proxy serve_file links correctly
+        if (path.includes('paocaseiro_db.php')) {
+            const index = HOSTINGER_BRIDGE_URL.indexOf('paocaseiro_db.php');
+            const baseUrl = index !== -1 ? HOSTINGER_BRIDGE_URL.substring(0, index) : '';
+            return `${baseUrl}${path.substring(path.indexOf('paocaseiro_db.php'))}`;
+        }
+
         // Hostinger path is usually relative to public/
         // Remove leading slash and 'public/' if present
         const cleanPath = path.replace(/^(\/|public\/)/, '');
@@ -631,6 +639,9 @@ export const hostingerService = {
 
         if (originalImage && originalImage.trim() !== '') {
             if (originalImage.startsWith('http')) return originalImage;
+            if (originalImage.includes('paocaseiro_db.php') || originalImage.includes('assets/')) {
+                return this.getPublicUrl(originalImage);
+            }
             
             let cleanOriginal = originalImage.replace(/^\//, '');
             // Normalize the filename part of the original image just like we did with physical files

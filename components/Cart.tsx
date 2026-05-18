@@ -477,7 +477,7 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
     const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
     const packagingFee = details.type === 'delivery' && totalItems > 0 ? Math.ceil(totalItems / 3) * 20 : 0;
 
-    const finalTotal = total + (deliveryFee > 0 ? deliveryFee : 0) + packagingFee;
+    const finalTotal = Math.max(0, total - couponDiscount + (deliveryFee > 0 ? deliveryFee : 0) + packagingFee);
     let amountToPay = payDeposit ? finalTotal / 2 : finalTotal;
     
     // Scheduled orders require 70% upfront
@@ -1136,9 +1136,50 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                                         <span>{language === 'en' ? 'Subtotal' : 'Subtotal'}</span>
                                         <span>{total} MT</span>
                                     </div>
+
+                                    {/* Coupon Input */}
+                                    {appliedCoupon ? (
+                                        <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-xl px-3 py-2 animate-fade-in">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-green-600 text-xs">🎟️</span>
+                                                <div>
+                                                    <p className="text-[10px] font-black text-green-700 uppercase tracking-wider">{appliedCoupon.label}</p>
+                                                    <p className="text-[10px] text-green-500 font-mono">{appliedCoupon.code}</p>
+                                                </div>
+                                            </div>
+                                            <button onClick={removeCoupon} className="text-green-400 hover:text-red-400 transition-colors text-xs font-bold">✕</button>
+                                        </div>
+                                    ) : (
+                                        <div className="flex gap-2">
+                                            <input
+                                                type="text"
+                                                value={couponInput}
+                                                onChange={e => setCouponInput(e.target.value.toUpperCase())}
+                                                onKeyDown={e => e.key === 'Enter' && validateCoupon(couponInput)}
+                                                placeholder={language === 'en' ? 'Coupon code...' : 'Código de cupão...'}
+                                                className="flex-1 text-xs border border-[#d9a65a]/30 rounded-xl px-3 py-2 focus:outline-none focus:border-[#d9a65a] font-mono uppercase tracking-widest bg-[#fdfaf6]"
+                                            />
+                                            <button
+                                                onClick={() => validateCoupon(couponInput)}
+                                                className="bg-[#3b2f2f] text-[#d9a65a] px-3 py-2 rounded-xl text-xs font-black hover:bg-[#d9a65a] hover:text-[#3b2f2f] transition-all"
+                                            >
+                                                {language === 'en' ? 'Apply' : 'Aplicar'}
+                                            </button>
+                                        </div>
+                                    )}
+                                    {couponError && <p className="text-red-500 text-[10px] font-bold">{couponError}</p>}
+
+                                    {/* Discount line */}
+                                    {appliedCoupon && couponDiscount > 0 && (
+                                        <div className="flex justify-between items-center text-green-600 font-bold">
+                                            <span className="text-sm">🎂 {language === 'en' ? 'Birthday Discount' : 'Desconto Aniversário'} ({appliedCoupon.discount}%)</span>
+                                            <span className="text-sm">-{couponDiscount} MT</span>
+                                        </div>
+                                    )}
+
                                     <div className="flex justify-between items-center text-2xl font-bold text-[#3b2f2f] pt-2 border-t">
                                         <span>{t.cart.total}</span>
-                                        <span>{total} MT</span>
+                                        <span>{total - couponDiscount} MT</span>
                                     </div>
                                 </div>
                                 
@@ -1151,7 +1192,7 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                                         <span className="text-sm">{t.menu.checkout_btn}</span>
                                     </div>
                                     <div className="flex items-center gap-3">
-                                        <span className="text-lg">{total} MT</span>
+                                        <span className="text-lg">{total - couponDiscount} MT</span>
                                         <div className="bg-[#d9a65a]/20 group-hover:bg-[#3b2f2f]/10 p-2 rounded-lg transition-colors">
                                            <ArrowRight className="w-5 h-5" />
                                         </div>
@@ -1499,6 +1540,12 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                                     <span>{t.cart.subtotal}:</span>
                                     <span className="font-bold">{total} MT</span>
                                 </div>
+                                {appliedCoupon && couponDiscount > 0 && (
+                                    <div className="flex justify-between text-sm text-green-600 font-bold">
+                                        <span>Desconto Aniversário ({appliedCoupon.discount}%):</span>
+                                        <span>-{couponDiscount} MT</span>
+                                    </div>
+                                )}
                                 {deliveryFee > 0 && (
                                     <div className="flex justify-between text-sm text-blue-600">
                                         <span>Taxa de Entrega:</span>
