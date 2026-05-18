@@ -126,6 +126,92 @@ function get_pdo_connection() {
                         $conn->exec("ALTER TABLE contact_messages ADD COLUMN reply_content TEXT NULL AFTER status");
                     }
                 }
+
+                // Ensure gallery table exists
+                $galleryCheck = $conn->query("SHOW TABLES LIKE 'gallery'")->rowCount();
+                if ($galleryCheck === 0) {
+                    $conn->exec("CREATE TABLE gallery (
+                        id VARCHAR(50) PRIMARY KEY,
+                        title VARCHAR(255) NOT NULL,
+                        description TEXT NULL,
+                        image_url TEXT NOT NULL,
+                        category VARCHAR(100) DEFAULT 'General',
+                        is_active TINYINT(1) DEFAULT 1,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )");
+                }
+
+                // Ensure blog_posts table exists
+                $blogPostsCheck = $conn->query("SHOW TABLES LIKE 'blog_posts'")->rowCount();
+                if ($blogPostsCheck === 0) {
+                    $conn->exec("CREATE TABLE blog_posts (
+                        id VARCHAR(50) PRIMARY KEY,
+                        title VARCHAR(255) NOT NULL,
+                        slug VARCHAR(255) UNIQUE NOT NULL,
+                        content LONGTEXT NOT NULL,
+                        excerpt TEXT NULL,
+                        image_url TEXT NULL,
+                        category VARCHAR(100) NULL,
+                        tags TEXT NULL,
+                        status VARCHAR(50) DEFAULT 'draft',
+                        author VARCHAR(100) DEFAULT 'Admin',
+                        seo_title VARCHAR(255) NULL,
+                        seo_description TEXT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                    )");
+                }
+
+                // Ensure blog_comments table exists
+                $blogCommentsCheck = $conn->query("SHOW TABLES LIKE 'blog_comments'")->rowCount();
+                if ($blogCommentsCheck === 0) {
+                    $conn->exec("CREATE TABLE blog_comments (
+                        id VARCHAR(50) PRIMARY KEY,
+                        post_id VARCHAR(50) NOT NULL,
+                        author VARCHAR(100) NOT NULL,
+                        content TEXT NOT NULL,
+                        user_id VARCHAR(50) NULL,
+                        status VARCHAR(50) DEFAULT 'pending',
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )");
+                }
+
+                // Ensure drive_folders table exists
+                $driveFoldersCheck = $conn->query("SHOW TABLES LIKE 'drive_folders'")->rowCount();
+                if ($driveFoldersCheck === 0) {
+                    $conn->exec("CREATE TABLE drive_folders (
+                        id VARCHAR(50) PRIMARY KEY,
+                        name VARCHAR(255) NOT NULL,
+                        parent_id VARCHAR(50) NULL
+                    )");
+                }
+
+                // Ensure drive_files table exists
+                $driveFilesCheck = $conn->query("SHOW TABLES LIKE 'drive_files'")->rowCount();
+                if ($driveFilesCheck === 0) {
+                    $conn->exec("CREATE TABLE drive_files (
+                        id VARCHAR(50) PRIMARY KEY,
+                        name VARCHAR(255) NOT NULL,
+                        path VARCHAR(255) NOT NULL,
+                        size INT NOT NULL DEFAULT 0,
+                        type VARCHAR(100) NULL,
+                        folder_id VARCHAR(50) NULL,
+                        uploaded_by VARCHAR(100) DEFAULT 'admin',
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )");
+                }
+
+                // Ensure newsletter_subscribers table exists
+                $newsletterCheck = $conn->query("SHOW TABLES LIKE 'newsletter_subscribers'")->rowCount();
+                if ($newsletterCheck === 0) {
+                    $conn->exec("CREATE TABLE newsletter_subscribers (
+                        id VARCHAR(50) PRIMARY KEY,
+                        name VARCHAR(255) NULL,
+                        email VARCHAR(255) UNIQUE NOT NULL,
+                        status VARCHAR(50) DEFAULT 'active',
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )");
+                }
             } catch (Exception $e) {
                 // Silently ignore schema check errors
                 error_log("[PaoCaseiro Schema Auto-Heal Error] " . $e->getMessage());
@@ -2197,11 +2283,23 @@ try {
             $prompt = $input['prompt'] ?? '';
             $systemContext = $input['systemContext'] ?? 'Você é a Zyph AI.';
             
-            $openRouterKey = "REPLACE_WITH_OPENROUTER_KEY"; 
+            // Fetch OpenRouter API key and model dynamically from settings table
+            $stmt = $pdo->prepare("SELECT value FROM settings WHERE `key` = ?");
+            $stmt->execute(['openrouter_api_key']);
+            $setting = $stmt->fetch();
+            $openRouterKey = $setting ? $setting['value'] : '';
+
+            $stmt->execute(['ai_model']);
+            $modelSetting = $stmt->fetch();
+            $aiModel = ($modelSetting && !empty($modelSetting['value'])) ? $modelSetting['value'] : 'google/gemini-2.0-flash-001';
+
+            if (empty($openRouterKey)) {
+                $openRouterKey = getenv('OPENROUTER_API_KEY') ?: '';
+            }
             
             $ch = curl_init("https://openrouter.ai/api/v1/chat/completions");
             $data = [
-                "model" => "google/gemini-2.0-flash-001",
+                "model" => $aiModel,
                 "messages" => [
                     ["role" => "system", "content" => $systemContext],
                     ["role" => "user", "content" => $prompt]
@@ -2228,7 +2326,6 @@ try {
         break;
 
     case 'analyze_audit_logs':
-
         try {
             // Fetch recent critical/warning logs to analyze
             $stmt = $pdo->query("SELECT * FROM audit_logs WHERE entity_type IN ('system', 'security', 'auth') OR action LIKE '%ERROR%' ORDER BY created_at DESC LIMIT 20");
@@ -2239,8 +2336,19 @@ try {
                 $logSummary .= "[{$l['created_at']}] {$l['action']} - {$l['entity_type']}: {$l['details']}\n";
             }
 
-            // Call LLM (OpenRouter)
-            $openRouterKey = "REPLACE_WITH_OPENROUTER_KEY"; // Example key, should be in env
+            // Fetch OpenRouter API key and model dynamically from settings table
+            $stmt = $pdo->prepare("SELECT value FROM settings WHERE `key` = ?");
+            $stmt->execute(['openrouter_api_key']);
+            $setting = $stmt->fetch();
+            $openRouterKey = $setting ? $setting['value'] : '';
+
+            $stmt->execute(['ai_model']);
+            $modelSetting = $stmt->fetch();
+            $aiModel = ($modelSetting && !empty($modelSetting['value'])) ? $modelSetting['value'] : 'google/gemini-2.0-flash-001';
+
+            if (empty($openRouterKey)) {
+                $openRouterKey = getenv('OPENROUTER_API_KEY') ?: '';
+            }
             
             $ch = curl_init("https://openrouter.ai/api/v1/chat/completions");
             $prompt = "Você é um especialista em segurança e auditoria da padaria Pão Caseiro. 
@@ -2252,7 +2360,7 @@ try {
                        Logs:\n" . $logSummary;
 
             $data = [
-                "model" => "google/gemini-2.0-flash-001",
+                "model" => $aiModel,
                 "messages" => [
                     ["role" => "system", "content" => "Analista de Segurança Pão Caseiro"],
                     ["role" => "user", "content" => $prompt]

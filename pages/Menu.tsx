@@ -392,6 +392,9 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
     const handleAddToCartFromModal = (item: any, quantity: number, variation?: any) => {
         addToCart(item, quantity, variation);
         handleCloseModal();
+        setTimeout(() => {
+            setIsUpsellModalOpen(true);
+        }, 300);
     };
 
     // Fix for "Plus" button logic
@@ -400,6 +403,7 @@ export const Menu: React.FC<{ language: 'pt' | 'en' }> = ({ language }) => {
             handleProductClick(item);
         } else {
             addToCart(item, 1);
+            setIsUpsellModalOpen(true);
         }
     };
 

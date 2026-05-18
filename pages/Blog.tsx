@@ -246,7 +246,7 @@ export const Blog: React.FC<{ language: Language }> = ({ language }) => {
                                     initial={{ opacity: 0, y: 20 }}
                                     animate={{ opacity: 1, y: 0 }}
                                     transition={{ delay: index * 0.1 }}
-                                    onClick={() => navigate(`/blog/${post.slug}`)}
+                                    onClick={() => navigate(language === 'en' ? `/en/blog/${post.slug}` : `/blog/${post.slug}`)}
                                     className="bg-white rounded-[2rem] overflow-hidden shadow-sm border border-[#3b2f2f]/5 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 flex flex-col sm:flex-row cursor-pointer group"
                                 >
                                     {/* Image Side */}

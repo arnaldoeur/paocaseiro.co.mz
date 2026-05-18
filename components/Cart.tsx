@@ -16,6 +16,7 @@ import { generateAndUploadReceipt } from '../services/billingService';
 import { logAudit } from '../services/audit';
 import { formatProductName, getEnglishProductName } from '../services/stringUtils';
 import { ClientLoginModal } from './ClientLoginModal';
+import { UpsellModal } from './UpsellModal';
 
 
 type CheckoutStep = 'cart' | 'details' | 'payment' | 'processing' | 'receipt';
@@ -90,10 +91,105 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
     const [completedOrder, setCompletedOrder] = useState<any>(null);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [isInitiating, setIsInitiating] = useState(false);
+    const [dismissedSuggestions, setDismissedSuggestions] = useState(false);
+
+    // Upsell States
+    const [isUpsellModalOpen, setIsUpsellModalOpen] = useState(false);
+    const [menuSections, setMenuSections] = useState<any[]>([]);
+    const [proceedToCheckoutAfterUpsell, setProceedToCheckoutAfterUpsell] = useState(false);
+
+    // Load Products for Upsell
+    useEffect(() => {
+        const loadProductsForUpsell = async () => {
+            try {
+                const data = await hostingerService.getProducts();
+                if (data && data.length > 0) {
+                    const grouped = data.reduce((acc: any, product: any) => {
+                        let cat = product.category || 'Outros';
+                        if (cat.trim().toLowerCase() === 'pizzaria') cat = 'Pizzas';
+                        if (!acc[cat]) acc[cat] = [];
+
+                        acc[cat].push({
+                            id: product.id,
+                            name: product.name,
+                            price: Number(product.price),
+                            image: hostingerService.resolveProductImage(product.name, product.image_url || product.image),
+                            desc: product.description,
+                            description_en: product.description_en,
+                            name_en: product.name_en,
+                            prepTime: product.prep_time,
+                            deliveryTime: product.delivery_time,
+                            isAvailable: (product.status === 'AVAILABLE' || Number(product.is_available) === 1 || Number(product.inStock) === 1) || 
+                                        (product.status !== 'UNAVAILABLE' && product.is_available !== '0' && product.is_available !== 0 && product.inStock !== '0' && product.inStock !== 0),
+                            isSpecial: false
+                        });
+                        return acc;
+                    }, {});
+
+                    const sectionsArray = Object.keys(grouped).map(key => ({
+                        title: key,
+                        items: grouped[key]
+                    }));
+                    setMenuSections(sectionsArray);
+                }
+            } catch (err) {
+                console.error("Error loading products for upsell in Cart:", err);
+            }
+        };
+        loadProductsForUpsell();
+    }, []);
+
+    // Global listener for normal item additions (resets scheduling + opens upsell)
+    useEffect(() => {
+        const handleItemAdded = (e: Event) => {
+            const customEvent = e as CustomEvent;
+            const item = customEvent.detail;
+            
+            // 1. Reset isScheduled to false since it's a normal add-to-cart!
+            setDetails(prev => {
+                const updated = { ...prev, isScheduled: false };
+                localStorage.setItem('checkout_details', JSON.stringify(updated));
+                return updated;
+            });
+            
+            // 2. Open Cart drawer!
+            setIsOpen(true);
+
+            // 3. Trigger upsell popup!
+            const category = item?.category?.toLowerCase() || '';
+            const name = item?.name?.toLowerCase() || '';
+            const isDrinkOrExtra = ['bebida', 'café', 'chá', 'sumo', 'extra', 'adicional', 'refrigerante', 'refresco', 'queijo', 'presunto', 'molho', 'maionese', 'ketcup', 'água', 'water', 'drink', 'soda', 'coke', 'fanta', 'sprite', 'sumol', 'compal', 'red bull', 'monster', 'cerveja', 'beer', 'vinho', 'wine'].some(k => 
+                category.includes(k) || name.includes(k)
+            );
+            
+            if (!isDrinkOrExtra) {
+                setIsUpsellModalOpen(true);
+            }
+        };
+        window.addEventListener('item-added-to-cart', handleItemAdded);
+        return () => window.removeEventListener('item-added-to-cart', handleItemAdded);
+    }, []);
+
+    const handleCloseUpsell = () => {
+        setIsUpsellModalOpen(false);
+        if (proceedToCheckoutAfterUpsell) {
+            setStep('details');
+            setProceedToCheckoutAfterUpsell(false);
+        }
+    };
 
     // Global listener to open cart from modals
     useEffect(() => {
-        const handleOpenCart = () => setIsOpen(true);
+        const handleOpenCart = () => {
+            setIsOpen(true);
+            const saved = localStorage.getItem('checkout_details');
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    setDetails(prev => ({ ...prev, ...parsed }));
+                } catch (e) { console.error("Error reloading details on open-cart", e); }
+            }
+        };
         window.addEventListener('open-cart', handleOpenCart);
         
         // Setup Auth Listeners
@@ -196,6 +292,20 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
             }));
         }
     }, [details]);
+
+    // Reset scheduling when cart becomes empty
+    useEffect(() => {
+        if (cart.length === 0) {
+            setDetails(prev => {
+                if (prev.isScheduled) {
+                    const updated = { ...prev, isScheduled: false, notes: '' };
+                    localStorage.setItem('checkout_details', JSON.stringify(updated));
+                    return updated;
+                }
+                return prev;
+            });
+        }
+    }, [cart.length]);
 
     // Check for changes relative to profile
     useEffect(() => {
@@ -375,17 +485,17 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                 return;
             }
 
-            // Check moved to 'details' step to know the order type? 
-            // Or assume delivery is default or check later?
-            // Actually, type is set in 'details' step. 
-            // So we should check min amount when moving FROM 'details' OR check generally but allow pass if pickup?
-            // User requirement: "Minimum 100 MT for Delivery". "Pickup/Table no minimum".
-            // Since 'type' is chosen in 'details' step (step 2), we can only strictly validate there.
-            // BUT, if the user starts with an empty cart or very low value, maybe warn them?
-            // Default type is 'delivery'.
-            // Let's allow proceeding to details, but validate BEFORE payment or when selecting type?
-            // Current flow: Cart -> Details (User picks Type) -> Payment.
-            // So validation must happen when leaving 'details' step if type is 'delivery'.
+            // Check if we should trigger upsell popup before proceeding to details!
+            const hasDrinksOrExtras = cart.some(item => {
+                const name = item.name.toLowerCase();
+                return ['bebida', 'café', 'chá', 'sumo', 'extra', 'adicional', 'refrigerante', 'refresco', 'queijo', 'presunto', 'molho', 'maionese', 'ketcup', 'água', 'water', 'drink', 'soda', 'coke', 'fanta', 'sprite', 'sumol', 'compal', 'red bull', 'monster', 'cerveja', 'beer', 'vinho', 'wine'].some(k => name.includes(k));
+            });
+
+            if (!hasDrinksOrExtras) {
+                setProceedToCheckoutAfterUpsell(true);
+                setIsUpsellModalOpen(true);
+                return;
+            }
 
             setStep('details');
             setError('');
@@ -776,12 +886,88 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
             localStorage.removeItem('active_tx_id');
             localStorage.setItem('last_order_id', orderId);
             clearCart();
+            setDetails(prev => {
+                const updated = { ...prev, isScheduled: false, notes: '' };
+                localStorage.setItem('checkout_details', JSON.stringify(updated));
+                return updated;
+            });
         }).catch(err => {
             console.error("Database save failed", err);
             // Fallback: show receipt anyway
             setCompletedOrder(newOrder);
             setStep('receipt');
+            setDetails(prev => {
+                const updated = { ...prev, isScheduled: false, notes: '' };
+                localStorage.setItem('checkout_details', JSON.stringify(updated));
+                return updated;
+            });
         });
+    };
+
+    const renderCartSuggestions = () => {
+        const upsellCandidates = [
+            { name: 'Coca-Cola 300ml', name_en: 'Coca-Cola 300ml', price: 60, image: '/assets/products/coca-cola-300ml.png' },
+            { name: 'Fanta Laranja 300ml', name_en: 'Fanta Orange 300ml', price: 60, image: '/assets/products/fanta-laranja-300ml.png' },
+            { name: 'Sprite 300ml', name_en: 'Sprite 300ml', price: 60, image: '/assets/products/sprite-300ml.png' },
+            { name: 'Compal 300ml', name_en: 'Compal Fruit Juice 300ml', price: 80, image: '/assets/products/compal-300ml.png' },
+            { name: 'Maionese', name_en: 'Mayonnaise', price: 30, image: '/assets/products/maionese.png' },
+            { name: 'Ketchup', name_en: 'Ketchup', price: 30, image: '/assets/products/ketchup.png' },
+            { name: 'Batata Frita', name_en: 'French Fries', price: 150, image: '/assets/products/batata-frita.png' }
+        ];
+
+        const suggestions = upsellCandidates.filter(item => !cart.some(cartItem => cartItem.name === item.name));
+
+        if (suggestions.length === 0 || dismissedSuggestions) return null;
+
+        return (
+            <div className="mt-8 pt-6 border-t border-dashed border-[#d9a65a]/20 space-y-4">
+                <div className="flex items-center justify-between">
+                    <h4 className="font-bold text-sm text-[#3b2f2f] flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-[#d9a65a] animate-pulse" />
+                        {language === 'en' ? 'Complete your order?' : 'Quer acompanhar com algo?'}
+                    </h4>
+                    <button 
+                        onClick={() => setDismissedSuggestions(true)}
+                        className="text-[10px] font-bold text-[#3b2f2f]/60 hover:text-red-500 transition-colors bg-white hover:bg-red-50 px-2 py-0.5 rounded border border-gray-200"
+                    >
+                        {language === 'en' ? 'No, thanks' : 'Não, obrigado'}
+                    </button>
+                </div>
+                <div className="flex gap-3 overflow-x-auto pb-3 snap-x no-scrollbar">
+                    {suggestions.map((item) => (
+                        <div 
+                            key={item.name} 
+                            className="w-36 bg-white p-3 rounded-2xl border border-[#d9a65a]/10 hover:border-[#d9a65a]/30 transition-all flex flex-col justify-between shrink-0 snap-start shadow-sm hover:shadow"
+                        >
+                            <div className="w-full h-16 bg-[#f7f1eb] rounded-xl overflow-hidden relative mb-2 flex items-center justify-center">
+                                <img 
+                                    src={item.image} 
+                                    alt={item.name} 
+                                    className="w-full h-full object-contain p-1"
+                                    onError={(e) => {
+                                        e.currentTarget.onerror = null;
+                                        e.currentTarget.src = '/assets/products/pao-caseiro.png';
+                                    }}
+                                />
+                            </div>
+                            <div className="flex-1">
+                                <h5 className="font-bold text-[#3b2f2f] text-xs line-clamp-1">
+                                    {language === 'en' ? item.name_en : item.name}
+                                </h5>
+                                <p className="text-[#d9a65a] text-xs font-black mt-0.5">{item.price} MT</p>
+                            </div>
+                            <button
+                                onClick={() => addToCart({ name: item.name, name_en: item.name_en, price: item.price, image: item.image, quantity: 1 })}
+                                className="mt-2 w-full py-1.5 rounded-lg bg-[#d9a65a]/10 hover:bg-[#d9a65a] text-[#d9a65a] hover:text-white text-[10px] font-bold transition-all flex items-center justify-center gap-1 active:scale-95"
+                            >
+                                <Plus className="w-3 h-3" />
+                                {language === 'en' ? 'Add' : 'Adicionar'}
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
     };
 
     const renderStepContent = () => {
@@ -808,6 +994,11 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                                             onClick={() => {
                                                 if (window.confirm(language === 'en' ? 'Are you sure you want to clear your cart?' : 'Tem certeza que deseja limpar o seu carrinho?')) {
                                                     clearCart();
+                                                    setDetails(prev => {
+                                                        const updated = { ...prev, isScheduled: false, notes: '' };
+                                                        localStorage.setItem('checkout_details', JSON.stringify(updated));
+                                                        return updated;
+                                                    });
                                                 }
                                             }}
                                             className="text-[10px] font-black uppercase tracking-widest text-red-400 flex items-center gap-1.5 hover:text-red-600 transition-all bg-red-50/50 hover:bg-red-50 px-3 py-1.5 rounded-full border border-red-100 shadow-sm active:scale-95"
@@ -851,6 +1042,7 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                                         </div>
                                     </div>
                                     ))}
+                                    {renderCartSuggestions()}
                                 </div>
                             )}
                         </div>
@@ -946,14 +1138,28 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                                 <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl flex items-start gap-3 text-blue-800 shadow-sm animate-fade-in relative overflow-hidden">
                                     <div className="absolute top-0 right-0 w-16 h-16 bg-blue-100 rounded-bl-full -z-10 opacity-50"></div>
                                     <Clock className="w-6 h-6 shrink-0 mt-0.5" />
-                                    <div>
+                                    <div className="flex-1">
                                         <span className="font-bold text-base block mb-1">
-                                            Pedido Agendado
+                                            {language === 'en' ? 'Scheduled Order' : 'Pedido Agendado'}
                                         </span>
                                         <p className="text-sm">
-                                            O sistema requer um sinal obrigatório de <b>70%</b> do total da fatura para confirmar a sua reserva.<br/>
-                                            A restante quantia será paga no ato de entrega.
+                                            {language === 'en' 
+                                                ? 'The system requires an upfront payment of 70% of the invoice total to confirm your reservation. The remaining amount will be paid upon delivery.' 
+                                                : 'O sistema requer um sinal obrigatório de 70% do total da fatura para confirmar a sua reserva. A restante quantia será paga no ato de entrega.'}
                                         </p>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setDetails(prev => {
+                                                    const updated = { ...prev, isScheduled: false, notes: '' };
+                                                    localStorage.setItem('checkout_details', JSON.stringify(updated));
+                                                    return updated;
+                                                });
+                                            }}
+                                            className="mt-3 text-xs font-bold underline text-blue-600 hover:text-blue-800 block transition-colors"
+                                        >
+                                            {language === 'en' ? 'Change to Normal Order (Instant Delivery)' : 'Alterar para Encomenda Normal (Entrega Imediata)'}
+                                        </button>
                                     </div>
                                 </div>
                             )}

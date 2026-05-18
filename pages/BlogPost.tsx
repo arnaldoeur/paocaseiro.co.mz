@@ -10,13 +10,15 @@ import { ClientLoginModal } from '../components/ClientLoginModal';
 interface BlogPostFull {
     id: string;
     title: string;
+    title_en?: string;
     slug: string;
     content: string;
+    content_en?: string;
     excerpt?: string;
     image_url: string;
     author: string;
     category: string;
-    tags: string[];
+    tags: string[] | string;
     created_at: string;
 }
 
@@ -64,7 +66,10 @@ export const BlogPost: React.FC<{ language: Language }> = ({ language }) => {
             
             try {
                 // Fetch single post
-                const postData = await hostingerService.getBlogPostBySlug(slug);
+                const postResponse = await hostingerService.getBlogPostBySlug(slug);
+                const postData = postResponse && postResponse.success && postResponse.data 
+                    ? postResponse.data 
+                    : (postResponse && postResponse.id ? postResponse : null);
 
                 if (postData) {
                     setPost(postData);
@@ -82,7 +87,8 @@ export const BlogPost: React.FC<{ language: Language }> = ({ language }) => {
                         element.setAttribute('content', content);
                     };
 
-                    const excerpt = postData.excerpt || postData.content?.substring(0, 150).replace(/<[^>]*>?/gm, '') + '...';
+                    const contentStr = postData.content || '';
+                    const excerpt = postData.excerpt || (contentStr.substring(0, 150).replace(/<[^>]*>?/gm, '') + '...');
                     const image = postData.image_url || hostingerService.getPublicUrl('assets/ui/about-bread.jpeg');
 
                     setMetaTag('description', excerpt);
@@ -99,8 +105,11 @@ export const BlogPost: React.FC<{ language: Language }> = ({ language }) => {
                     // ---------------------------------------
 
                     // Fetch comments for this post
-                    const commentsData = await hostingerService.getBlogComments(postData.id);
-                    if (commentsData) {
+                    const commentsResponse = await hostingerService.getBlogComments(postData.id);
+                    if (commentsResponse) {
+                        const commentsData = commentsResponse.success && Array.isArray(commentsResponse.data)
+                            ? commentsResponse.data
+                            : (Array.isArray(commentsResponse) ? commentsResponse : []);
                         setComments(commentsData);
                     }
                 }
@@ -196,7 +205,7 @@ export const BlogPost: React.FC<{ language: Language }> = ({ language }) => {
                     className="flex items-center gap-2 bg-[#d9a65a] text-[#3b2f2f] px-8 py-4 rounded-xl font-bold hover:shadow-xl hover:-translate-y-1 transition-all uppercase tracking-widest text-sm"
                 >
                     <ArrowLeft size={20} />
-                    {t.backToBlog || 'Voltar ao Blog'}
+                    {t?.backToBlog || 'Voltar ao Blog'}
                 </button>
             </div>
         );
@@ -209,7 +218,7 @@ export const BlogPost: React.FC<{ language: Language }> = ({ language }) => {
                     onClick={() => navigate('/blog')}
                     className="flex items-center gap-2 text-gray-400 hover:text-[#d9a65a] font-bold text-sm uppercase tracking-widest transition-colors mb-10"
                 >
-                    <ArrowLeft size={16} /> {t.backToBlog || 'Voltar'}
+                    <ArrowLeft size={16} /> {t?.backToBlog || 'Voltar'}
                 </button>
 
                 {/* Main Article Content */}
@@ -231,12 +240,17 @@ export const BlogPost: React.FC<{ language: Language }> = ({ language }) => {
                     <div className="flex flex-wrap items-center gap-6 text-xs md:text-sm font-bold text-gray-400 uppercase tracking-widest mb-12 py-6 border-y border-gray-100">
                         <div className="flex items-center gap-2">
                             <User size={16} className="text-[#d9a65a]" />
-                            <span className="text-gray-500">{t.author || 'Por'} <span className="text-[#3b2f2f]">{post.author || 'Pão Caseiro'}</span></span>
+                            <span className="text-gray-500">{t?.author || 'Por'} <span className="text-[#3b2f2f]">{post.author || 'Pão Caseiro'}</span></span>
                         </div>
                         <div className="flex items-center gap-2">
                             <Calendar size={16} className="text-[#d9a65a]" />
                             <span className="text-gray-500">
-                                {post.created_at ? new Date(post.created_at).toLocaleDateString(language === 'pt' ? 'pt-PT' : 'en-US', { day: 'numeric', month: 'long', year: 'numeric' }) : ''}
+                                {post.created_at ? (() => {
+                                    const d = new Date(post.created_at.replace(/-/g, '/'));
+                                    return !isNaN(d.getTime()) 
+                                        ? d.toLocaleDateString(language === 'pt' ? 'pt-PT' : 'en-US', { day: 'numeric', month: 'long', year: 'numeric' }) 
+                                        : '';
+                                })() : ''}
                             </span>
                         </div>
                         <div className="flex-1" />
@@ -300,18 +314,34 @@ export const BlogPost: React.FC<{ language: Language }> = ({ language }) => {
                     )}
 
                     {/* Tags Section */}
-                    {post.tags && post.tags.length > 0 && (
-                        <div className="flex items-center gap-4 pt-8 border-t border-gray-100">
-                            <Tag size={18} className="text-[#d9a65a]" />
-                            <div className="flex flex-wrap gap-2">
-                                {post.tags.map(tag => (
-                                    <span key={tag} className="bg-[#f7f1eb] text-[#3b2f2f] px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest">
-                                        #{tag}
-                                    </span>
-                                ))}
+                    {(() => {
+                        const parsedTags = Array.isArray(post.tags)
+                            ? post.tags
+                            : typeof post.tags === 'string'
+                                ? (() => {
+                                    try {
+                                        const parsed = JSON.parse(post.tags);
+                                        if (Array.isArray(parsed)) return parsed;
+                                    } catch (e) {}
+                                    return post.tags.split(',').map((t: string) => t.trim()).filter(Boolean);
+                                })()
+                                : [];
+                        
+                        if (parsedTags.length === 0) return null;
+                        
+                        return (
+                            <div className="flex items-center gap-4 pt-8 border-t border-gray-100">
+                                <Tag size={18} className="text-[#d9a65a]" />
+                                <div className="flex flex-wrap gap-2">
+                                    {parsedTags.map(tag => (
+                                        <span key={tag} className="bg-[#f7f1eb] text-[#3b2f2f] px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest">
+                                            #{tag}
+                                        </span>
+                                    ))}
+                                </div>
                             </div>
-                        </div>
-                    )}
+                        );
+                    })()}
                 </motion.div>
 
                 {/* Comments Section */}
@@ -322,14 +352,14 @@ export const BlogPost: React.FC<{ language: Language }> = ({ language }) => {
                     className="bg-white rounded-[2.5rem] p-8 md:p-12 shadow-sm border border-[#3b2f2f]/5"
                 >
                     <h3 className="text-2xl font-black font-serif text-[#3b2f2f] mb-8">
-                        {t.comments?.title || 'Comentários'} ({comments.length})
+                        {t?.comments?.title || 'Comentários'} ({comments.length})
                     </h3>
 
                     {/* Comments List */}
                     <div className="mb-12 space-y-8">
                         {visibleComments.length === 0 ? (
                             <p className="text-gray-500 italic bg-gray-50 p-6 rounded-2xl text-center">
-                                {t.comments?.empty || 'Ainda não há comentários. Seja o primeiro a comentar!'}
+                                {t?.comments?.empty || 'Ainda não há comentários. Seja o primeiro a comentar!'}
                             </p>
                         ) : (
                             visibleComments.map((comment) => (
@@ -341,9 +371,13 @@ export const BlogPost: React.FC<{ language: Language }> = ({ language }) => {
                                         <div>
                                             <h4 className="font-bold text-[#3b2f2f]">{comment.author || 'Utilizador'}</h4>
                                             <span className="text-xs text-gray-400 font-medium">
-                                                {comment.created_at && !isNaN(new Date(comment.created_at).getTime())
-                                                    ? new Date(comment.created_at).toLocaleDateString(language === 'pt' ? 'pt-PT' : 'en-US', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute:'2-digit' })
-                                                    : ''}
+                                                {(() => {
+                                                    if (!comment.created_at) return '';
+                                                    const d = new Date(comment.created_at.replace(/-/g, '/'));
+                                                    return !isNaN(d.getTime())
+                                                        ? d.toLocaleDateString(language === 'pt' ? 'pt-PT' : 'en-US', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute:'2-digit' })
+                                                        : '';
+                                                })()}
                                             </span>
                                         </div>
                                     </div>
@@ -370,7 +404,7 @@ export const BlogPost: React.FC<{ language: Language }> = ({ language }) => {
                     {/* Add Comment Form */}
                     <div className="bg-[#f7f1eb] p-6 md:p-8 rounded-[2rem]">
                         <h4 className="text-lg font-bold text-[#3b2f2f] mb-6 tracking-widest uppercase text-sm">
-                            {t.comments?.formTitle || 'Deixe um comentário'}
+                            {t?.comments?.formTitle || 'Deixe um comentário'}
                         </h4>
                         
                         {!currentUser ? (
@@ -398,7 +432,7 @@ export const BlogPost: React.FC<{ language: Language }> = ({ language }) => {
                                         readOnly
                                         value={newCommentName}
                                         onChange={(e) => setNewCommentName(e.target.value)}
-                                        placeholder={t.comments?.namePlaceholder || 'O seu nome (obrigatório)'}
+                                        placeholder={t?.comments?.namePlaceholder || 'O seu nome (obrigatório)'}
                                         className="w-full px-5 py-4 rounded-xl bg-gray-100 border-transparent focus:outline-none text-gray-500 cursor-not-allowed hidden"
                                     />
                                     <div className="text-sm font-bold text-gray-500 mb-2">Comentando como: <span className="text-[#d9a65a]">{newCommentName}</span></div>
@@ -407,7 +441,7 @@ export const BlogPost: React.FC<{ language: Language }> = ({ language }) => {
                                         rows={4}
                                         value={newCommentContent}
                                         onChange={(e) => setNewCommentContent(e.target.value)}
-                                        placeholder={t.comments?.commentPlaceholder || 'O seu comentário...'}
+                                        placeholder={t?.comments?.commentPlaceholder || 'O seu comentário...'}
                                         className="w-full px-5 py-4 rounded-xl bg-white border-transparent focus:border-[#d9a65a] focus:ring-2 focus:ring-[#d9a65a]/20 outline-none transition-all resize-none placeholder-gray-400 text-gray-700 shadow-sm"
                                     ></textarea>
                                     <div className="flex justify-end mt-2">
@@ -416,7 +450,7 @@ export const BlogPost: React.FC<{ language: Language }> = ({ language }) => {
                                             disabled={submittingComment || !newCommentContent.trim()}
                                             className="bg-[#3b2f2f] text-white px-8 py-4 rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-[#d9a65a] hover:-translate-y-1 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-[#3b2f2f] disabled:hover:translate-y-0"
                                         >
-                                            {submittingComment ? (t.comments?.submitting || 'A enviar...') : (t.comments?.submit || 'Comentar')}
+                                            {submittingComment ? (t?.comments?.submitting || 'A enviar...') : (t?.comments?.submit || 'Comentar')}
                                         </button>
                                     </div>
                                 </form>

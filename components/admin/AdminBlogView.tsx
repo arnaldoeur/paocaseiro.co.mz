@@ -133,10 +133,25 @@ export function AdminBlogView() {
         try {
             const data = await hostingerService.getBlogPosts();
             if (data && Array.isArray(data)) {
-                const processed = data.map((post: any) => ({
-                    ...post,
-                    tags: post.tags ? (typeof post.tags === 'string' ? JSON.parse(post.tags) : post.tags) : []
-                }));
+                const processed = data.map((post: any) => {
+                    let parsedTags = [];
+                    if (post.tags) {
+                        if (Array.isArray(post.tags)) {
+                            parsedTags = post.tags;
+                        } else if (typeof post.tags === 'string') {
+                            try {
+                                const parsed = JSON.parse(post.tags);
+                                parsedTags = Array.isArray(parsed) ? parsed : [parsed];
+                            } catch (e) {
+                                parsedTags = post.tags.split(',').map((t: string) => t.trim()).filter(Boolean);
+                            }
+                        }
+                    }
+                    return {
+                        ...post,
+                        tags: parsedTags
+                    };
+                });
                 setPosts(processed);
             }
         } catch (err: any) {
