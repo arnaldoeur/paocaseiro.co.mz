@@ -545,6 +545,42 @@ export const hostingerService = {
     getPublicUrl(path: string) {
         if (!path) return '';
         
+        // Intercepta uploads/products para servir dos assets
+        if (path.includes('uploads/products/')) {
+            const fileName = path.substring(path.lastIndexOf('/') + 1);
+            const cleanName = fileName.replace(/^\d+_/, '');
+            const knownAssets = [
+                "agua-namaacha-500ml.png", "arrofadas.png", "batata-frita.png", "batatas-fritas.png",
+                "biscoitos-amanteigados.png", "bola-berlim.png", "bolo-arroz.png", "bolo-t14.png",
+                "bolo20.png", "bolot24.png", "bolot26.png", "brioche-fruta.png", "broa-milho.png",
+                "cachorro-quente.png", "cafe-categoria.png", "cafeexpressapao.png", "cakes.png",
+                "calzone-recheado.png", "cappuccino.png", "cha-com-leite.png", "cha-especial-1.png",
+                "cha-leite-gelado-boba.png", "cha-quente.png", "chamussaS.png", "chamussas-mix.png",
+                "charuto.png", "chocolate-quente.png", "coca-cola-300ml.png", "compal-300ml.png",
+                "coxinhas.png", "croissant-folhado.png", "croissants-chocolate.png", "croissants-folhados.png",
+                "croissants-recheados-extra.png", "croissants-recheados.png", "croissants-simples.png",
+                "donuts.png", "empadas.png", "fanta-laranja-300ml.png", "fatias-bolo-pound.png",
+                "fatias-xadrez.png", "folhado-salsicha-queijo.png", "folhado-salsicha.png", "folhados-carne.png",
+                "folhados-recheados.png", "guardanapo-recheado.png", "hamburguer-completo.png",
+                "hamburguer-simples.png", "ketchup.png", "king-pie-frango.png", "lacos.png",
+                "lingua-sogra.png", "maionese.png", "melted-cheese-sauce.png", "mini-bus.png",
+                "mini-folhados.png", "mini-pizza.png", "mini-pizzas-extra.png", "molho-de-tomate.png",
+                "molho-picante.png", "nevada.png", "palmier-recheado.png", "palmier.png",
+                "pao-caseiro-extra-2.png", "pao-caseiro.png", "pao-cereais.png", "pao-de-hamburguer.png",
+                "pao-extra.png", "pao-forma-integral.png", "pao-forma-simples.png", "pao-integral-2.png",
+                "pao-integral.png", "pao-portugues.png", "paointefgrale.png", "paonormal2.png",
+                "paozinho-leite-dourado.png", "pastel-de-coco.png", "pastel-de-nata.png", "pie-vegetais.png",
+                "pizza-4-estacoes.png", "pizza-atum.png", "pizza-de-frango-2.png", "pizza-frango.png",
+                "pizza-mexicana.png", "pizza-pepperoni.png", "pizza_mexicana.webp", "premium-coffee.png",
+                "pudim.png", "queques.png", "rissois-camarao.png", "sacos-de-torrada.png", "salada-mista.png",
+                "salada-tomate-cebola.png", "shawarma-de-frango.png", "sprite-300ml.png", "torta.png",
+                "waffle-stick.png", "waffle_stick.png"
+            ];
+            if (knownAssets.includes(cleanName)) {
+                return this.getPublicUrl(`assets/products/${cleanName}`);
+            }
+        }
+        
         // Handle database proxy serve_file links correctly
         if (path.includes('paocaseiro_db.php')) {
             const index = HOSTINGER_BRIDGE_URL.indexOf('paocaseiro_db.php');
@@ -648,6 +684,42 @@ export const hostingerService = {
         };
 
         if (originalImage && originalImage.trim() !== '') {
+            // Se for um link de uploads/products, tenta mapear para o asset correspondente que temos localmente
+            if (originalImage.includes('uploads/products/')) {
+                const fileName = originalImage.substring(originalImage.lastIndexOf('/') + 1);
+                const cleanName = fileName.replace(/^\d+_/, '');
+                const knownAssets = [
+                    "agua-namaacha-500ml.png", "arrofadas.png", "batata-frita.png", "batatas-fritas.png",
+                    "biscoitos-amanteigados.png", "bola-berlim.png", "bolo-arroz.png", "bolo-t14.png",
+                    "bolo20.png", "bolot24.png", "bolot26.png", "brioche-fruta.png", "broa-milho.png",
+                    "cachorro-quente.png", "cafe-categoria.png", "cafeexpressapao.png", "cakes.png",
+                    "calzone-recheado.png", "cappuccino.png", "cha-com-leite.png", "cha-especial-1.png",
+                    "cha-leite-gelado-boba.png", "cha-quente.png", "chamussaS.png", "chamussas-mix.png",
+                    "charuto.png", "chocolate-quente.png", "coca-cola-300ml.png", "compal-300ml.png",
+                    "coxinhas.png", "croissant-folhado.png", "croissants-chocolate.png", "croissants-folhados.png",
+                    "croissants-recheados-extra.png", "croissants-recheados.png", "croissants-simples.png",
+                    "donuts.png", "empadas.png", "fanta-laranja-300ml.png", "fatias-bolo-pound.png",
+                    "fatias-xadrez.png", "folhado-salsicha-queijo.png", "folhado-salsicha.png", "folhados-carne.png",
+                    "folhados-recheados.png", "guardanapo-recheado.png", "hamburguer-completo.png",
+                    "hamburguer-simples.png", "ketchup.png", "king-pie-frango.png", "lacos.png",
+                    "lingua-sogra.png", "maionese.png", "melted-cheese-sauce.png", "mini-bus.png",
+                    "mini-folhados.png", "mini-pizza.png", "mini-pizzas-extra.png", "molho-de-tomate.png",
+                    "molho-picante.png", "nevada.png", "palmier-recheado.png", "palmier.png",
+                    "pao-caseiro-extra-2.png", "pao-caseiro.png", "pao-cereais.png", "pao-de-hamburguer.png",
+                    "pao-extra.png", "pao-forma-integral.png", "pao-forma-simples.png", "pao-integral-2.png",
+                    "pao-integral.png", "pao-portugues.png", "paointefgrale.png", "paonormal2.png",
+                    "paozinho-leite-dourado.png", "pastel-de-coco.png", "pastel-de-nata.png", "pie-vegetais.png",
+                    "pizza-4-estacoes.png", "pizza-atum.png", "pizza-de-frango-2.png", "pizza-frango.png",
+                    "pizza-mexicana.png", "pizza-pepperoni.png", "pizza_mexicana.webp", "premium-coffee.png",
+                    "pudim.png", "queques.png", "rissois-camarao.png", "sacos-de-torrada.png", "salada-mista.png",
+                    "salada-tomate-cebola.png", "shawarma-de-frango.png", "sprite-300ml.png", "torta.png",
+                    "waffle-stick.png", "waffle_stick.png"
+                ];
+                if (knownAssets.includes(cleanName)) {
+                    return this.getPublicUrl(`assets/products/${cleanName}`);
+                }
+            }
+
             if (originalImage.startsWith('http') && !originalImage.includes('/uploads/')) return originalImage;
             if (originalImage.includes('paocaseiro_db.php') || originalImage.includes('assets/') || originalImage.includes('uploads/')) {
                 return this.getPublicUrl(originalImage);
