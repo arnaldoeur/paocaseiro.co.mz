@@ -3199,7 +3199,7 @@ export const Admin: React.FC = () => {
                         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
                             {/* Performance Chart */}
                             <div className="lg:col-span-3">
-                                <AnalyticsChart orders={orders} teamMembers={teamMembers} onExportMaster={handleExportMaster} />
+                                <AnalyticsChart orders={orders} teamMembers={teamMembers} customers={customers} onExportMaster={handleExportMaster} />
                             </div>
 
                             {/* Recent Activity (Compact) */}

@@ -46,10 +46,11 @@ interface Order {
 interface AnalyticsChartProps {
     orders: Order[];
     teamMembers?: any[];
+    customers?: any[];
     onExportMaster?: () => void;
 }
 
-export const AnalyticsChart: React.FC<AnalyticsChartProps> = ({ orders = [], teamMembers = [], onExportMaster }) => {
+export const AnalyticsChart: React.FC<AnalyticsChartProps> = ({ orders = [], teamMembers = [], customers = [], onExportMaster }) => {
     const [metric, setMetric] = useState<MetricType>('sales');
     const [range, setRange] = useState<TimeRange>('7d');
     const [selectedStaff, setSelectedStaff] = useState<string>('all');
@@ -387,7 +388,7 @@ export const AnalyticsChart: React.FC<AnalyticsChartProps> = ({ orders = [], tea
             <KPISummary data={{
                 totalSales: chartData.reduce((acc, curr) => acc + curr.sales, 0),
                 orders: chartData.reduce((acc, curr) => acc + curr.orders, 0),
-                customers: chartData.reduce((acc, curr) => acc + curr.customers, 0),
+                customers: customers.length > 0 ? customers.length : chartData.reduce((acc, curr) => acc + curr.customers, 0),
                 avgTicket: Math.floor(chartData.reduce((acc, curr) => acc + curr.sales, 0) / (chartData.reduce((acc, curr) => acc + curr.orders, 0) || 1))
             }} />
 
