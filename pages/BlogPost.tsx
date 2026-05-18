@@ -233,7 +233,7 @@ export const BlogPost: React.FC<{ language: Language }> = ({ language }) => {
                         </div>
                     )}
 
-                    <h1 className="text-4xl md:text-5xl lg:text-6xl font-black text-[#3b2f2f] mb-8 font-serif leading-tight">
+                    <h1 className="text-2xl md:text-3xl lg:text-4xl font-black text-[#3b2f2f] mb-8 font-serif leading-tight">
                         {language === 'en' && post.title_en ? post.title_en : post.title}
                     </h1>
 

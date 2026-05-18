@@ -1129,10 +1129,16 @@ try {
 
     case 'get_blog_comments':
         $postId = $input['post_id'] ?? '';
-        $stmt = $pdo->prepare("SELECT * FROM blog_comments WHERE post_id = ? ORDER BY created_at ASC");
-        $stmt->execute([$postId]);
+        if (empty($postId) || $postId === 'undefined' || $postId === 'null') {
+            $stmt = $pdo->prepare("SELECT * FROM blog_comments ORDER BY created_at DESC");
+            $stmt->execute();
+        } else {
+            $stmt = $pdo->prepare("SELECT * FROM blog_comments WHERE post_id = ? ORDER BY created_at ASC");
+            $stmt->execute([$postId]);
+        }
         echo json_encode($stmt->fetchAll());
         break;
+
 
     case 'save_blog_comment':
         $postId = $input['post_id'];
