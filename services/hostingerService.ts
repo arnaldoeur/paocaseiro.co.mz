@@ -542,10 +542,8 @@ export const hostingerService = {
     purgeDatabase() {
         return this.fetch('purge_database');
     },
-
     getPublicUrl(path: string) {
         if (!path) return '';
-        if (path.startsWith('http')) return path;
         
         // Handle database proxy serve_file links correctly
         if (path.includes('paocaseiro_db.php')) {
@@ -554,9 +552,21 @@ export const hostingerService = {
             return `${baseUrl}${path.substring(path.indexOf('paocaseiro_db.php'))}`;
         }
 
+        if (path.startsWith('http')) {
+            if (path.includes('/uploads/')) {
+                const relativePath = path.substring(path.indexOf('uploads/'));
+                return this.getPublicUrl(`paocaseiro_db.php?action=serve_upload&path=${relativePath}`);
+            }
+            return path;
+        }
+
         // Hostinger path is usually relative to public/
         // Remove leading slash and 'public/' if present
         const cleanPath = path.replace(/^(\/|public\/)/, '');
+        
+        if (cleanPath.startsWith('uploads/')) {
+            return this.getPublicUrl(`paocaseiro_db.php?action=serve_upload&path=${cleanPath}`);
+        }
         
         // If it's a simple filename (no slashes) and looks like an image, assume it's in images/products/
         if (!cleanPath.includes('/') && /\.(jpg|jpeg|png|webp|gif|svg)$/i.test(cleanPath)) {
@@ -638,8 +648,8 @@ export const hostingerService = {
         };
 
         if (originalImage && originalImage.trim() !== '') {
-            if (originalImage.startsWith('http')) return originalImage;
-            if (originalImage.includes('paocaseiro_db.php') || originalImage.includes('assets/')) {
+            if (originalImage.startsWith('http') && !originalImage.includes('/uploads/')) return originalImage;
+            if (originalImage.includes('paocaseiro_db.php') || originalImage.includes('assets/') || originalImage.includes('uploads/')) {
                 return this.getPublicUrl(originalImage);
             }
             
@@ -678,8 +688,6 @@ export const hostingerService = {
             }
         }
 
-        
-        
         return this.getPublicUrl('assets/products/pao-caseiro.png');
     }
 };

@@ -338,7 +338,7 @@ $token = trim(str_ireplace('Bearer ', '', $auth));
 // debug_log("Headers received: " . json_encode($all_headers));
 // debug_log("Auth token extracted: " . $token);
 
-if ($action !== 'paysuite_webhook' && $action !== 'serve_file' && $token !== $API_KEY) {
+if ($action !== 'paysuite_webhook' && $action !== 'serve_file' && $action !== 'serve_upload' && $token !== $API_KEY) {
     http_response_code(401);
     debug_log("Unauthorized access attempt. Action: $action, Token: $token");
     die(json_encode(["error" => "Acesso não autorizado."]));
@@ -424,6 +424,61 @@ try {
         header("Content-Length: " . filesize($resolvedPath));
         header("Content-Disposition: inline; filename=\"" . basename($fileRecord['name']) . "\"");
         header("Cache-Control: public, max-age=86400");
+        readfile($resolvedPath);
+        exit;
+
+    case 'serve_upload':
+        $path = $_GET['path'] ?? $input['path'] ?? '';
+        if (empty($path)) {
+            http_response_code(400);
+            die("Path is required");
+        }
+        
+        // Sanitize path to prevent directory traversal
+        $path = str_replace(array('../', '..\\'), '', $path);
+        
+        // Extract folder and file name
+        $parts = explode('/', $path);
+        $fileName = basename($path);
+        $folder = (count($parts) >= 2) ? $parts[count($parts)-2] : 'products';
+        
+        $absoluteDir = get_persistent_upload_dir($folder);
+        $resolvedPath = $absoluteDir . $fileName;
+        
+        // If the file doesn't exist in the persistent directory, try the relative fallback inside public_html
+        if (!file_exists($resolvedPath)) {
+            $resolvedPath = __DIR__ . '/' . $path;
+        }
+        
+        if (!file_exists($resolvedPath)) {
+            http_response_code(404);
+            die("File not found on disk: " . $resolvedPath);
+        }
+        
+        // Clear headers
+        while (ob_get_level()) {
+            ob_end_clean();
+        }
+        
+        // Detect content type
+        $ext = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+        $contentTypes = [
+            'png' => 'image/png',
+            'jpg' => 'image/jpeg',
+            'jpeg' => 'image/jpeg',
+            'gif' => 'image/gif',
+            'webp' => 'image/webp',
+            'svg' => 'image/svg+xml',
+            'pdf' => 'application/pdf',
+            'txt' => 'text/plain',
+            'html' => 'text/html'
+        ];
+        $contentType = $contentTypes[$ext] ?? 'application/octet-stream';
+        
+        header("Content-Type: " . $contentType);
+        header("Content-Length: " . filesize($resolvedPath));
+        header("Cache-Control: public, max-age=86400");
+        
         readfile($resolvedPath);
         exit;
 
