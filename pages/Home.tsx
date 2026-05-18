@@ -96,14 +96,27 @@ const CLASSICS = [
 ];
 
 const DEFAULT_GALLERY_ITEMS = [
-    { src: '/assets/products/pao-caseiro-extra-2.png', caption: 'Pão Caseiro Artesanal' },
-    { src: '/assets/products/croissant-folhado.png', caption: 'Croissant Folhado' },
-    { src: '/assets/products/croissants-chocolate.png', caption: 'Croissants de Chocolate' },
-    { src: '/assets/products/croissants-recheados-extra.png', caption: 'Croissants Recheados' },
-    { src: '/assets/products/hamburguer-completo.png', caption: 'Hambúrguer Completo' },
-    { src: '/assets/products/pizza_mexicana.webp', caption: 'Pizza Mexicana' },
-    { src: '/assets/products/pizza-frango.png', caption: 'Pizza de Frango' },
-    { src: '/assets/products/folhados-recheados.png', caption: 'Folhados Recheados' }
+    // 3 Clássicos de Pão (Breads)
+    { src: '/assets/products/pao-caseiro.png', caption: 'Pão Caseiro Tradicional' },
+    { src: '/assets/products/pao-cereais.png', caption: 'Pão de Cereais Rústico' },
+    { src: '/assets/products/pao-portugues.png', caption: 'Pão Português Crocante' },
+    
+    // 3 Clássicos de Salgados (Savory)
+    { src: '/assets/products/rissois-camarao.png', caption: 'Rissóis de Camarão Artesanais' },
+    { src: '/assets/products/coxinhas.png', caption: 'Coxinhas de Frango Crocantes' },
+    { src: '/assets/products/empadas.png', caption: 'Empadas de Frango Deliciosas' },
+    
+    // 3 Clássicos de Doces & Pastelaria (Sweet & Pastry)
+    { src: '/assets/products/pastel-de-nata.png', caption: 'Pastéis de Nata Cremosos' },
+    { src: '/assets/products/bola-berlim.png', caption: 'Bolas de Berlim Tradicionais' },
+    { src: '/assets/products/donuts.png', caption: 'Donuts Reconfortantes' }
+];
+
+const HERO_BG_IMAGES = [
+    '/assets/products/pao-caseiro-extra-2.png',
+    '/assets/products/pastel-de-nata.png',
+    '/assets/products/croissants-recheados.png',
+    '/assets/products/empadas.png'
 ];
 
 export const Home: React.FC<HomeProps> = ({ language }) => {
@@ -141,6 +154,14 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
     const videoRef = React.useRef<HTMLVideoElement>(null);
     const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
     const [galleryItems, setGalleryItems] = useState<{ src: string, caption: string }[]>(DEFAULT_GALLERY_ITEMS);
+    const [currentHeroIndex, setCurrentHeroIndex] = useState(0);
+
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setCurrentHeroIndex((prev) => (prev + 1) % HERO_BG_IMAGES.length);
+        }, 5000);
+        return () => clearInterval(interval);
+    }, []);
 
     useEffect(() => {
         const fetchGallery = async () => {
@@ -421,16 +442,23 @@ export const Home: React.FC<HomeProps> = ({ language }) => {
             {/* --- HERO SECTION --- */}
             <section id="hero" className="relative min-h-screen flex items-center justify-center overflow-hidden pt-14">
                 <div className="absolute inset-0 z-0">
-                    <img
-                        src={hostingerService.getPublicUrl("/og-image.jpg")}
-                        alt="Hero Background"
-                        className="w-full h-full object-cover"
-                        fetchPriority="high"
-                        loading="eager"
-                        onError={(e) => {
-                            (e.target as HTMLImageElement).src = '/og-image.jpg';
-                        }}
-                    />
+                    <AnimatePresence mode="popLayout">
+                        <motion.img
+                            key={currentHeroIndex}
+                            src={hostingerService.getPublicUrl(HERO_BG_IMAGES[currentHeroIndex])}
+                            alt="Hero Background"
+                            initial={{ opacity: 0, scale: 1.05 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 1.5, ease: "easeInOut" }}
+                            className="absolute inset-0 w-full h-full object-cover"
+                            fetchPriority="high"
+                            loading="eager"
+                            onError={(e) => {
+                                (e.target as HTMLImageElement).src = HERO_BG_IMAGES[currentHeroIndex];
+                            }}
+                        />
+                    </AnimatePresence>
                     <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/60 to-black/70 shadow-[inset_0_0_100px_rgba(0,0,0,0.5)]" />
                 </div>
 
