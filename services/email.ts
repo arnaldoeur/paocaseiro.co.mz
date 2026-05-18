@@ -6,7 +6,7 @@ import { formatProductName } from './stringUtils';
 
 const DEFAULT_FROM = 'Pão Caseiro <sistema@paocaseiro.co.mz>';
 const PRODUCTION_URL = 'https://paocaseiro.co.mz';
-const FALLBACK_LOGO_URL = 'https://paocaseiro.co.mz/logo_on_dark.png';
+const FALLBACK_LOGO_URL = 'https://paocaseiro.co.mz/assets/ui/logo-dark.png';
 
 /**
  * Base template for all branded emails
@@ -14,7 +14,7 @@ const FALLBACK_LOGO_URL = 'https://paocaseiro.co.mz/logo_on_dark.png';
 const brandedEmailLayout = (content: string) => `
     <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f7f1eb; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
         <div style="background-color: #3b2f2f; padding: 30px; text-align: center;">
-            <img src="${FALLBACK_LOGO_URL}" alt="Pão Caseiro" style="width: 120px; height: auto; margin-bottom: 10px;">
+            <img src="${FALLBACK_LOGO_URL}" alt="Pão Caseiro" width="120" height="auto" style="width: 120px; height: auto; display: block; margin: 0 auto 12px; border: 0; outline: 0; text-decoration: none;" />
             <h1 style="color: #d9a65a; margin: 0; font-size: 24px; letter-spacing: 2px; text-transform: uppercase;">Pão Caseiro</h1>
             <p style="color: #f7f1eb; margin: 5px 0 0; font-size: 14px; opacity: 0.8; font-style: italic;">O Sabor que Aquece o Coração</p>
         </div>
@@ -534,33 +534,60 @@ export const sendPresentationEmail = async (name: string, userEmail: string) => 
 };
 
 /**
- * Birthday Celebration Email
+ * Birthday Celebration Email — personalized unique coupon, 72h validity, direct menu link
  */
 export const sendBirthdayEmail = async (email: string, name: string) => {
+    // Generate unique coupon: first name slug + random hex based on name + today
+    const firstName = name.trim().split(' ')[0].toUpperCase().replace(/[^A-Z]/g, '').slice(0, 8);
+    const today = new Date();
+    const seed = `${firstName}-${today.getFullYear()}-${today.getMonth()}-${today.getDate()}`;
+    let hash = 0;
+    for (let i = 0; i < seed.length; i++) {
+        hash = ((hash << 5) - hash) + seed.charCodeAt(i);
+        hash |= 0;
+    }
+    const hashHex = Math.abs(hash).toString(36).toUpperCase().slice(0, 4);
+    const couponCode = `BDAY-${firstName}-${hashHex}`;
+
+    // 72h expiry
+    const expiryDate = new Date(today.getTime() + 72 * 60 * 60 * 1000);
+    const expiryStr = expiryDate.toLocaleDateString('pt-PT', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
+
+    // Direct menu link with coupon pre-applied
+    const menuLink = `${PRODUCTION_URL}/menu?coupon=${encodeURIComponent(couponCode)}`;
+
     const html = `
         <div style="text-align: center;">
-            <h1 style="color: #d9a65a; font-size: 32px;">Feliz Aniversário! 🎂</h1>
-            <p style="font-size: 18px; color: #3b2f2f;">Olá, <strong>${name}</strong>!</p>
-            <p>Hoje é um dia especial e a equipa da Pão Caseiro não quis deixar passar em branco.</p>
+            <h1 style="color: #d9a65a; font-size: 32px; margin-bottom: 8px;">Feliz Aniversário! 🎂</h1>
+            <p style="font-size: 18px; color: #3b2f2f; margin: 0 0 8px;">Olá, <strong>${name}</strong>!</p>
+            <p style="color: #666; margin: 0 0 24px;">Hoje é um dia especial e a equipa da Pão Caseiro não quis deixar passar em branco.</p>
             
-            <div style="background-color: #ffffff; padding: 30px; border-radius: 20px; margin: 30px 0; border: 2px solid #f7f1eb;">
-                <p style="font-size: 16px; margin-bottom: 20px;">Para celebrar o seu dia, temos um presente para si:</p>
-                <div style="background-color: #3b2f2f; color: #d9a65a; padding: 20px; border-radius: 12px; display: inline-block;">
-                    <p style="margin: 0; font-size: 12px; text-transform: uppercase;">Use o Cupão:</p>
-                    <h2 style="margin: 5px 0; font-size: 24px; letter-spacing: 5px;">BDAY-PC2026</h2>
-                    <p style="margin: 5px 0 0; font-size: 14px;"><strong>15% DESCONTO</strong> no seu próximo pedido</p>
+            <div style="background-color: #ffffff; padding: 30px; border-radius: 20px; margin: 24px 0; border: 2px solid #f0e8df; box-shadow: 0 4px 12px rgba(59,47,47,0.06);">
+                <p style="font-size: 15px; margin: 0 0 20px; color: #3b2f2f;">Para celebrar o seu dia, temos um presente <strong>exclusivo</strong> para si:</p>
+                
+                <div style="background: linear-gradient(135deg, #3b2f2f 0%, #5a3e2b 100%); color: #d9a65a; padding: 24px 32px; border-radius: 16px; display: inline-block; box-shadow: 0 6px 20px rgba(59,47,47,0.3);">
+                    <p style="margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: 3px; opacity: 0.8;">Cupão Pessoal de Aniversário</p>
+                    <h2 style="margin: 8px 0; font-size: 26px; letter-spacing: 6px; font-family: monospace;">${couponCode}</h2>
+                    <p style="margin: 4px 0 0; font-size: 14px;"><strong>15% DESCONTO</strong> em todo o menu</p>
+                </div>
+
+                <div style="margin-top: 20px; padding: 12px 20px; background-color: #fff8f0; border-radius: 10px; border-left: 4px solid #d9a65a; text-align: left; display: inline-block; min-width: 280px;">
+                    <p style="margin: 0; font-size: 12px; color: #888; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">⏳ Válido até</p>
+                    <p style="margin: 4px 0 0; font-size: 14px; color: #3b2f2f; font-weight: bold;">${expiryStr}</p>
+                    <p style="margin: 4px 0 0; font-size: 11px; color: #aaa;">Este cupão é pessoal e intransferível. Válido apenas no seu dia de aniversário (72 horas).</p>
                 </div>
             </div>
 
-            <p>Esperamos que o seu dia seja repleto de doçura e momentos inesquecíveis.</p>
+            <p style="color: #555; font-size: 14px; margin-bottom: 24px;">Esperamos que o seu dia seja repleto de doçura e momentos inesquecíveis. 🎉</p>
             
-            <div style="text-align: center; margin-top: 30px;">
-                <a href="${PRODUCTION_URL}/menu" style="background-color: #d9a65a; color: #3b2f2f; padding: 15px 30px; text-decoration: none; border-radius: 30px; font-weight: bold; display: inline-block;">ESCOLHER O MEU BOLO</a>
+            <div style="text-align: center; margin-top: 8px;">
+                <a href="${menuLink}" style="background-color: #d9a65a; color: #3b2f2f; padding: 16px 36px; text-decoration: none; border-radius: 30px; font-weight: bold; font-size: 16px; display: inline-block; box-shadow: 0 4px 12px rgba(217,166,90,0.4);">🎂 FAZER O MEU PEDIDO COM DESCONTO</a>
+                <p style="margin-top: 10px; font-size: 11px; color: #aaa;">O cupão é aplicado automaticamente ao clicar no botão.</p>
             </div>
         </div>
     `;
 
-    return sendEmail([email], `Parabéns, ${name}! 🎈 Temos um presente para si`, html);
+    return sendEmail([email], `🎂 Parabéns, ${name}! O seu presente exclusivo de aniversário está aqui`, html);
 };
 
 /**

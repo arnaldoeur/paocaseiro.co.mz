@@ -52,61 +52,58 @@ const SERVICES = [
 
 const CLASSICS = [
     {
-        title: 'Pastéis de Nata',
-        desc: 'A clássica doçura portuguesa, estaladiços por fora e cremosos por dentro.',
+        title: 'Croissant Folhado',
+        desc: 'Folhado estaladiço, amanteigado e leve — perfeito para começar o dia.',
         price: '',
-        image: '/assets/products/pastel-de-nata.png',
+        image: '/assets/products/croissant-folhado.png',
+        categoryId: 'folhados-salgados'
+    },
+    {
+        title: 'Croissant de Chocolate',
+        desc: 'Folhado irresistível recheado com chocolate derretido de qualidade.',
+        price: '',
+        image: '/assets/products/croissants-chocolate.png',
         categoryId: 'folhados-e-doces'
     },
     {
-        title: 'Pão de Cereais',
-        desc: 'Uma opção saudável, rica em fibra e com um sabor inconfundível.',
+        title: 'Croissants Recheados',
+        desc: 'Recheios variados para todos os gostos — experimente o seu favorito.',
         price: '',
-        image: '/assets/products/pao-cereais.png',
-        categoryId: 'paes'
+        image: '/assets/products/croissants-recheados-extra.png',
+        categoryId: 'folhados-salgados'
     },
     {
-        title: 'Pão Integral',
-        desc: 'O nosso pão integral clássico, fresco a toda a hora.',
+        title: 'Hambúrguer Completo',
+        desc: 'O nosso hambúrguer artesanal com todos os ingredientes frescos.',
         price: '',
-        image: '/assets/products/pao-integral.png',
-        categoryId: 'paes'
+        image: '/assets/products/hamburguer-completo.png',
+        categoryId: 'lanches'
+    },
+    {
+        title: 'Folhados Recheados',
+        desc: 'Folhados salgados frescos, recheados com carnes e queijos selecionados.',
+        price: '',
+        image: '/assets/products/folhados-recheados.png',
+        categoryId: 'folhados-salgados'
     },
     {
         title: 'Pão Caseiro',
         desc: 'Aquele pão rústico especial que toda a família adora.',
         price: '',
-        image: '/assets/products/pao-caseiro.png',
-        categoryId: 'paes'
-    },
-    {
-        title: 'Croissants',
-        desc: 'Folhados, recheados ou simples, sempre com a máxima qualidade.',
-        price: '',
-        image: '/assets/products/croissants-recheados.png',
-        categoryId: 'folhados-salgados'
-    },
-    {
-        title: 'Broa de Milho',
-        desc: 'Broa densa e saborosa, feita com a melhor farinha de milho.',
-        price: '',
-        image: '/assets/products/broa-milho.png',
+        image: '/assets/products/pao-caseiro-extra-2.png',
         categoryId: 'paes'
     }
 ];
 
 const DEFAULT_GALLERY_ITEMS = [
-    { src: '/assets/products/pao-caseiro.png', caption: 'Pão Caseiro Tradicional' },
-    { src: '/assets/products/pao-cereais.png', caption: 'Pão de Cereais' },
-    { src: '/assets/products/pastel-de-nata.png', caption: 'Pastel de Nata' },
-    { src: '/assets/products/fatias-xadrez.png', caption: 'Fatias Xadrez' },
-    { src: '/assets/products/croissants-folhados.png', caption: 'Folhados e Croissants' },
-    { src: '/assets/products/queques.png', caption: 'Queques Caseiros' },
-    { src: '/assets/products/empadas.png', caption: 'Empadas' },
-    { src: '/assets/products/chamussaS.png', caption: 'Chamussas' },
-    { src: '/assets/products/pizza-frango.png', caption: 'Pizzas Artesanais' },
-    { src: '/assets/products/torta.png', caption: 'Tortas e Doces' },
-    { src: '/assets/products/cafe-categoria.png', caption: 'O Nosso Café' }
+    { src: '/assets/products/pao-caseiro-extra-2.png', caption: 'Pão Caseiro Artesanal' },
+    { src: '/assets/products/croissant-folhado.png', caption: 'Croissant Folhado' },
+    { src: '/assets/products/croissants-chocolate.png', caption: 'Croissants de Chocolate' },
+    { src: '/assets/products/croissants-recheados-extra.png', caption: 'Croissants Recheados' },
+    { src: '/assets/products/hamburguer-completo.png', caption: 'Hambúrguer Completo' },
+    { src: '/assets/products/pizza_mexicana.webp', caption: 'Pizza Mexicana' },
+    { src: '/assets/products/pizza-frango.png', caption: 'Pizza de Frango' },
+    { src: '/assets/products/folhados-recheados.png', caption: 'Folhados Recheados' }
 ];
 
 export const Home: React.FC<HomeProps> = ({ language }) => {

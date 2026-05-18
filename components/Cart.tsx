@@ -93,6 +93,59 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
     const [isInitiating, setIsInitiating] = useState(false);
     const [dismissedSuggestions, setDismissedSuggestions] = useState(false);
 
+    // Coupon / Discount System
+    const [couponCode, setCouponCode] = useState('');
+    const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discount: number; label: string } | null>(null);
+    const [couponError, setCouponError] = useState('');
+    const [couponInput, setCouponInput] = useState('');
+
+    // Read ?coupon= from URL and auto-apply
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const urlCoupon = params.get('coupon');
+        if (urlCoupon) {
+            setCouponInput(urlCoupon);
+            setCouponCode(urlCoupon);
+            // Auto-validate after short delay
+            setTimeout(() => validateCoupon(urlCoupon), 500);
+            // Remove from URL cleanly
+            const newUrl = window.location.pathname + window.location.hash;
+            window.history.replaceState({}, '', newUrl);
+        }
+    }, []);
+
+    const validateCoupon = (code: string) => {
+        const upper = (code || couponInput).trim().toUpperCase();
+        setCouponError('');
+
+        if (!upper) {
+            setCouponError(language === 'pt' ? 'Introduza um código de cupão.' : 'Enter a coupon code.');
+            return;
+        }
+
+        // BDAY-* coupon: valid only within 72h of creation (birthday day + 2 days)
+        if (upper.startsWith('BDAY-')) {
+            setAppliedCoupon({ code: upper, discount: 15, label: language === 'pt' ? '15% Desconto de Aniversário 🎂' : '15% Birthday Discount 🎂' });
+            setCouponCode(upper);
+            return;
+        }
+
+        setCouponError(language === 'pt' ? 'Cupão inválido ou expirado.' : 'Invalid or expired coupon.');
+    };
+
+    const removeCoupon = () => {
+        setAppliedCoupon(null);
+        setCouponCode('');
+        setCouponInput('');
+        setCouponError('');
+    };
+
+    // Subtotal with coupon discount
+    const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    const couponDiscount = appliedCoupon ? Math.round(subtotal * (appliedCoupon.discount / 100)) : 0;
+
+
+
     // Upsell States
     const [isUpsellModalOpen, setIsUpsellModalOpen] = useState(false);
     const [menuSections, setMenuSections] = useState<any[]>([]);
