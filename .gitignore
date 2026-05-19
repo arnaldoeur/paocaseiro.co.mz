@@ -39,7 +39,7 @@ paocaseiro-deploy.zip
 # Temp/Bug files
 bug/
 test_extract/
-dist/
+# dist/
 capacitor-cordova-android-plugins/
 
 .edge-debug/

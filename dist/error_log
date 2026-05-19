@@ -1,0 +1,4 @@
+[2026-05-18 02:32:29 UTC] [PaoCaseiro DB] Error during self-healing: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'notes' in 'SET'
+[2026-05-18 02:35:02 UTC] [PaoCaseiro DB] Error during self-healing: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'notes' in 'SET'
+[2026-05-18 02:36:14 UTC] [PaoCaseiro DB] Error during self-healing: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'notes' in 'SET'
+[2026-05-18 02:37:15 UTC] [PaoCaseiro DB] Error during self-healing: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'notes' in 'SET'
