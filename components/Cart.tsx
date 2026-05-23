@@ -231,6 +231,13 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
         }
     };
 
+    const closeCartDrawer = () => {
+        setIsOpen(false);
+        setIsUpsellModalOpen(false);
+        setProceedToCheckoutAfterUpsell(false);
+        setError('');
+    };
+
     // Global listener to open cart from modals
     useEffect(() => {
         const handleOpenCart = () => {
@@ -680,6 +687,48 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
         localStorage.setItem('last_order_id', shortId); // Store for redirect recovery
         setStep('processing');
         setError('');
+
+        // [SIMULATION FOR TEST PRODUCTS]
+        const isTestOrder = cart.some(item => item.name.toLowerCase().includes('teste'));
+        if (isTestOrder) {
+            setIsInitiating(true);
+            setTimeout(async () => {
+                try {
+                    setIsInitiating(false);
+                    const itemsSnapshot = cart.map(item => ({
+                        name: item.name,
+                        quantity: item.quantity,
+                        price: item.price
+                    }));
+                    const orderPayload = {
+                        id: `ord_${refId}`,
+                        short_id: shortId,
+                        customer_id: user?.id || null,
+                        customer_name: details.name,
+                        customer_phone: details.phone,
+                        customer_email: details.email,
+                        total_amount: amountToPay,
+                        delivery_type: details.type as any,
+                        delivery_address: details.address,
+                        notes: details.notes,
+                        payment_method: 'mpesa',
+                        payment_status: 'paid',
+                        payment_reference: refId,
+                        transaction_id: 'TX-SIMULADO-TESTE',
+                        status: 'pending',
+                        items: itemsSnapshot
+                    };
+                    await hostingerService.saveOrder(orderPayload);
+                    finishOrder(shortId, refId, 'TX-SIMULADO-TESTE');
+                    setShowSuccessModal(true);
+                } catch (e: any) {
+                    console.error("Test order simulation error:", e);
+                    setError('Erro ao simular pedido de teste: ' + e.message);
+                    setStep('payment');
+                }
+            }, 1500);
+            return;
+        }
 
         // Test bypass removed for production phase
 
@@ -1773,7 +1822,7 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
-                            onClick={() => setIsOpen(false)}
+                            onClick={closeCartDrawer}
                             className="fixed inset-0 bg-black/60 z-[60] backdrop-blur-sm"
                         />
                         <motion.div
@@ -1799,7 +1848,7 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                                         {step === 'cart' ? 'Carrinho' : step === 'details' ? 'Dados' : step === 'payment' ? 'Pagamento' : 'Status'}
                                     </h2>
                                 </div>
-                                <button onClick={() => setIsOpen(false)} title="Fechar Carrinho" className="hover:text-[#d9a65a] transition-colors">
+                                <button onClick={closeCartDrawer} title="Fechar Carrinho" className="hover:text-[#d9a65a] transition-colors">
                                     <X className="w-6 h-6" />
                                 </button>
                             </div>
