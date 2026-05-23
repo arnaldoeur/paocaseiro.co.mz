@@ -1,6 +1,8 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { hostingerService } from './hostingerService';
+import { generateFormalInvoicePDF } from './pdfGenerator';
+import { getCompanySettings } from './billingService';
 
 const IS_PROD = typeof window !== 'undefined' && !window.location.hostname.includes('localhost');
 const API_URL = IS_PROD 
@@ -270,13 +272,10 @@ export const notifyCustomerNewOrderWhatsApp = async (order: any, items: any[], c
     const pdfCaption = message;
 
     try {
-        const { generateFormalInvoicePDF } = await import('./pdfGenerator');
-        
         let companyInfo = customCompanyInfo;
         if (!companyInfo) {
             try {
-                // Fetch settings from Hostinger bridge
-                companyInfo = await hostingerService.getSettings();
+                companyInfo = await getCompanySettings();
             } catch (err) {
                 console.error("Failed to fetch settings for WhatsApp:", err);
             }
@@ -285,10 +284,12 @@ export const notifyCustomerNewOrderWhatsApp = async (order: any, items: any[], c
         const doc = await generateFormalInvoicePDF(order, items, companyInfo);
         const pdfBase64 = doc.output('datauristring').split(',')[1];
         
+        const shortIdStr = order.short_id || order.orderId || (order.id ? order.id.slice(-6).toUpperCase() : 'UNKNOWN');
+
         return await sendWhatsAppMedia(
             customerPhone,
             'document',
-            `Fatura-Recibo-PaoCaseiro-${order.short_id || order.id.slice(-6).toUpperCase()}.pdf`,
+            `Fatura-Recibo-PaoCaseiro-${shortIdStr}.pdf`,
             pdfCaption,
             pdfBase64
         );
