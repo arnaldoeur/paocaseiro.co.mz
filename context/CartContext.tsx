@@ -16,6 +16,8 @@ interface CartContextType {
     addToCart: (item: Omit<CartItem, 'quantity'> & { quantity?: number }) => void;
     removeFromCart: (itemName: string) => void;
     clearCart: () => void;
+    setCart: (items: CartItem[]) => void;
+    restoreBackupCart: () => void;
     total: number;
 }
 
@@ -28,7 +30,6 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             if (!saved) return [];
             const parsed = JSON.parse(saved);
             if (Array.isArray(parsed)) {
-                // Ensure prices are valid numbers
                 return parsed.map(item => ({
                     ...item,
                     price: Number(item.price) || 0,
@@ -48,21 +49,17 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const addToCart = (newItem: Omit<CartItem, 'quantity'> & { quantity?: number }) => {
         setCart((prevCart) => {
             const existingItem = prevCart.find((item) => item.name === newItem.name);
-            const qty = newItem.quantity || 1; // Default to 1 if not provided, but allow negatives via this too? 
-            // Wait, logic from Cart.tsx was passing { ...item, quantity: 1 } or -1. 
-            // But here I'm modifying to support `quantity` as input correctly.
+            const qty = newItem.quantity || 1;
 
             if (existingItem) {
                 const newQuantity = existingItem.quantity + qty;
                 if (newQuantity <= 0) {
                     return prevCart.filter(item => item.name !== newItem.name);
                 }
-
                 return prevCart.map((item) =>
                     item.name === newItem.name ? { ...item, quantity: newQuantity } : item
                 );
             }
-            // If item doesn't exist and qty is positive
             if (qty > 0) {
                 return [...prevCart, { ...newItem, quantity: qty }];
             }
@@ -76,10 +73,33 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const clearCart = () => setCart([]);
 
+    /**
+     * Restores a previously backed-up cart from localStorage key 'cancelled_cart_backup'.
+     * Called when the user cancels a payment and wants to try again.
+     */
+    const restoreBackupCart = () => {
+        try {
+            const backup = localStorage.getItem('cancelled_cart_backup');
+            if (backup) {
+                const parsed = JSON.parse(backup);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    setCart(parsed.map(item => ({
+                        ...item,
+                        price: Number(item.price) || 0,
+                        quantity: Number(item.quantity) || 1
+                    })));
+                    localStorage.removeItem('cancelled_cart_backup');
+                }
+            }
+        } catch(e) {
+            console.error('Failed to restore backup cart', e);
+        }
+    };
+
     const total = cart.reduce((sum, item) => sum + (Number(item.price) || 0) * (Number(item.quantity) || 1), 0);
 
     return (
-        <CartContext.Provider value={{ cart, addToCart, removeFromCart, clearCart, total }}>
+        <CartContext.Provider value={{ cart, addToCart, removeFromCart, clearCart, setCart, restoreBackupCart, total }}>
             {children}
         </CartContext.Provider>
     );

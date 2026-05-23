@@ -370,6 +370,56 @@ function verify_jwt($jwt, $secret) {
     return false;
 }
 
+// ── INTERNAL NOTIFICATION HELPERS (used by webhook without auth check) ──────
+function send_whatsapp_internal($number, $text) {
+    $wa_instance = "Pao caseiro";
+    $wa_apikey   = "84E61FAAB9AB-47FD-8F42-EAFE4DAB9C49";
+    $wa_url      = "https://wa.zyphtech.com";
+    $endpoint    = "/message/sendText/" . rawurlencode($wa_instance);
+    $payload     = [
+        "number"  => $number,
+        "text"    => $text,
+        "options" => ["delay" => 1200, "presence" => "composing", "linkPreview" => false]
+    ];
+    $ch = curl_init($wa_url . $endpoint);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => json_encode($payload),
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_TIMEOUT        => 10,
+        CURLOPT_HTTPHEADER     => ["Content-Type: application/json", "apikey: $wa_apikey"]
+    ]);
+    $res = curl_exec($ch);
+    $err = curl_error($ch);
+    curl_close($ch);
+    return $err ? ['error' => $err] : json_decode($res, true);
+}
+
+function send_sms_internal($number, $message) {
+    $turbo_token = "WTJlMzZpeDNNb25WR3hZK0NhcG1DUT09";
+    $payload = [
+        "user_token" => $turbo_token,
+        "sender_id"  => "PAOCASEIRO",
+        "number"     => $number,
+        "message"    => $message
+    ];
+    $ch = curl_init('https://my.turbo.host/api/international-sms/submit');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => json_encode($payload),
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_TIMEOUT        => 10,
+        CURLOPT_HTTPHEADER     => ["Content-Type: application/json"]
+    ]);
+    $res = curl_exec($ch);
+    $err = curl_error($ch);
+    curl_close($ch);
+    return $err ? ['error' => $err] : json_decode($res, true);
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 try {
     switch ($action) {
     // --- PRODUCTS ---
@@ -616,6 +666,29 @@ try {
         break;
 
     // --- ORDERS ---
+    case 'get_order':
+        $orderId = $input['id'] ?? $_GET['id'] ?? '';
+        if (empty($orderId)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Order ID required']);
+            break;
+        }
+        // Try exact match first, then short_id
+        $stmtO = $pdo->prepare("SELECT o.*, c.name as customer_name_full, c.phone as customer_phone_full FROM orders o LEFT JOIN customers c ON o.customer_id = c.id WHERE o.id = ? OR o.short_id = ? LIMIT 1");
+        $stmtO->execute([$orderId, $orderId]);
+        $foundOrder = $stmtO->fetch();
+        if (!$foundOrder) {
+            http_response_code(404);
+            echo json_encode(['error' => 'Pedido não encontrado']);
+            break;
+        }
+        $stmtItems = $pdo->prepare("SELECT * FROM order_items WHERE order_id = ?");
+        $stmtItems->execute([$foundOrder['id']]);
+        $foundOrder['items'] = $stmtItems->fetchAll();
+        echo json_encode($foundOrder);
+        break;
+
+
     case 'get_orders':
         $status = $input['status'] ?? $_GET['status'] ?? null;
         $customer_id = $input['customer_id'] ?? $_GET['customer_id'] ?? null;
@@ -2407,30 +2480,79 @@ try {
         // Webhook security verification per PaySuite docs
         $payload = file_get_contents('php://input');
         $signature = $_SERVER['HTTP_X_WEBHOOK_SIGNATURE'] ?? '';
-        
+
         debug_log("PaySuite Webhook Received. Signature: " . $signature);
-        
+
         $calculatedSignature = hash_hmac('sha256', $payload, $PAYSUITE_WEBHOOK_SECRET);
-        
+
         if (hash_equals($signature, $calculatedSignature)) {
             $data = json_decode($payload, true);
             $event = $data['event'] ?? '';
             $ref = $data['data']['reference'] ?? '';
             $txId = $data['data']['transaction']['id'] ?? null;
-            
+
             debug_log("Webhook Verified: $event for Ref: $ref");
-            
+
             if ($event === 'payment.success') {
-                $stmt = $pdo->prepare("UPDATE orders SET payment_status = 'paid', status = 'paid', transaction_id = ?, updated_at = NOW() WHERE payment_reference = ?");
-                $stmt->execute([$txId, $ref]);
-                debug_log("Order $ref marked as PAID via Webhook.");
+                // FIX: Update payment_status='paid' but KEEP status='pending' so order appears in KDS panel
+                $stmtUpd = $pdo->prepare("UPDATE orders SET payment_status = 'paid', transaction_id = ?, updated_at = NOW() WHERE payment_reference = ?");
+                $stmtUpd->execute([$txId, $ref]);
+                debug_log("Order $ref payment_status marked as PAID via Webhook. Status remains 'pending' for KDS.");
+
+                // Fetch order details for notifications
+                $stmtFetch = $pdo->prepare("SELECT * FROM orders WHERE payment_reference = ? LIMIT 1");
+                $stmtFetch->execute([$ref]);
+                $paidOrder = $stmtFetch->fetch();
+
+                if ($paidOrder) {
+                    $clientName  = $paidOrder['customer_name'] ?? 'Cliente';
+                    $clientPhone = $paidOrder['customer_phone'] ?? '';
+                    $shortId     = $paidOrder['short_id'] ?? $ref;
+                    $totalAmt    = number_format((float)($paidOrder['total_amount'] ?? 0), 2, '.', ',');
+                    $receiptUrl  = "https://paocaseiro.co.mz/order-receipt/" . $shortId;
+
+                    // --- Notify CLIENT ---
+                    if ($clientPhone) {
+                        $clientMsg = "Ola {$clientName}! O seu pagamento de {$totalAmt} MT foi confirmado. Pedido #{$shortId} em preparacao. Recibo: {$receiptUrl}";
+                        // WhatsApp
+                        $waResult = send_whatsapp_internal($clientPhone, $clientMsg);
+                        debug_log("Client WA notification result: " . json_encode($waResult));
+                        // SMS fallback
+                        $smsMsg = "PaoCaseiro: Pagamento {$totalAmt} MT confirmado! Pedido #{$shortId}. Recibo: {$receiptUrl}";
+                        send_sms_internal($clientPhone, $smsMsg);
+                    }
+
+                    // --- Notify ADMIN TEAM via WhatsApp ---
+                    $adminNumbers = ['258879146662', '258846930960', '258876666903'];
+                    $adminMsg = "NOVO PEDIDO PAGO! #{$shortId} | Cliente: {$clientName} ({$clientPhone}) | Total: {$totalAmt} MT | Ref: {$ref} | Ver painel: https://paocaseiro.co.mz/admin";
+                    foreach ($adminNumbers as $adminNum) {
+                        send_whatsapp_internal($adminNum, $adminMsg);
+                    }
+                    debug_log("Admin team notified for order $shortId");
+
+                    // --- Insert Notification in DB ---
+                    try {
+                        $notifId = uniqid('notif_');
+                        $stmtNotif = $pdo->prepare("INSERT INTO notifications (id, type, title, message, entity_id, link, `read`) VALUES (?, 'order', ?, ?, ?, ?, 0)");
+                        $stmtNotif->execute([
+                            $notifId,
+                            "Pagamento Confirmado: #{$shortId}",
+                            "Pedido #{$shortId} de {$clientName} foi pago ({$totalAmt} MT). Pronto para preparação.",
+                            $paidOrder['id'],
+                            "/admin?tab=orders&order=" . $shortId
+                        ]);
+                    } catch (Exception $notifEx) {
+                        debug_log("Failed to insert notification: " . $notifEx->getMessage());
+                    }
+                }
+
             } else if ($event === 'payment.failed') {
                 $error = $data['data']['error'] ?? 'Unknown error';
-                $stmt = $pdo->prepare("UPDATE orders SET payment_status = 'failed', notes = CONCAT(IFNULL(notes,''), '\nPaySuite Error: ', ?), updated_at = NOW() WHERE payment_reference = ?");
-                $stmt->execute([$error, $ref]);
+                $stmtFail = $pdo->prepare("UPDATE orders SET payment_status = 'failed', notes = CONCAT(IFNULL(notes,''), '\nPaySuite Error: ', ?), updated_at = NOW() WHERE payment_reference = ?");
+                $stmtFail->execute([$error, $ref]);
                 debug_log("Order $ref marked as FAILED via Webhook: $error");
             }
-            
+
             echo json_encode(["status" => "success", "message" => "Event processed"]);
         } else {
             debug_log("Webhook Signature Mismatch! Calculated: $calculatedSignature");

@@ -73,6 +73,29 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
 
     const [generatedOtp, setGeneratedOtp] = useState('');
 
+    // Reset all state whenever the modal closes so it's fresh when re-opened
+    useEffect(() => {
+        if (!isOpen) {
+            setStep('choice');
+            setMode(null);
+            setIdentifier('');
+            setPassword('');
+            setOtp('');
+            setError('');
+            setSuccessMsg('');
+            setLoading(false);
+            setPendingReset(false);
+            setGeneratedOtp('');
+            setName('');
+            setEmail('');
+            setDob('');
+            setAddress('');
+            setNuit('');
+            setWhatsapp('');
+            setExistingCustomer(null);
+        }
+    }, [isOpen]);
+
     const handleCheckUser = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
@@ -232,7 +255,8 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
             await logAudit({ action: 'CUSTOMER_LOGIN', entity_type: 'customer', entity_id: customerData.id, details: { method: 'password' }, customer_phone: customerData.contact_no });
 
             onClose();
-            navigate('/dashboard');
+            // Intentionally no auto-navigate: let user stay on current page after login
+
         } catch (err: any) {
             console.error('Password Login Error:', err);
             setError(err.message || 'Erro ao entrar.');
@@ -339,7 +363,8 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                 await logAudit({ action: 'CUSTOMER_LOGIN', entity_type: 'customer', entity_id: existingCustomer.id, details: { method: 'otp' }, customer_phone: existingCustomer.contact_no });
 
                 onClose();
-                navigate('/dashboard');
+                // Intentionally no auto-navigate: modal closes reactively
+
             } else {
                 setStep('register');
             }
@@ -411,7 +436,8 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
             }
 
             onClose();
-            navigate('/dashboard');
+            // Intentionally no auto-navigate: modal closes reactively
+
         } catch (err: any) {
             console.error('Registration Error:', err);
             
@@ -446,10 +472,10 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                         className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] md:max-h-[85vh] overflow-hidden relative flex flex-col"
                     >
                         <button
-                            onClick={onClose}
+                            onClick={(e) => { e.stopPropagation(); onClose(); }}
                             title="Fechar"
                             aria-label="Fechar"
-                            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 z-10"
+                            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 z-50 pointer-events-auto bg-white rounded-full p-1 shadow-sm hover:shadow-md transition-all"
                         >
                             <X className="w-6 h-6" />
                         </button>

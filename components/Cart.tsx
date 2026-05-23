@@ -37,7 +37,7 @@ interface CartProps {
 }
 
 export const Cart: React.FC<CartProps> = ({ language }) => {
-    const { cart, addToCart, removeFromCart, total, clearCart } = useCart();
+    const { cart, addToCart, removeFromCart, total, clearCart, restoreBackupCart } = useCart();
     const t = translations[language];
     const [isOpen, setIsOpen] = useState(false);
     const [step, setStep] = useState<CheckoutStep>('cart');
@@ -727,7 +727,42 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
             if (result.success && result.checkout_url) {
                 paymentWindow.location.href = result.checkout_url;
                 setCurrentTxId(result.transaction_id);
-                setStep('processing'); 
+
+                // ── FIX: Save pending order to DB BEFORE user completes payment ──
+                // This ensures the webhook can find and update the order even if
+                // the user closes the tab before returning to the shop.
+                const itemsSnapshot = cart.map(item => ({
+                    name: item.name,
+                    quantity: item.quantity,
+                    price: item.price
+                }));
+                const pendingOrderPayload = {
+                    id: `ord_${refId}`,
+                    short_id: shortId,
+                    customer_id: user?.id || null,
+                    customer_name: details.name,
+                    customer_phone: details.phone,
+                    customer_email: details.email,
+                    total_amount: amountToPay,
+                    delivery_type: details.type as any,
+                    delivery_address: details.address,
+                    notes: details.notes,
+                    payment_method: paymentMethod || 'mpesa',
+                    payment_status: 'pending',
+                    payment_reference: refId,
+                    transaction_id: result.transaction_id,
+                    status: 'pending',
+                    items: itemsSnapshot
+                };
+                hostingerService.saveOrder(pendingOrderPayload).catch(err =>
+                    console.error('[Cart] Failed to pre-save pending order:', err)
+                );
+
+                // ── Backup cart & clear immediately to prevent duplicate checkout ──
+                localStorage.setItem('cancelled_cart_backup', JSON.stringify(cart));
+                clearCart();
+
+                setStep('processing');
             } else {
                 paymentWindow.close();
                 setStep('payment');
@@ -1670,6 +1705,8 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                                 setStep('payment');
                                 setCurrentTxId(undefined);
                                 setPaymentUrl(null);
+                                // Restore cart items that were backed up before payment redirect
+                                restoreBackupCart();
                             }}
                             title="Cancelar"
                             className="bg-gray-100 text-gray-500 py-3 px-8 rounded-xl font-bold hover:bg-gray-200 transition-all flex items-center gap-2 border border-gray-300"
