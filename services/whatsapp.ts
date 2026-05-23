@@ -263,12 +263,8 @@ export const notifyCustomerNewOrderWhatsApp = async (order: any, items: any[], c
     const firstName = getFirstName(order);
 
     let paymentInstructions = '';
-    const isPaid = order.payment_status === 'paid' || order.payment_status === 'completed';
-    if (!isPaid) {
-        paymentInstructions = `\n\n💳 *Dados para Pagamento:*\nPor favor, faça o pagamento por M-Pesa para o número *84 693 0960* e envie o comprovativo.`;
-    }
 
-    const message = `*🍞 Pão Caseiro — Encomenda Confirmada!*\n\nOlá ${firstName}, muito obrigado por escolher o sabor do nosso coração! 🤎\n\n📦 *Pedido:* #${order.short_id || order.orderId || (order.id ? order.id.slice(-6).toUpperCase() : '')}\n💰 *Total:* ${total} MT\n\n📝 *Artigos:*\n${itemsText}${paymentInstructions}\n\n🔗 *Ver Recibo Online:*\n${url}\n\n*O sabor que aquece o seu coração!*`;
+    const message = `*🍞 Pão Caseiro — Encomenda Confirmada!*\n\nOlá ${firstName}, muito obrigado por escolher a nossa padaria! 🍞\n\n📦 *Pedido:* #${order.short_id || order.orderId || (order.id ? order.id.slice(-6).toUpperCase() : '')}\n💰 *Total:* ${total} MT\n\n📝 *Artigos:*\n${itemsText}${paymentInstructions}\n\n🔗 *Ver Recibo Online:*\n${url}\n\n*O sabor que aquece o seu coração!*`;
 
     // Send the complete message as the PDF caption
     const pdfCaption = message;

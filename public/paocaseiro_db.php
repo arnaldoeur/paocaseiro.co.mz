@@ -790,9 +790,9 @@ try {
             }
 
             // 2. Insert/Update Order
-            $sql = "INSERT INTO orders (id, short_id, customer_id, customer_name, customer_phone, customer_email, total_amount, status, delivery_type, delivery_address, notes, payment_method, payment_status, payment_reference, transaction_id, estimated_ready_at, cash_session_id) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ON DUPLICATE KEY UPDATE status=VALUES(status), payment_status=VALUES(payment_status), payment_reference=VALUES(payment_reference), transaction_id=VALUES(transaction_id), notes=VALUES(notes), estimated_ready_at=VALUES(estimated_ready_at), cash_session_id=VALUES(cash_session_id)";
+            $sql = "INSERT INTO orders (id, short_id, customer_id, customer_name, customer_phone, customer_email, total_amount, amount_paid, balance, status, delivery_type, delivery_address, notes, payment_method, payment_status, payment_reference, transaction_id, estimated_ready_at, cash_session_id) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE status=VALUES(status), payment_status=VALUES(payment_status), payment_reference=VALUES(payment_reference), transaction_id=VALUES(transaction_id), notes=VALUES(notes), estimated_ready_at=VALUES(estimated_ready_at), cash_session_id=VALUES(cash_session_id), amount_paid=VALUES(amount_paid), balance=VALUES(balance)";
             
             $stmt = $pdo->prepare($sql);
             $stmt->execute([
@@ -803,6 +803,8 @@ try {
                 $o['customer_phone'],
                 $o['customer_email'] ?? null,
                 $o['total_amount'] ?? 0,
+                (float)($o['amount_paid'] ?? 0),
+                (float)($o['balance'] ?? 0),
                 $o['status'] ?? 'pending',
                 $o['delivery_type'] ?? 'pickup',
                 $o['delivery_address'] ?? null,

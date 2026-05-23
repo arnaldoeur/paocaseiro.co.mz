@@ -15,6 +15,8 @@ export interface HostingerOrderData {
     customer_phone: string;
     customer_email?: string;
     total_amount: number;
+    amount_paid?: number;
+    balance?: number;
     delivery_type: 'pickup' | 'delivery' | 'dine_in';
     delivery_address?: string;
     notes?: string;
