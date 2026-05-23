@@ -545,18 +545,6 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                 return;
             }
 
-            // Check if we should trigger upsell popup before proceeding to details!
-            const hasDrinksOrExtras = cart.some(item => {
-                const name = item.name.toLowerCase();
-                return ['bebida', 'café', 'chá', 'sumo', 'extra', 'adicional', 'refrigerante', 'refresco', 'queijo', 'presunto', 'molho', 'maionese', 'ketcup', 'água', 'water', 'drink', 'soda', 'coke', 'fanta', 'sprite', 'sumol', 'compal', 'red bull', 'monster', 'cerveja', 'beer', 'vinho', 'wine'].some(k => name.includes(k));
-            });
-
-            if (!hasDrinksOrExtras) {
-                setProceedToCheckoutAfterUpsell(true);
-                setIsUpsellModalOpen(true);
-                return;
-            }
-
             setStep('details');
             setError('');
         } else if (step === 'details') {
@@ -689,7 +677,10 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
         setError('');
 
         // [SIMULATION FOR TEST PRODUCTS]
-        const isTestOrder = cart.some(item => item.name.toLowerCase().includes('teste'));
+        const isTestOrder = cart.some(item => {
+            const name = (item.name || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+            return name.includes('teste') || name.includes('test') || name.includes('simulado');
+        });
         if (isTestOrder) {
             setIsInitiating(true);
             setTimeout(async () => {
