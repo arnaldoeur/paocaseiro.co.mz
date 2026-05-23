@@ -39,10 +39,27 @@ const getBase64ImageFromUrl = async (url: string): Promise<string> => {
         img.crossOrigin = 'Anonymous';
         img.onload = () => {
             const canvas = document.createElement('canvas');
-            canvas.width = img.width;
-            canvas.height = img.height;
+            // Downscale image to a maximum dimension of 200px to drastically reduce PDF file size
+            const maxDim = 200;
+            let width = img.width;
+            let height = img.height;
+            if (width > maxDim || height > maxDim) {
+                if (width > height) {
+                    height = Math.round((height * maxDim) / width);
+                    width = maxDim;
+                } else {
+                    width = Math.round((width * maxDim) / height);
+                    height = maxDim;
+                }
+            }
+            canvas.width = width;
+            canvas.height = height;
             const ctx = canvas.getContext('2d');
-            if (ctx) ctx.drawImage(img, 0, 0);
+            if (ctx) {
+                ctx.imageSmoothingEnabled = true;
+                ctx.imageSmoothingQuality = 'high';
+                ctx.drawImage(img, 0, 0, width, height);
+            }
             resolve(canvas.toDataURL('image/png'));
         };
         img.onerror = () => resolve('');
