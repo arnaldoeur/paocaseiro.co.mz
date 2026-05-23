@@ -1100,7 +1100,15 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                                         {/* Image Thumbnail */}
                                         <div className="w-14 h-14 bg-[#f7f1eb] rounded-xl shrink-0 overflow-hidden border border-[#d9a65a]/10">
                                             {item.image ? (
-                                                <img src={item.image} alt={formatProductName(item.name)} className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
+                                                <img 
+                                                    src={item.image} 
+                                                    alt={formatProductName(item.name)} 
+                                                    className="w-full h-full object-cover group-hover:scale-110 transition-transform" 
+                                                    onError={(e) => {
+                                                        e.currentTarget.onerror = null;
+                                                        e.currentTarget.src = '/assets/products/pao-caseiro.png';
+                                                    }}
+                                                />
                                             ) : (
                                                 <div className="w-full h-full flex items-center justify-center text-[10px] text-[#d9a65a] font-black opacity-40">PC</div>
                                             )}
@@ -1910,6 +1918,13 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                 onClose={() => setIsLoginModalOpen(false)}
                 language={language}
                 isCheckoutFlow={true}
+            />
+
+            <UpsellModal
+                isOpen={isUpsellModalOpen}
+                onClose={handleCloseUpsell}
+                language={language}
+                menuSections={menuSections}
             />
 
         </>

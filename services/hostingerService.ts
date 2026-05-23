@@ -621,6 +621,11 @@ export const hostingerService = {
     resolveProductImage(name: string, originalImage?: string): string {
         const normalizedName = name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
         
+        // Force override for known local assets if name matches
+        if (normalizedName.includes('lingua de sogra') || normalizedName.includes('lingua da sogra')) {
+            return this.getPublicUrl('assets/products/lingua-sogra.png');
+        }
+        
         const mapping: Record<string, string> = {
             'pao caseiro': 'pao-caseiro.png',
             'pao de forma': 'pao-forma-simples.png',
