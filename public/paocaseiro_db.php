@@ -2298,7 +2298,9 @@ try {
 
     case 'test_email':
         $to = $input['to'] ?? 'geral@paocaseiro.co.mz';
-        $result = send_resend_email($to, 'Teste de Email Pão Caseiro', '<h1>Funcionando!</h1><p>Este é um teste de entrega da ponte PHP.</p>');
+        $subject = $input['subject'] ?? 'Teste de Email Pão Caseiro';
+        $html = $input['html'] ?? '<h1>Funcionando!</h1><p>Este é um teste de entrega da ponte PHP.</p>';
+        $result = send_resend_email($to, $subject, $html);
         $is_success = ($result !== false && !isset($result['error']) && !isset($result['message']));
         echo json_encode(['success' => $is_success, 'result' => $result]);
         break;

@@ -154,7 +154,7 @@ export const sendPasswordResetEmail = async (email: string, name: string, newPas
         <p style="text-align: center;">Recomendamos que altere a sua senha após o primeiro acesso para garantir a segurança da sua conta.</p>
 
         <div style="text-align: center; margin: 30px 0;">
-            <a href="${window.location.origin}/login" style="background-color: #3b2f2f; color: #d9a65a; padding: 15px 30px; text-decoration: none; border-radius: 30px; font-weight: bold; display: inline-block;">ENTRAR NA CONTA</a>
+            <a href="${PRODUCTION_URL}/login" style="background-color: #3b2f2f; color: #d9a65a; padding: 15px 30px; text-decoration: none; border-radius: 30px; font-weight: bold; display: inline-block;">ENTRAR NA CONTA</a>
         </div>
 
         <p style="font-size: 12px; color: #999; text-align: center; margin-top: 20px;">
@@ -178,7 +178,7 @@ export const sendAdminNewOrderNotification = async (order: any, items: any[]) =>
     };
 
     const adminEmail = getAdminEmail();
-    const domain = window.location.origin;
+    const domain = PRODUCTION_URL;
     const orderLink = `${domain}/admin`; // Direct link to dashboard
     const receiptLink = `${domain}/order-receipt/${order.short_id || order.id}`;
 
@@ -263,7 +263,7 @@ export const sendDeliveryNotificationEmail = async (order: any, items: any[]) =>
     const customerEmail = order.customer_email || order.customer?.email || order.email;
     if (!customerEmail) return { success: false, error: 'No email provided' };
 
-    const domain = window.location.origin;
+    const domain = PRODUCTION_URL;
     const receiptLink = `${domain}/order-receipt/${order.short_id || order.orderId}`;
 
     const itemsHtml = items.map(item => `
@@ -342,7 +342,7 @@ export const notifyOrderStatusUpdateEmail = async (order: any) => {
     };
 
     const statusText = statusMap[order.status] || order.status;
-    const domain = window.location.origin;
+    const domain = PRODUCTION_URL;
     const receiptLink = `${domain}/order-receipt/${order.short_id || order.orderId}`;
 
     const html = `
@@ -458,7 +458,7 @@ export const sendAdminNewUserNotification = async (userEmail: string, userName: 
         return 'geral@paocaseiro.co.mz';
     };
     const adminEmail = getAdminEmail();
-    const domain = window.location.origin;
+    const domain = PRODUCTION_URL;
 
     const html = `
         <div style="text-align: center; margin-bottom: 20px;">

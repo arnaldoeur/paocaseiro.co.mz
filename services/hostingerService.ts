@@ -454,8 +454,8 @@ export const hostingerService = {
         return this.fetch('save_ai_insight', { insight });
     },
 
-    async testEmail(to?: string) {
-        return this.fetch('test_email', { to });
+    async testEmail(to?: string, subject?: string, html?: string) {
+        return this.fetch('test_email', { to, subject, html });
     },
 
     // --- EMAIL CAMPAIGNS ---
