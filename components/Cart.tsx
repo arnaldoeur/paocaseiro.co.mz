@@ -130,6 +130,21 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
             return;
         }
 
+        // Generic PROMO or DESCONTO coupons (e.g. PROMO20, DESCONTO10, PROMO-20, PC-20)
+        const match = upper.match(/^(PROMO|DESCONTO|PC)-?(\d+)$/);
+        if (match) {
+            const discountPercent = parseInt(match[2], 10);
+            if (discountPercent > 0 && discountPercent <= 100) {
+                setAppliedCoupon({
+                    code: upper,
+                    discount: discountPercent,
+                    label: language === 'pt' ? `${discountPercent}% Desconto Promocional` : `${discountPercent}% Promotional Discount`
+                });
+                setCouponCode(upper);
+                return;
+            }
+        }
+
         setCouponError(language === 'pt' ? 'Cupão inválido ou expirado.' : 'Invalid or expired coupon.');
     };
 
@@ -1261,7 +1276,7 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                                     {/* Discount line */}
                                     {appliedCoupon && couponDiscount > 0 && (
                                         <div className="flex justify-between items-center text-green-600 font-bold">
-                                            <span className="text-sm">🎂 {language === 'en' ? 'Birthday Discount' : 'Desconto Aniversário'} ({appliedCoupon.discount}%)</span>
+                                            <span className="text-sm">{appliedCoupon.code.startsWith('BDAY-') ? '🎂' : '🏷️'} {appliedCoupon.label}</span>
                                             <span className="text-sm">-{couponDiscount} MT</span>
                                         </div>
                                     )}
@@ -1631,7 +1646,7 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                                 </div>
                                 {appliedCoupon && couponDiscount > 0 && (
                                     <div className="flex justify-between text-sm text-green-600 font-bold">
-                                        <span>Desconto Aniversário ({appliedCoupon.discount}%):</span>
+                                        <span>{appliedCoupon.code.startsWith('BDAY-') ? 'Desconto Aniversário' : 'Desconto Promocional'} ({appliedCoupon.discount}%):</span>
                                         <span>-{couponDiscount} MT</span>
                                     </div>
                                 )}

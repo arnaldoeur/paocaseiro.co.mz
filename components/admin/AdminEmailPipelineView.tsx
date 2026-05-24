@@ -196,25 +196,39 @@ export const AdminEmailPipelineView: React.FC = () => {
 
             const domain = typeof window !== 'undefined' ? window.location.origin : 'https://paocaseiro.co.mz';
             
+            // Extract discount percentage from content or subject if exists
+            const discountMatch = (subject + ' ' + content).match(/(\d+)%/);
+            const discountPercent = discountMatch ? discountMatch[1] : '20'; // default to 20% if not found
+            const couponCode = `PROMO${discountPercent}`;
+            const menuLink = `${domain}/menu?coupon=${couponCode}`;
+            
             let htmlContent = '';
             
             if (isRawHtml) {
                 htmlContent = content;
             } else {
                 htmlContent = `
-                    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #3b2f2f;">
-                        <div style="background-color: #3b2f2f; padding: 20px; text-align: center;">
-                            <img src="${domain}/logo_on_dark.png" alt="Pão Caseiro" style="height: 50px; max-width: 100%;">
+                    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #3b2f2f; border: 1px solid #eee; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05); background-color: #f7f1eb;">
+                        <div style="background-color: #3b2f2f; padding: 25px; text-align: center;">
+                            <img src="${domain}/assets/ui/logo-dark.png" alt="Pão Caseiro" style="height: 60px; max-width: 100%; display: block; margin: 0 auto;">
                         </div>
-                        <div style="padding: 30px; background-color: #f7f1eb;">
-                            <h1 style="color: #d9a65a; font-family: 'Playfair Display', serif; margin-top: 0;">${title}</h1>
-                            <div style="line-height: 1.6;">
+                        <div style="padding: 35px 30px; background-color: #f7f1eb;">
+                            <h1 style="color: #d9a65a; font-family: 'Playfair Display', serif; margin-top: 0; margin-bottom: 20px; font-size: 22px; text-align: center;">${title}</h1>
+                            <div style="line-height: 1.6; font-size: 15px; color: #3b2f2f; margin-bottom: 30px;">
                                 ${content.replace(/\\n/g, '<br/>')}
                             </div>
+                            
+                            <!-- Botão de Ação Dinâmico para Encomenda com Cupão -->
+                            <div style="text-align: center; margin: 35px 0;">
+                                <a href="${menuLink}" style="background-color: #d9a65a; color: #3b2f2f; padding: 15px 35px; text-decoration: none; border-radius: 30px; font-weight: bold; display: inline-block; box-shadow: 0 4px 12px rgba(217,166,90,0.3); font-size: 14px; text-transform: uppercase; letter-spacing: 1px;">
+                                    Aproveitar Desconto no Menu 🥖
+                                </a>
+                                <p style="margin-top: 10px; font-size: 11px; color: #888;">* O cupão de ${discountPercent}% de desconto será aplicado automaticamente ao entrar no menu.</p>
+                            </div>
                         </div>
-                        <div style="background-color: #3b2f2f; color: white; padding: 20px; text-align: center; font-size: 12px;">
-                            <p>Recebeu este email porque subscreveu a newsletter da Pão Caseiro.</p>
-                            <p>© ${new Date().getFullYear()} Pão Caseiro - Lichinga, Niassa.</p>
+                        <div style="background-color: #3b2f2f; color: white; padding: 25px; text-align: center; font-size: 12px; opacity: 0.9;">
+                            <p style="margin: 0 0 10px 0;">Recebeu este email porque subscreveu a newsletter da Pão Caseiro.</p>
+                            <p style="margin: 0;">© ${new Date().getFullYear()} Pão Caseiro - Lichinga, Niassa.</p>
                         </div>
                     </div>
                 `;
@@ -222,7 +236,7 @@ export const AdminEmailPipelineView: React.FC = () => {
 
             for (let i = 0; i < emails.length; i += 50) {
                 const chunk = emails.slice(i, i + 50);
-                await sendEmail(chunk, subject, htmlContent);
+                await sendEmail(chunk, subject, htmlContent, undefined, undefined, [], [], true);
             }
 
             setActionResult({ 

@@ -34,12 +34,12 @@ import { hostingerService } from './hostingerService';
 /**
  * Send an email using the Resend API via Hostinger Bridge.
  */
-export const sendEmail = async (to: string[], subject: string, html: string, replyTo?: string, fromOverride?: string, bcc: string[] = [], attachments: any[] = []): Promise<{ success: boolean; data?: any; error?: string }> => {
+export const sendEmail = async (to: string[], subject: string, html: string, replyTo?: string, fromOverride?: string, bcc: string[] = [], attachments: any[] = [], skipLayout: boolean = false): Promise<{ success: boolean; data?: any; error?: string }> => {
     try {
         const payload: any = {
             to,
             subject,
-            html: brandedEmailLayout(html)
+            html: skipLayout ? html : brandedEmailLayout(html)
         };
 
         if (replyTo) payload.reply_to = replyTo;
