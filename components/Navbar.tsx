@@ -149,7 +149,7 @@ export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
   return (
     <>
       <nav className="fixed top-0 left-0 right-0 z-50 bg-[#f7f1eb]/95 backdrop-blur-md shadow-sm border-b border-[#3b2f2f]/5 h-20 flex items-center">
-        <div className="container mx-auto px-6 flex justify-between lg:grid lg:grid-cols-3 items-center">
+        <div className="container mx-auto px-6 flex justify-between items-center w-full">
           {/* Left: Logo & Language */}
           <div className="flex items-center justify-start gap-4">
             <div className="cursor-pointer" onClick={() => handleNavigation('hero')}>
@@ -171,7 +171,7 @@ export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
           </div>
 
           {/* Center: Nav Items (Centered) */}
-          <div className="hidden lg:flex items-center justify-center gap-5 xl:gap-8 text-sm font-bold tracking-wide uppercase text-[#4b3a2f]">
+          <div className="hidden lg:flex items-center justify-center gap-3 xl:gap-6 text-xs xl:text-sm font-bold tracking-wide uppercase text-[#4b3a2f]">
             {NAV_ITEMS.map((item) => {
               const isActive = (item.id === 'hero' && location.pathname === '/') || 
                                (item.id === 'blog' && location.pathname.startsWith('/blog'));
@@ -202,7 +202,7 @@ export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
           </div>
 
           {/* Right Side: Account and Call button */}
-          <div className="hidden lg:flex items-center justify-end gap-3 xl:gap-4">
+          <div className="hidden lg:flex items-center justify-end gap-2 xl:gap-4">
             {(user || manualUserPhone) ? (
               <button
                 onClick={() => navigate('/dashboard')}
@@ -228,7 +228,7 @@ export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
 
             <a
               href="tel:+258879146662"
-              className="hidden sm:flex items-center gap-3 border border-[#3b2f2f]/10 px-6 py-2 rounded-full font-bold text-[#3b2f2f] hover:bg-white transition-all shadow-sm bg-white/50"
+              className="hidden xl:flex items-center gap-3 border border-[#3b2f2f]/10 px-6 py-2 rounded-full font-bold text-[#3b2f2f] hover:bg-white transition-all shadow-sm bg-white/50"
               title={t.nav.callUs}
               aria-label={t.nav.callUs}
             >

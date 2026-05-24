@@ -195,12 +195,12 @@ export const Admin: React.FC = () => {
         // Auto-dismiss after 6 seconds
         setTimeout(() => setActiveToast(null), 6000);
     });
-    const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(window.innerWidth < 768);
+    const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(window.innerWidth < 1024);
     
     // Auto-close sidebar on mobile after navigation
     const handleNavClick = (view: any) => {
         setActiveView(view);
-        if (window.innerWidth < 768) setIsSidebarCollapsed(true);
+        if (window.innerWidth < 1024) setIsSidebarCollapsed(true);
     };
 
     // --- Voice Notifications (TTS) ---
@@ -938,6 +938,30 @@ export const Admin: React.FC = () => {
             if (!result.success) throw new Error(result.error || 'Falha ao salvar pedido no Hostinger');
 
             const orderId = result.id;
+
+            // Central Billing Integration (Receipt & Invoice)
+            try {
+                const { generateAndUploadReceipt } = await import('../services/billingService');
+                await generateAndUploadReceipt(
+                    orderId,
+                    shortId,
+                    posCustomer?.id || `manual-${shortId}`,
+                    orderPayload.customer_name,
+                    orderPayload.items,
+                    orderPayload.total_amount,
+                    'Receipt',
+                    true,
+                    true,
+                    {
+                        customer_phone: orderPayload.customer_phone,
+                        customer_address: orderPayload.delivery_address,
+                        customer_email: orderPayload.customer_email,
+                        customer_nuit: orderPayload.customer_nuit
+                    }
+                );
+            } catch (billingErr) {
+                console.error("Failed to generate billing receipt/invoice for POS:", billingErr);
+            }
 
             // NEW: Log System Event with actionable link
             try {
@@ -3061,11 +3085,11 @@ export const Admin: React.FC = () => {
                 </div>
             </div>
 
-            <div className={`flex-1 overflow-y-auto relative flex flex-col ${activeView === 'logistics' ? 'bg-white' : 'p-6 md:p-10'} pt-16 md:pt-10 shadow-inner`}>
+            <div className={`flex-1 overflow-y-auto relative flex flex-col ${activeView === 'logistics' ? 'bg-white' : 'p-4 sm:p-6 lg:p-10'} pt-16 md:pt-10 shadow-inner`}>
                 {/* Global Header */}
                 <div className="flex justify-between items-center mb-8 gap-4 hidden md:flex shrink-0">
                     <div className="flex flex-col">
-                        <h1 className="text-3xl font-serif font-black text-[#3b2f2f] uppercase tracking-tighter">
+                        <h1 className="text-xl sm:text-2xl lg:text-3xl font-serif font-black text-[#3b2f2f] uppercase tracking-tighter">
                             {activeView === 'dashboard' ? 'Painel de Controlo' : 
                              activeView === 'orders' ? 'Gestão de Pedidos' :
                              activeView === 'stock' ? 'Inventário e Stock' :
@@ -3083,7 +3107,7 @@ export const Admin: React.FC = () => {
                             {new Date().toLocaleDateString('pt-MZ', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                         </p>
                     </div>
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2 lg:gap-4">
                         {/* Email Service Status Badge */}
                         <div 
                             onClick={() => setActiveView('notificacoes')}
@@ -3133,7 +3157,7 @@ export const Admin: React.FC = () => {
                 {activeView === 'dashboard' && (
                     <div className="space-y-6 animate-fade-in">
                         {/* Compact Stats Row */}
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
                             <div
                                 onClick={() => { setActiveView('orders'); setStatusFilter('pending'); }}
                                 className="bg-white py-6 px-4 rounded-3xl shadow-sm border border-[#d9a65a]/10 cursor-pointer group hover:shadow-xl hover:-translate-y-1 transition-all duration-300 relative overflow-hidden flex flex-col items-center text-center"

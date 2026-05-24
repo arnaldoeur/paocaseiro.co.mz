@@ -19,11 +19,11 @@ export const KPISummary: React.FC<KPISummaryProps> = ({ data }) => {
     ];
 
     return (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
             {stats.map((s, idx) => (
                 <div key={idx} className="bg-white p-5 rounded-[2rem] border border-gray-100 shadow-sm hover:shadow-md transition-shadow group">
                     <div className="flex items-center gap-4">
-                        <div className={`p-3 rounded-2xl ${s.color} transition-transform group-hover:scale-110`}>
+                        <div className={`p-3 rounded-2xl ${s.color} transition-transform group-hover:scale-110 shrink-0`}>
                             <s.icon size={24} />
                         </div>
                         <div>

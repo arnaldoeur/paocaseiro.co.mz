@@ -36,17 +36,67 @@ const BillingDetailsModal = ({ doc, onClose, onRefresh }: { doc: any, onClose: (
     const handleMarkAsPaid = async () => {
         setMarkingPaid(true);
         try {
-            // 1. Hostinger
             const shortIdStr = doc.receipt_no.split('-').pop() || '000';
+            
+            // 1. Update Invoice status to 'paid'
+            const updatedInvoice = {
+                ...doc,
+                status: 'paid'
+            };
+            await hostingerService.saveReceipt(updatedInvoice);
+
+            // 2. Create corresponding Receipt document as 'paid'
             const receiptData = {
                 ...doc,
                 id: crypto.randomUUID(),
                 receipt_no: `REC-${shortIdStr}`,
+                document_type: 'Receipt',
                 status: 'paid'
             };
             await hostingerService.saveReceipt(receiptData);
 
-            // 2. No more Supabase Fallback
+            // 3. Update associated order to 'paid' if applicable
+            if (doc.order_id && !doc.order_id.startsWith('MANUAL-')) {
+                await hostingerService.updateOrder(doc.order_id, { payment_status: 'paid' });
+            }
+
+            // 4. Generate/Upload PDFs in the background
+            try {
+                const { getCompanySettings } = await import('../../services/billingService');
+                const companyInfo = await getCompanySettings();
+                const { generateCustomerReceiptPDF, generateFormalInvoicePDF } = await import('../../services/pdfGenerator');
+                
+                const generateAndUpload = async (type: 'Receipt' | 'Invoice', receiptNo: string, dbData: any) => {
+                    const docProps = {
+                        ...dbData,
+                        short_id: shortIdStr,
+                        transaction_id: receiptNo,
+                        delivery_type: 'pickup',
+                        amount_paid: dbData.total_amount || dbData.amount || 0
+                    };
+                    const pdfDoc = type === 'Receipt'
+                        ? await generateCustomerReceiptPDF(docProps, dbData.items || [], companyInfo)
+                        : await generateFormalInvoicePDF(docProps, dbData.items || [], companyInfo);
+
+                    const pdfBlob = pdfDoc.output('blob');
+                    const file = new File([pdfBlob], `${receiptNo}.pdf`, { type: 'application/pdf' });
+
+                    const folderName = type === 'Receipt' ? 'Recibos' : 'Faturas';
+                    let folderId = null;
+                    try {
+                        const folder = await hostingerService.getDriveFolder(folderName);
+                        folderId = folder?.id;
+                    } catch (e) {}
+
+                    await hostingerService.uploadDriveFile(file, folderId, 'system');
+                };
+
+                // Generate and upload updated paid Invoice PDF & new Receipt PDF
+                await generateAndUpload('Invoice', doc.receipt_no, updatedInvoice);
+                await generateAndUpload('Receipt', `REC-${shortIdStr}`, receiptData);
+            } catch (pdfErr) {
+                console.error("Failed to generate/upload paid PDFs on conversion:", pdfErr);
+            }
 
             alert("Fatura marcada como Paga e correspondente Recibo criado com sucesso!");
             onRefresh();
@@ -456,6 +506,7 @@ export const AdminBillingView: React.FC = () => {
     
     const [selectedDoc, setSelectedDoc] = useState<any | null>(null);
     const [generatingRowPdf, setGeneratingRowPdf] = useState<string | null>(null);
+    const [convertingDocId, setConvertingDocId] = useState<string | null>(null);
 
     useEffect(() => {
         loadBillingData();
@@ -496,6 +547,81 @@ export const AdminBillingView: React.FC = () => {
             alert("Ocorreu um erro ao gerar pré-visualização.");
         } finally {
             setGeneratingRowPdf(null);
+        }
+    };
+
+    const handleConvertInvoiceToReceipt = async (doc: any) => {
+        setConvertingDocId(doc.id);
+        try {
+            const shortIdStr = doc.receipt_no.split('-').pop() || '000';
+            
+            // 1. Update Invoice status to 'paid'
+            const updatedInvoice = {
+                ...doc,
+                status: 'paid'
+            };
+            await hostingerService.saveReceipt(updatedInvoice);
+
+            // 2. Create corresponding Receipt document as 'paid'
+            const receiptData = {
+                ...doc,
+                id: crypto.randomUUID(),
+                receipt_no: `REC-${shortIdStr}`,
+                document_type: 'Receipt',
+                status: 'paid'
+            };
+            await hostingerService.saveReceipt(receiptData);
+
+            // 3. Update associated order to 'paid' if applicable
+            if (doc.order_id && !doc.order_id.startsWith('MANUAL-')) {
+                await hostingerService.updateOrder(doc.order_id, { payment_status: 'paid' });
+            }
+
+            // 4. Generate/Upload PDFs in the background
+            try {
+                const { getCompanySettings } = await import('../../services/billingService');
+                const companyInfo = await getCompanySettings();
+                const { generateCustomerReceiptPDF, generateFormalInvoicePDF } = await import('../../services/pdfGenerator');
+                
+                const generateAndUpload = async (type: 'Receipt' | 'Invoice', receiptNo: string, dbData: any) => {
+                    const docProps = {
+                        ...dbData,
+                        short_id: shortIdStr,
+                        transaction_id: receiptNo,
+                        delivery_type: 'pickup',
+                        amount_paid: dbData.total_amount || dbData.amount || 0
+                    };
+                    const pdfDoc = type === 'Receipt'
+                        ? await generateCustomerReceiptPDF(docProps, dbData.items || [], companyInfo)
+                        : await generateFormalInvoicePDF(docProps, dbData.items || [], companyInfo);
+
+                    const pdfBlob = pdfDoc.output('blob');
+                    const file = new File([pdfBlob], `${receiptNo}.pdf`, { type: 'application/pdf' });
+
+                    const folderName = type === 'Receipt' ? 'Recibos' : 'Faturas';
+                    let folderId = null;
+                    try {
+                        const folder = await hostingerService.getDriveFolder(folderName);
+                        folderId = folder?.id;
+                    } catch (e) {}
+
+                    await hostingerService.uploadDriveFile(file, folderId, 'system');
+                };
+
+                // Generate and upload updated paid Invoice PDF & new Receipt PDF
+                await generateAndUpload('Invoice', doc.receipt_no, updatedInvoice);
+                await generateAndUpload('Receipt', `REC-${shortIdStr}`, receiptData);
+            } catch (pdfErr) {
+                console.error("Failed to generate/upload paid PDFs on conversion:", pdfErr);
+            }
+
+            alert("Fatura convertida em Recibo com sucesso!");
+            await loadBillingData();
+        } catch (err) {
+            console.error("Failed to convert invoice to receipt:", err);
+            alert("Não foi possível converter a fatura em recibo.");
+        } finally {
+            setConvertingDocId(null);
         }
     };
 
@@ -636,6 +762,16 @@ export const AdminBillingView: React.FC = () => {
                                                  <span className={`px-2 py-1 rounded w-16 text-center text-[10px] font-bold uppercase tracking-wider ${r.status === 'paid' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
                                                     {r.status === 'paid' ? 'Pago' : 'Pendente'}
                                                 </span>
+                                                {r.document_type === 'Invoice' && r.status === 'pending' && (
+                                                    <button 
+                                                        onClick={(e) => { e.stopPropagation(); handleConvertInvoiceToReceipt(r); }}
+                                                        disabled={convertingDocId === r.id}
+                                                        className="p-2 bg-green-50 text-green-600 hover:bg-green-600 hover:text-white rounded-lg transition-colors flex items-center justify-center disabled:opacity-50"
+                                                        title="Converter Fatura para Recibo (Liquidar)"
+                                                    >
+                                                        {convertingDocId === r.id ? <Loader className="animate-spin" size={18} /> : <CheckCircle size={18} />}
+                                                    </button>
+                                                )}
                                                 <button 
                                                     onClick={(e) => { e.stopPropagation(); handleOpenPDF(r); }}
                                                     disabled={generatingRowPdf === r.id}
