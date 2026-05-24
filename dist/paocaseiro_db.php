@@ -234,6 +234,21 @@ function get_pdo_connection() {
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )");
                 }
+
+                // Ensure email_campaigns table exists
+                $campaignCheck = $conn->query("SHOW TABLES LIKE 'email_campaigns'")->rowCount();
+                if ($campaignCheck === 0) {
+                    $conn->exec("CREATE TABLE email_campaigns (
+                        id VARCHAR(50) PRIMARY KEY,
+                        subject VARCHAR(255) NOT NULL,
+                        title VARCHAR(255) NULL,
+                        content LONGTEXT NOT NULL,
+                        status VARCHAR(50) DEFAULT 'draft',
+                        target_count INT DEFAULT 0,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        sent_at TIMESTAMP NULL DEFAULT NULL
+                    )");
+                }
             } catch (Exception $e) {
                 // Silently ignore schema check errors
                 error_log("[PaoCaseiro Schema Auto-Heal Error] " . $e->getMessage());
@@ -417,6 +432,49 @@ function send_sms_internal($number, $message) {
     $err = curl_error($ch);
     curl_close($ch);
     return $err ? ['error' => $err] : json_decode($res, true);
+}
+
+function send_resend_email($to, $subject, $html) {
+    $resend_key = "re_P7j69cGh_572YUfnaJMSJJXFNQ7HWPthF";
+    $payload = [
+        "from" => "Pão Caseiro <sistema@paocaseiro.co.mz>",
+        "to" => is_array($to) ? $to : [$to],
+        "subject" => $subject,
+        "html" => $html
+    ];
+    
+    $send_request = function($p) use ($resend_key) {
+        $ch = curl_init('https://api.resend.com/emails');
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($p));
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            "Authorization: Bearer $resend_key",
+            "Content-Type: application/json"
+        ]);
+        $res = curl_exec($ch);
+        $err = curl_error($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        
+        if ($err) {
+            return ['body' => ['error' => "cURL Error: $err"], 'code' => 500];
+        }
+        return ['body' => json_decode($res, true), 'code' => $code];
+    };
+
+    $result = $send_request($payload);
+    
+    if ($result['code'] === 403 || ($result['code'] === 422 && strpos(json_encode($result['body']), 'sandbox') !== false)) {
+        $payload['from'] = 'Pão Caseiro <onboarding@resend.dev>';
+        $result = $send_request($payload);
+    }
+    
+    if ($result['code'] >= 400) {
+        return $result['body'] ?: ['message' => 'Erro HTTP ' . $result['code']];
+    }
+    return $result['body'] ?: true;
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -2186,10 +2244,63 @@ try {
         echo json_encode(['success' => true]);
         break;
 
+    case 'get_email_campaigns':
+        $stmt = $pdo->query("SELECT * FROM email_campaigns ORDER BY created_at DESC");
+        echo json_encode($stmt->fetchAll());
+        break;
+
+    case 'save_email_campaign':
+        $c = $input['campaign'] ?? $input;
+        $id = $c['id'] ?? null;
+        
+        $sent_at = null;
+        if (!empty($c['sent_at'])) {
+            $sent_at = date('Y-m-d H:i:s', strtotime($c['sent_at']));
+        }
+
+        $data = [
+            'subject' => $c['subject'] ?? '',
+            'title' => $c['title'] ?? '',
+            'content' => $c['content'] ?? '',
+            'status' => $c['status'] ?? 'draft',
+            'target_count' => isset($c['target_count']) ? (int)$c['target_count'] : 0,
+            'sent_at' => $sent_at
+        ];
+
+        if ($id) {
+            $setParts = [];
+            foreach ($data as $key => $val) { 
+                $setParts[] = "`$key` = ?"; 
+            }
+            $stmt = $pdo->prepare("UPDATE email_campaigns SET " . implode(', ', $setParts) . " WHERE id = ?");
+            $stmt->execute(array_merge(array_values($data), [$id]));
+        } else {
+            $id = uniqid('camp_');
+            $data['id'] = $id;
+            $data['created_at'] = date('Y-m-d H:i:s');
+            $cols = array_keys($data);
+            $vals = array_fill(0, count($cols), '?');
+            $stmt = $pdo->prepare("INSERT INTO email_campaigns (`" . implode('`, `', $cols) . "`) VALUES (" . implode(', ', $vals) . ")");
+            $stmt->execute(array_values($data));
+        }
+
+        $stmt = $pdo->prepare("SELECT * FROM email_campaigns WHERE id = ?");
+        $stmt->execute([$id]);
+        echo json_encode($stmt->fetch());
+        break;
+
+    case 'delete_email_campaign':
+        $id = $input['id'] ?? '';
+        $stmt = $pdo->prepare("DELETE FROM email_campaigns WHERE id = ?");
+        $stmt->execute([$id]);
+        echo json_encode(['success' => true]);
+        break;
+
     case 'test_email':
         $to = $input['to'] ?? 'geral@paocaseiro.co.mz';
         $result = send_resend_email($to, 'Teste de Email Pão Caseiro', '<h1>Funcionando!</h1><p>Este é um teste de entrega da ponte PHP.</p>');
-        echo json_encode(['success' => $result !== false, 'result' => $result]);
+        $is_success = ($result !== false && !isset($result['error']) && !isset($result['message']));
+        echo json_encode(['success' => $is_success, 'result' => $result]);
         break;
 
     // --- DRIVE MANAGEMENT ---
