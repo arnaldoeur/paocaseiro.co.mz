@@ -30,6 +30,11 @@ interface NavbarProps {
 
 export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const lastClosedTime = React.useRef(0);
+  const closeMobileMenu = () => {
+    lastClosedTime.current = Date.now();
+    setMobileMenuOpen(false);
+  };
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [user, setUser] = useState<any | null>(null);
   const [manualUserPhone, setManualUserPhone] = useState<string | null>(null);
@@ -104,11 +109,11 @@ export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
 
   // Force close mobile menu on route change
   useEffect(() => {
-    setMobileMenuOpen(false);
+    closeMobileMenu();
   }, [location.pathname]);
 
     const handleNavigation = (id: string) => {
-      setMobileMenuOpen(false);
+      closeMobileMenu();
 
       if (id === 'blog') {
         navigate('/blog');
@@ -242,7 +247,10 @@ export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
             <button
               id="mobile-menu-toggle"
               className="text-[#3b2f2f] p-2"
-              onClick={() => setMobileMenuOpen(true)}
+              onClick={() => {
+                if (Date.now() - lastClosedTime.current < 400) return;
+                setMobileMenuOpen(true);
+              }}
               title={t.nav.openMenu}
               aria-label={t.nav.openMenu}
             >
@@ -259,7 +267,7 @@ export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
             initial={{ opacity: 0, x: '100%' }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: '100%' }}
-            onClick={() => setMobileMenuOpen(false)}
+            onClick={() => closeMobileMenu()}
             className="fixed inset-0 z-[60] bg-[#3b2f2f]/95 backdrop-blur-md text-[#f7f1eb] flex flex-col items-center justify-start overflow-y-auto cursor-pointer"
           >
             {/* Inner Content Wrapper that stops propagation to background */}
@@ -272,7 +280,7 @@ export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
                 className="absolute top-6 right-6 p-3 bg-white/10 hover:bg-white/20 active:scale-95 transition-all text-white rounded-full z-[100] shadow-lg cursor-pointer pointer-events-auto"
                 onClick={(e) => {
                   e.stopPropagation();
-                  setMobileMenuOpen(false);
+                  closeMobileMenu();
                 }}
                 title={t.nav.closeMenu}
                 aria-label={t.nav.closeMenu}
@@ -305,7 +313,7 @@ export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
               <button
                 onClick={() => {
                   navigate('/menu');
-                  setMobileMenuOpen(false);
+                  closeMobileMenu();
                 }}
                 className={`text-2xl font-serif hover:text-[#d9a65a] transition-colors cursor-pointer py-1 ${location.pathname === '/menu' ? 'text-[#d9a65a]' : ''}`}
                 title="Menu"
@@ -315,7 +323,7 @@ export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
               </button>
 
               <button
-                onClick={() => { toggleLanguage(); setMobileMenuOpen(false); }}
+                onClick={() => { toggleLanguage(); closeMobileMenu(); }}
                 className="flex items-center gap-3 px-6 py-2.5 rounded-full border border-white/20 hover:border-[#d9a65a] hover:text-[#d9a65a] transition-all mt-3 cursor-pointer"
                 title={language === 'pt' ? 'Mudar para Inglês' : 'Change to Portuguese'}
               >
@@ -331,7 +339,7 @@ export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
               <div className="mt-4 w-full flex justify-center">
                 {(user || manualUserPhone) ? (
                   <button
-                    onClick={() => { navigate('/dashboard'); setMobileMenuOpen(false); }}
+                    onClick={() => { navigate('/dashboard'); closeMobileMenu(); }}
                     className="flex items-center gap-3 bg-white/10 hover:bg-white/20 px-8 py-3 rounded-full border border-white/20 hover:border-[#d9a65a] transition-all cursor-pointer shadow-lg active:scale-95"
                     title={t.nav.myAccount}
                   >
@@ -344,7 +352,7 @@ export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
                   </button>
                 ) : (
                   <button
-                    onClick={() => { setIsLoginModalOpen(true); setMobileMenuOpen(false); }}
+                    onClick={() => { setIsLoginModalOpen(true); closeMobileMenu(); }}
                     className="flex items-center gap-3 bg-[#d9a65a] hover:bg-white text-[#3b2f2f] px-8 py-3 rounded-full font-bold hover:bg-white transition-all shadow-lg cursor-pointer active:scale-95"
                     title={t.nav.login}
                   >
