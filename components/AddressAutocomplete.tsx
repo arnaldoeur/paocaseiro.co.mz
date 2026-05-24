@@ -118,7 +118,7 @@ export const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({ value,
             </div>
 
             {isOpen && results.length > 0 && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-xl shadow-xl border border-gray-100 max-h-60 overflow-y-auto z-[9999]">
+                <div className="w-full mt-2 bg-white rounded-xl shadow-md border border-gray-100 max-h-60 overflow-y-auto relative z-10 block">
                     {results.map((result, idx) => (
                         <button
                             key={idx}

@@ -262,24 +262,23 @@ export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
             onClick={() => setMobileMenuOpen(false)}
             className="fixed inset-0 z-[60] bg-[#3b2f2f]/95 backdrop-blur-md text-[#f7f1eb] flex flex-col items-center justify-start overflow-y-auto cursor-pointer"
           >
-            <button
-              id="mobile-menu-close"
-              className="absolute top-8 right-8 p-3 bg-white/10 text-white rounded-full z-[70] hover:bg-white/20 active:scale-95 transition-all shadow-lg cursor-pointer"
-              onClick={(e) => {
-                e.stopPropagation();
-                setMobileMenuOpen(false);
-              }}
-              title={t.nav.closeMenu}
-              aria-label={t.nav.closeMenu}
-            >
-              <X className="w-8 h-8" />
-            </button>
-
             {/* Inner Content Wrapper that stops propagation to background */}
             <div 
-              className="flex flex-col items-center justify-start gap-5 w-full max-w-md pt-20 pb-12 px-6 cursor-default"
+              className="relative flex flex-col items-center justify-start gap-5 w-full max-w-md pt-20 pb-12 px-6 cursor-default"
               onClick={(e) => e.stopPropagation()}
             >
+              <button
+                id="mobile-menu-close"
+                className="absolute top-6 right-6 p-3 bg-white/10 hover:bg-white/20 active:scale-95 transition-all text-white rounded-full z-[100] shadow-lg cursor-pointer pointer-events-auto"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMobileMenuOpen(false);
+                }}
+                title={t.nav.closeMenu}
+                aria-label={t.nav.closeMenu}
+              >
+                <X className="w-8 h-8" />
+              </button>
               <div 
                 className="cursor-pointer hover:scale-105 transition-transform mb-4"
                 onClick={() => handleNavigation('hero')}
