@@ -249,6 +249,32 @@ function get_pdo_connection() {
                         sent_at TIMESTAMP NULL DEFAULT NULL
                     )");
                 }
+
+                // Ensure logistics_drivers table has lat/lng columns
+                $driversTableCheck = $conn->query("SHOW TABLES LIKE 'logistics_drivers'")->rowCount();
+                if ($driversTableCheck > 0) {
+                    $latCheck = $conn->query("SHOW COLUMNS FROM logistics_drivers LIKE 'lat'")->rowCount();
+                    if ($latCheck === 0) {
+                        $conn->exec("ALTER TABLE logistics_drivers ADD COLUMN lat DECIMAL(10, 8) NULL");
+                    }
+                    $lngCheck = $conn->query("SHOW COLUMNS FROM logistics_drivers LIKE 'lng'")->rowCount();
+                    if ($lngCheck === 0) {
+                        $conn->exec("ALTER TABLE logistics_drivers ADD COLUMN lng DECIMAL(11, 8) NULL");
+                    }
+                }
+
+                // Ensure orders table has driver_lat/driver_lng columns
+                $ordersTableCheck = $conn->query("SHOW TABLES LIKE 'orders'")->rowCount();
+                if ($ordersTableCheck > 0) {
+                    $driverLatCheck = $conn->query("SHOW COLUMNS FROM orders LIKE 'driver_lat'")->rowCount();
+                    if ($driverLatCheck === 0) {
+                        $conn->exec("ALTER TABLE orders ADD COLUMN driver_lat DECIMAL(10, 8) NULL");
+                    }
+                    $driverLngCheck = $conn->query("SHOW COLUMNS FROM orders LIKE 'driver_lng'")->rowCount();
+                    if ($driverLngCheck === 0) {
+                        $conn->exec("ALTER TABLE orders ADD COLUMN driver_lng DECIMAL(11, 8) NULL");
+                    }
+                }
             } catch (Exception $e) {
                 // Silently ignore schema check errors
                 error_log("[PaoCaseiro Schema Auto-Heal Error] " . $e->getMessage());
@@ -488,6 +514,42 @@ try {
 
     case 'ping':
         echo json_encode(["success" => true, "message" => "Pong! Conectado com sucesso.", "time" => date('Y-m-d H:i:s')]);
+        break;
+
+    case 'search_places':
+        $q = $input['q'] ?? $_GET['q'] ?? '';
+        if (empty($q)) {
+            echo json_encode([]);
+            break;
+        }
+        
+        $url = "https://nominatim.openstreetmap.org/search?format=json&q=" . urlencode($q) . "&countrycodes=mz&limit=5&addressdetails=1";
+        
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_TIMEOUT        => 10,
+            CURLOPT_HTTPHEADER     => [
+                "User-Agent: PaoCaseiroApp/1.0 (nazir@paocaseiro.co.mz)",
+                "Accept-Language: pt-PT,pt;q=0.9"
+            ]
+        ]);
+        $res = curl_exec($ch);
+        $err = curl_error($ch);
+        curl_close($ch);
+        
+        if ($err) {
+            echo json_encode(["error" => $err]);
+        } else {
+            // Check if returned data is valid JSON before sending
+            $jsonTest = json_decode($res);
+            if (json_last_error() === JSON_ERROR_NONE) {
+                echo $res;
+            } else {
+                echo json_encode(["error" => "Invalid response from search service"]);
+            }
+        }
         break;
 
     case 'serve_file':

@@ -1,6 +1,6 @@
-/// <reference types="@types/google.maps" />
 import React, { useState, useEffect, useRef } from 'react';
 import { MapPin, Search, Loader } from 'lucide-react';
+import { hostingerService } from '../services/hostingerService';
 
 interface AddressAutocompleteProps {
     value: string;
@@ -8,32 +8,31 @@ interface AddressAutocompleteProps {
     onSelect: (result: { label: string; x: number; y: number }) => void;
 }
 
+interface NominatimResult {
+    place_id: number;
+    licence: string;
+    osm_type: string;
+    osm_id: number;
+    boundingbox: string[];
+    lat: string;
+    lon: string;
+    display_name: string;
+    class: string;
+    type: string;
+    importance: number;
+}
+
 export const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({ value, onChange, onSelect }) => {
     const [query, setQuery] = useState(value);
-    const [results, setResults] = useState<google.maps.places.AutocompletePrediction[]>([]);
+    const [results, setResults] = useState<NominatimResult[]>([]);
     const [isOpen, setIsOpen] = useState(false);
     const [loading, setLoading] = useState(false);
     const wrapperRef = useRef<HTMLDivElement>(null);
-    const [autocompleteService, setAutocompleteService] = useState<google.maps.places.AutocompleteService | null>(null);
-    const [geocoder, setGeocoder] = useState<google.maps.Geocoder | null>(null);
 
-    // Initialize services
+    // Keep state in sync with parent prop updates (e.g. if loaded from profile)
     useEffect(() => {
-        if (window.google && window.google.maps && window.google.maps.places) {
-            setAutocompleteService(new window.google.maps.places.AutocompleteService());
-            setGeocoder(new window.google.maps.Geocoder());
-        } else {
-            // Wait for script to load
-            const checkGoogleMaps = setInterval(() => {
-                if (window.google && window.google.maps && window.google.maps.places) {
-                    setAutocompleteService(new window.google.maps.places.AutocompleteService());
-                    setGeocoder(new window.google.maps.Geocoder());
-                    clearInterval(checkGoogleMaps);
-                }
-            }, 500);
-            return () => clearInterval(checkGoogleMaps);
-        }
-    }, []);
+        setQuery(value);
+    }, [value]);
 
     const [debouncedQuery, setDebouncedQuery] = useState(query);
     useEffect(() => {
@@ -44,25 +43,32 @@ export const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({ value,
     }, [query]);
 
     useEffect(() => {
-        if (!autocompleteService || !debouncedQuery || debouncedQuery.length < 3) {
+        if (!debouncedQuery || debouncedQuery.length < 3) {
             setResults([]);
             return;
         }
 
-        setLoading(true);
-        autocompleteService.getPlacePredictions({
-            input: debouncedQuery,
-            componentRestrictions: { country: 'mz' } // Limit to Mozambique
-        }, (predictions, status) => {
-            setLoading(false);
-            if (status === window.google.maps.places.PlacesServiceStatus.OK && predictions) {
-                setResults(predictions);
-                setIsOpen(true);
-            } else {
+        const fetchPlaces = async () => {
+            setLoading(true);
+            try {
+                // Call through our secure backend proxy which has a valid static User-Agent and bypasses CORS/rate-limits!
+                const data = await hostingerService.fetch('search_places', { q: debouncedQuery });
+                if (data && Array.isArray(data)) {
+                    setResults(data);
+                    setIsOpen(true);
+                } else {
+                    setResults([]);
+                }
+            } catch (err) {
+                console.error("Nominatim Autocomplete Proxy Error:", err);
                 setResults([]);
+            } finally {
+                setLoading(false);
             }
-        });
-    }, [debouncedQuery, autocompleteService]);
+        };
+
+        fetchPlaces();
+    }, [debouncedQuery]);
 
     // Close on click outside
     useEffect(() => {
@@ -75,36 +81,28 @@ export const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({ value,
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    const handleSelect = (result: google.maps.places.AutocompletePrediction) => {
-        setQuery(result.description);
-        onChange(result.description);
+    const handleSelect = (result: NominatimResult) => {
+        const label = result.display_name;
+        setQuery(label);
+        onChange(label);
         setIsOpen(false);
-        setLoading(true);
 
-        if (geocoder && result.place_id) {
-            geocoder.geocode({ placeId: result.place_id }, (geocodeResults, status) => {
-                setLoading(false);
-                if (status === window.google.maps.GeocoderStatus.OK && geocodeResults && geocodeResults.length > 0) {
-                    const location = geocodeResults[0].geometry.location;
-                    onSelect({
-                        label: result.description,
-                        y: location.lat(), // lat
-                        x: location.lng()  // lng
-                    });
-                }
-            });
-        }
+        onSelect({
+            label: label,
+            y: parseFloat(result.lat), // lat
+            x: parseFloat(result.lon)  // lon (lng)
+        });
     };
 
     return (
-        <div ref={wrapperRef} className="relative z-50">
+        <div ref={wrapperRef} className="relative z-[1000]">
             <div className="relative">
                 <MapPin className="absolute left-3 top-3 text-[#d9a65a] w-5 h-5" />
                 <textarea
-                    value={query} // Local state controls input
+                    value={query}
                     onChange={(e) => {
                         setQuery(e.target.value);
-                        onChange(e.target.value); // Sync up
+                        onChange(e.target.value);
                     }}
                     onFocus={() => {
                         if (results.length > 0) setIsOpen(true);
@@ -120,7 +118,7 @@ export const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({ value,
             </div>
 
             {isOpen && results.length > 0 && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-xl shadow-xl border border-gray-100 max-h-60 overflow-y-auto z-[100]">
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-xl shadow-xl border border-gray-100 max-h-60 overflow-y-auto z-[9999]">
                     {results.map((result, idx) => (
                         <button
                             key={idx}
@@ -129,15 +127,12 @@ export const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({ value,
                         >
                             <Search className="w-4 h-4 text-gray-400 mt-1 shrink-0" />
                             <div>
-                                <span className="block text-sm text-[#3b2f2f]">{result.structured_formatting?.main_text || result.description}</span>
-                                {result.structured_formatting?.secondary_text && (
-                                    <span className="block text-xs text-gray-500">{result.structured_formatting.secondary_text}</span>
-                                )}
+                                <span className="block text-sm text-[#3b2f2f]">{result.display_name}</span>
                             </div>
                         </button>
                     ))}
                     <div className="p-2 flex justify-center bg-gray-50 border-t border-gray-100">
-                        <img src="https://developers.google.com/maps/documentation/images/powered_by_google_on_non_white.png" alt="Powered by Google" className="h-4 opacity-50" />
+                        <span className="text-[10px] text-gray-400">Powered by OpenStreetMap</span>
                     </div>
                 </div>
             )}

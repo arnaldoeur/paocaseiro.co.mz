@@ -90,7 +90,10 @@ export const Delivery: React.FC = () => {
     }, []);
 
     const startTracking = useCallback(async (order: any) => {
-        if (!navigator.geolocation) return;
+        if (!navigator.geolocation) {
+            alert("Atenção: O seu dispositivo não suporta Geolocalização/GPS. O rastreamento não funcionará!");
+            return;
+        }
 
         setTrackingOrderId(order.id);
         const destCoords = parseCoords(order.delivery_coordinates);
@@ -99,11 +102,19 @@ export const Delivery: React.FC = () => {
             async (pos) => {
                 const { latitude, longitude } = pos.coords;
 
-                // Update driver position in DB
+                // Update driver position in DB (Orders table)
                 await hostingerService.updateOrder(order.id, { 
                     driver_lat: latitude, 
                     driver_lng: longitude 
                 });
+
+                // Also update the Driver table location to sync everything immediately
+                if (user?.id) {
+                    await hostingerService.updateDriver(user.id, { 
+                        lat: latitude, 
+                        lng: longitude 
+                    }).catch();
+                }
 
                 // Check proximity — trigger approaching notification once
                 if (destCoords && !order.approaching_notified) {
@@ -119,7 +130,12 @@ export const Delivery: React.FC = () => {
                     }
                 }
             },
-            (err) => console.error('[GPS] Error:', err),
+            (err) => {
+                console.error('[GPS] Error:', err);
+                if (err.code === err.PERMISSION_DENIED) {
+                    alert("Aviso de GPS: Permissão de localização negada! Por favor, ative a localização no seu navegador para podermos rastrear a sua entrega.");
+                }
+            },
             { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
         );
     }, [user]);
@@ -369,6 +385,29 @@ export const Delivery: React.FC = () => {
                             Status: {user?.is_it ? 'Supervisão' : 'Online'}
                         </div>
                     </div>
+
+                    {/* Active Tracking Signal Card */}
+                    {trackingOrderId && (
+                        <motion.div 
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            className="bg-green-500 text-white rounded-2xl p-4 shadow-lg flex items-center justify-between"
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center animate-pulse shrink-0">
+                                    <Navigation className="w-5 h-5 text-white" />
+                                </div>
+                                <div className="text-left">
+                                    <h4 className="font-bold text-sm leading-tight">GPS em Tempo Real Ativo</h4>
+                                    <p className="text-[11px] text-white/80 mt-0.5">A partilhar localização da entrega ativa com o Admin...</p>
+                                </div>
+                            </div>
+                            <span className="flex h-2.5 w-2.5 relative">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
+                            </span>
+                        </motion.div>
+                    )}
 
                     {/* Loading */}
                     {fetchingOrders && (
