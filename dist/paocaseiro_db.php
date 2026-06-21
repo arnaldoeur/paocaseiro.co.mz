@@ -861,6 +861,13 @@ try {
             $o = $input['order_data'] ?? $input;
             $orderId = $o['id'] ?? uniqid();
             
+            // Clean/sanitize customer name and phone
+            $customerName = trim((string)($o['customer_name'] ?? ''));
+            if ($customerName === '') {
+                $customerName = 'Cliente';
+            }
+            $customerPhone = trim((string)($o['customer_phone'] ?? ''));
+
             // 1. Ensure customer exists or update with robust null/empty sanitization
             $customerId = null;
             if (isset($o['customer_id'])) {
@@ -876,16 +883,15 @@ try {
                                        ON DUPLICATE KEY UPDATE name=VALUES(name), last_order_at=NOW()");
                 $stmtC->execute([
                     $customerId,
-                    $o['customer_name'] ?? 'Cliente', 
-                    $o['customer_phone'] ?? '', 
-                    $o['customer_phone'] ?? '',
+                    $customerName, 
+                    $customerPhone, 
+                    $customerPhone,
                     $o['customer_email'] ?? null,
                     $o['delivery_address'] ?? null
                 ]);
-            } else if (!empty($o['customer_phone']) && trim((string)$o['customer_phone']) !== '' && trim((string)$o['customer_phone']) !== 'N/A' && trim((string)$o['customer_phone']) !== 'undefined' && trim((string)$o['customer_phone']) !== 'null') {
-                $phone = trim((string)$o['customer_phone']);
+            } else if (!empty($customerPhone) && $customerPhone !== 'N/A' && $customerPhone !== 'undefined' && $customerPhone !== 'null') {
                 $stmtExist = $pdo->prepare("SELECT id FROM customers WHERE phone = ? LIMIT 1");
-                $stmtExist->execute([$phone]);
+                $stmtExist->execute([$customerPhone]);
                 $customerId = $stmtExist->fetchColumn();
                 
                 if (!$customerId) {
@@ -893,9 +899,9 @@ try {
                     $stmtC = $pdo->prepare("INSERT INTO customers (id, name, phone, contact_no, email, address) VALUES (?, ?, ?, ?, ?, ?)");
                     $stmtC->execute([
                         $customerId,
-                        $o['customer_name'] ?? 'Cliente Balcão',
-                        $phone,
-                        $phone,
+                        $customerName,
+                        $customerPhone,
+                        $customerPhone,
                         $o['customer_email'] ?? null,
                         $o['delivery_address'] ?? null
                     ]);
@@ -909,6 +915,26 @@ try {
                 $customerId = null;
             }
 
+            // Check if it's a new order
+            $stmtCheckNew = $pdo->prepare("SELECT COUNT(*) FROM orders WHERE id = ?");
+            $stmtCheckNew->execute([$orderId]);
+            $isNewOrder = ($stmtCheckNew->fetchColumn() == 0);
+            
+            $shortId = $o['short_id'] ?? strtoupper(substr($orderId, -6));
+            if ($isNewOrder) {
+                // Ensure short_id is unique
+                $stmtCheckShort = $pdo->prepare("SELECT COUNT(*) FROM orders WHERE short_id = ?");
+                $stmtCheckShort->execute([$shortId]);
+                if ($stmtCheckShort->fetchColumn() > 0) {
+                    $attempts = 0;
+                    do {
+                        $attempts++;
+                        $shortId = 'PC-' . str_pad(rand(0, 9999), 4, '0', STR_PAD_LEFT);
+                        $stmtCheckShort->execute([$shortId]);
+                    } while ($stmtCheckShort->fetchColumn() > 0 && $attempts < 100);
+                }
+            }
+
             // 2. Insert/Update Order
             $sql = "INSERT INTO orders (id, short_id, customer_id, customer_name, customer_phone, customer_email, total_amount, amount_paid, balance, status, delivery_type, delivery_address, notes, payment_method, payment_status, payment_reference, transaction_id, estimated_ready_at, cash_session_id) 
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -917,10 +943,10 @@ try {
             $stmt = $pdo->prepare($sql);
             $stmt->execute([
                 $orderId, 
-                $o['short_id'] ?? strtoupper(substr($orderId, -6)),
+                $shortId,
                 $customerId,
-                $o['customer_name'],
-                $o['customer_phone'],
+                $customerName,
+                $customerPhone,
                 $o['customer_email'] ?? null,
                 $o['total_amount'] ?? 0,
                 (float)($o['amount_paid'] ?? 0),
@@ -956,8 +982,8 @@ try {
             }
 
             $pdo->commit();
-            echo json_encode(["success" => true, "id" => $orderId, "short_id" => $o['short_id'] ?? strtoupper(substr($orderId, -6))]);
-        } catch (Exception $e) {
+            echo json_encode(["success" => true, "id" => $orderId, "short_id" => $shortId]);
+        } catch (Throwable $e) {
             $pdo->rollBack();
             http_response_code(500);
             echo json_encode(["error" => $e->getMessage()]);
@@ -2948,7 +2974,7 @@ try {
         echo json_encode(["error" => "Ação não encontrada: " . $action]);
         break;
     } // End Switch
-} catch (Exception $e) {
+} catch (Throwable $e) {
     http_response_code(500);
     echo json_encode([
         "success" => false, 

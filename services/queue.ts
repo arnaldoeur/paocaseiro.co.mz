@@ -25,7 +25,8 @@ export const queueService = {
     },
 
     async generateTicket(isPriority: boolean = false, phone?: string, category: string = 'Geral', userId?: string) {
-        const data = await hostingerService.generateTicket(isPriority, phone, category, userId);
+        const result = await hostingerService.generateTicket(isPriority, phone, category, userId);
+        const data = (result && result.data && result.data.length > 0) ? result.data[0] : result;
         if (data && data.id) {
             window.dispatchEvent(new CustomEvent('queue-ticket-created', { detail: data }));
         }
