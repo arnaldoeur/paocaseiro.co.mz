@@ -38,4 +38,9 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Queries for Sunmi Printer Service package visibility (Android 11+) -->
+    <queries>
+        <package android:name="woyou.aidl.service.ashmem" />
+    </queries>
 </manifest>

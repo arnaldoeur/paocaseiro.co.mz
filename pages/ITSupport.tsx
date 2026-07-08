@@ -70,7 +70,7 @@ export const ITSupport: React.FC = () => {
         try {
             // Stats & Logs
             const logsResult = await hostingerService.getSmsLogs(200);
-            const logs = logsResult.success ? logsResult.data : [];
+            const logs = Array.isArray(logsResult) ? logsResult : (logsResult?.data || []);
             if (logs) setSmsLogs(logs);
 
             const settingsData = await hostingerService.getSystemSettings();
@@ -102,7 +102,7 @@ export const ITSupport: React.FC = () => {
 
             // Orders
             const ordersResult = await hostingerService.getOrders({ limit: 200 });
-            const ords = ordersResult.success ? ordersResult.data : [];
+            const ords = Array.isArray(ordersResult) ? ordersResult : (ordersResult?.data || []);
             if (ords) {
                 setOrders(ords);
                 setStats(s => ({ ...s, totalOrders: ords.length, failedOrders: ords.filter((o: any) => o.status === 'failed_payment').length }));
@@ -110,7 +110,7 @@ export const ITSupport: React.FC = () => {
 
             // Messages
             const msgsResult = await hostingerService.getContactMessages();
-            const msgs = msgsResult.success ? msgsResult.data : [];
+            const msgs = Array.isArray(msgsResult) ? msgsResult : (msgsResult?.data || []);
             if (msgs) {
                 setMessages(msgs);
                 setStats(s => ({ ...s, activeTickets: msgs.filter((m: any) => m.status === 'unread' || m.status === 'pending').length }));
@@ -118,12 +118,12 @@ export const ITSupport: React.FC = () => {
 
             // Comments
             const commentsResult = await hostingerService.getBlogComments();
-            const cmmts = commentsResult.success ? commentsResult.data : [];
+            const cmmts = Array.isArray(commentsResult) ? commentsResult : (commentsResult?.data || []);
             if (cmmts) setComments(cmmts);
 
             // Team
             const teamResult = await hostingerService.getTeam();
-            const tm = teamResult.success ? teamResult.data : [];
+            const tm = Array.isArray(teamResult) ? teamResult : (teamResult?.data || []);
             if (tm) setTeam(tm);
 
             // Calculate costs
@@ -255,7 +255,7 @@ export const ITSupport: React.FC = () => {
         
         try {
             const ordersResult = await hostingerService.getOrders();
-            const ords = ordersResult.success ? ordersResult.data : [];
+            const ords = Array.isArray(ordersResult) ? ordersResult : (ordersResult?.data || []);
             if (ords) {
                 if(broadcastChannel === 'email') {
                     contacts = Array.from(new Set(ords.map((o: any) => o.customer_email).filter((e: any) => e && e.includes('@')))) as string[];
