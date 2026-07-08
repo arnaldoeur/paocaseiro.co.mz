@@ -6,9 +6,13 @@ import { NotificationService } from '../services/NotificationService';
 import { translations, Language } from '../translations';
 import { hostingerService } from '../services/hostingerService';
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 
 export const GetTicket: React.FC<{ language?: Language }> = ({ language = 'pt' }) => {
     const t = translations[language] || translations['pt'];
+    const [searchParams] = useSearchParams();
+    const ticketIdParam = searchParams.get('id');
+
     const [step, setStep] = useState<'category' | 'type' | 'phone' | 'otp' | 'ticket'>('category');
     const [selectedCategory, setSelectedCategory] = useState<string>('');
     const [ticket, setTicket] = useState<any>(null);
@@ -46,13 +50,35 @@ export const GetTicket: React.FC<{ language?: Language }> = ({ language = 'pt' }
         fetchBranding();
     }, []);
 
+    // Load ticket by ID if param exists on mount
+    useEffect(() => {
+        if (ticketIdParam) {
+            const loadTicket = async () => {
+                setLoading(true);
+                try {
+                    const fetchedTicket = await hostingerService.getActiveTicket('', ticketIdParam);
+                    if (fetchedTicket && fetchedTicket.id) {
+                        setTicket(fetchedTicket);
+                        setStep('ticket');
+                    } else {
+                        console.warn("Ticket not found for ID:", ticketIdParam);
+                    }
+                } catch (err) {
+                    console.error("Error loading ticket by ID:", err);
+                } finally {
+                    setLoading(false);
+                }
+            };
+            loadTicket();
+        }
+    }, [ticketIdParam]);
+
     // Polling for ticket updates (replacement for real-time channel)
     useEffect(() => {
-        if (!ticket || ticket.status !== 'waiting') return;
+        if (!ticket || ticket.status === 'completed' || ticket.status === 'skipped' || ticket.status === 'cancelled') return;
         
         const pollTicket = async () => {
-            const identifier = ticket.phone || ticket.user_id || ticket.id;
-            const data = await hostingerService.getActiveTicket(identifier);
+            const data = await hostingerService.getActiveTicket('', ticket.id);
             if (data && data.status !== ticket.status) {
                 setTicket(data);
             }
@@ -301,6 +327,10 @@ export const GetTicket: React.FC<{ language?: Language }> = ({ language = 'pt' }
                                     <h2 className="text-[5rem] sm:text-[7rem] font-mono font-black text-white tracking-tighter my-2 leading-none whitespace-nowrap">
                                         {ticket?.ticket_number || (typeof ticket === 'string' ? ticket : "---")}
                                     </h2>
+                                    {/* Retrieval Time Display */}
+                                    <p className="text-[11px] font-black text-white/50 uppercase tracking-widest mt-1">
+                                        {language === 'en' ? 'Issued at:' : 'Hora de Retirada:'} {ticket.created_at ? new Date(ticket.created_at).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' }) : '--:--'}
+                                    </p>
                                     <div className="flex justify-center items-center gap-3 mt-4">
                                         {ticket.status === 'waiting' && (
                                             <span className="inline-flex items-center gap-2 px-6 py-2 rounded-full bg-white/5 text-white/40 text-xs font-black uppercase tracking-widest border border-white/5">
@@ -310,6 +340,21 @@ export const GetTicket: React.FC<{ language?: Language }> = ({ language = 'pt' }
                                         {ticket.status === 'calling' && (
                                             <span className="inline-flex items-center gap-2 px-6 py-2 rounded-full bg-amber-500/20 text-amber-500 text-xs font-black uppercase tracking-[0.2em] border border-amber-500/20 animate-pulse">
                                                 <Ticket className="w-4 h-4" /> Dirija-se ao {ticket.counter || 'Balcão'}
+                                            </span>
+                                        )}
+                                        {ticket.status === 'completed' && (
+                                            <span className="inline-flex items-center gap-2 px-6 py-2 rounded-full bg-green-500/20 text-green-500 text-xs font-black uppercase tracking-[0.2em] border border-green-500/20">
+                                                <CheckCircle className="w-4 h-4" /> Atendimento Concluído
+                                            </span>
+                                        )}
+                                        {ticket.status === 'skipped' && (
+                                            <span className="inline-flex items-center gap-2 px-6 py-2 rounded-full bg-red-500/20 text-red-400 text-xs font-black uppercase tracking-[0.2em] border border-red-500/20">
+                                                <X className="w-4 h-4" /> Chamada Perdida
+                                            </span>
+                                        )}
+                                        {ticket.status === 'cancelled' && (
+                                            <span className="inline-flex items-center gap-2 px-6 py-2 rounded-full bg-red-500/20 text-red-500 text-xs font-black uppercase tracking-[0.2em] border border-red-500/20">
+                                                <X className="w-4 h-4" /> Senha Cancelada
                                             </span>
                                         )}
                                     </div>
@@ -328,26 +373,31 @@ export const GetTicket: React.FC<{ language?: Language }> = ({ language = 'pt' }
                                                 <p className="text-4xl font-black text-[#d9a65a]">~{Math.max(2, (peopleAhead + 1) * 3)}m</p>
                                             </div>
                                         </div>
-
+ 
                                         {/* QR Code for sharing/digital ticket */}
                                         <div className="flex flex-col items-center gap-3 py-2 border-t border-white/5">
                                             <div className="p-2 bg-white rounded-xl shadow-2xl">
                                                 <img 
-                                                    src={`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(`${company?.office_name} - Senha: ${ticket.ticket_number}\nEstado: Em Espera`)}`}
+                                                    src={`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(`${window.location.origin}/get-ticket?id=${ticket.id}`)}`}
                                                     alt="Ticket QR Code"
                                                     className="w-32 h-32"
                                                 />
                                             </div>
-                                             <p className="text-[8px] font-black text-white/30 uppercase tracking-[0.2em] max-w-[200px] text-center">
-                                                {language === 'en' ? 'Scan to share or save your ticket' : 'Digitalize para partilhar ou guardar a sua senha'}
+                                            <p className="text-[8px] font-black text-white/30 uppercase tracking-[0.2em] max-w-[200px] text-center">
+                                                {language === 'en' ? 'Scan to check your live ticket status' : 'Digitalize para acompanhar o estado em tempo real'}
                                             </p>
                                         </div>
                                     </div>
                                 )}
                             </div>
                             
-                                 <button 
-                                onClick={() => setStep('category')} 
+                            <button 
+                                onClick={() => {
+                                    if (window.location.search) {
+                                        window.history.pushState({}, document.title, window.location.pathname);
+                                    }
+                                    setStep('category');
+                                }} 
                                 className="mt-6 text-[#d9a65a] font-black uppercase tracking-widest text-xs hover:text-white transition-colors"
                             >
                                 {t.clientDashboard.queue.novaSenha}

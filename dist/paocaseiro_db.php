@@ -1500,8 +1500,14 @@ try {
 
     case 'get_active_ticket':
         $identifier = $input['identifier'] ?? '';
-        $stmt = $pdo->prepare("SELECT * FROM queue_tickets WHERE (user_id = ? OR customer_phone = ?) AND status IN ('waiting', 'calling') AND DATE(created_at) = CURDATE() ORDER BY created_at DESC LIMIT 1");
-        $stmt->execute([$identifier, $identifier]);
+        $id = $input['id'] ?? '';
+        if ($id) {
+            $stmt = $pdo->prepare("SELECT * FROM queue_tickets WHERE id = ?");
+            $stmt->execute([$id]);
+        } else {
+            $stmt = $pdo->prepare("SELECT * FROM queue_tickets WHERE (user_id = ? OR customer_phone = ?) AND status IN ('waiting', 'calling') AND DATE(created_at) = CURDATE() ORDER BY created_at DESC LIMIT 1");
+            $stmt->execute([$identifier, $identifier]);
+        }
         echo json_encode(map_ticket($stmt->fetch()));
         break;
 

@@ -1183,7 +1183,7 @@ export const QueueManager: React.FC = () => {
                             
                             <div className="bg-gray-50 p-6 rounded-3xl border border-gray-100 mb-8 mx-auto w-fit">
                                 <img 
-                                    src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(`Senha: ${shareTicket.ticket_number}`)}`}
+                                    src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(`https://paocaseiro.co.mz/get-ticket?id=${shareTicket.id}`)}`}
                                     alt="QR Code"
                                     className="w-40 h-40"
                                 
@@ -1191,7 +1191,7 @@ export const QueueManager: React.FC = () => {
                             </div>
 
                             <button 
-                                onClick={() => handleDownloadQR(`Pão Caseiro - Senha: ${shareTicket.ticket_number}`, `senha-${shareTicket.ticket_number}`)}
+                                onClick={() => handleDownloadQR(`https://paocaseiro.co.mz/get-ticket?id=${shareTicket.id}`, `senha-${shareTicket.ticket_number}`)}
                                 disabled={isDownloading}
                                 className="w-full py-4 bg-[#3b2f2f] text-[#d9a65a] font-black rounded-2xl uppercase tracking-widest text-xs flex items-center justify-center gap-3 shadow-xl active:scale-95 transition-all disabled:opacity-50"
                             >
@@ -1285,8 +1285,9 @@ export const QueueManager: React.FC = () => {
                                         </div>
 
                                         {/* Timestamp */}
-                                        <div style={{ textAlign: ticketCustom.text_align }} className="text-[8px] text-gray-400">
-                                            Data: {new Date(viewTicketModal.created_at || Date.now()).toLocaleString('pt-PT')}
+                                        <div style={{ textAlign: ticketCustom.text_align }} className="text-[8px] text-gray-400 flex flex-col gap-0.5">
+                                            <div>Data: {new Date(viewTicketModal.created_at || Date.now()).toLocaleDateString('pt-PT')}</div>
+                                            <div>Hora de Retirada: {new Date(viewTicketModal.created_at || Date.now()).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })}</div>
                                         </div>
 
                                         <div className="border-t border-dashed border-gray-300"></div>
@@ -1296,12 +1297,12 @@ export const QueueManager: React.FC = () => {
                                             <div className="flex flex-col items-center gap-1 my-1">
                                                 <div className="p-1 bg-white border border-gray-200 rounded">
                                                     <img 
-                                                        src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(viewTicketModal.id)}`}
+                                                        src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(`https://paocaseiro.co.mz/get-ticket?id=${viewTicketModal.id}`)}`}
                                                         alt="QR Code"
                                                         className="w-16 h-16"
                                                     />
                                                 </div>
-                                                <span className="text-[5px] text-gray-400 font-black uppercase tracking-wider">Registe a sua senha</span>
+                                                <span className="text-[5px] text-gray-400 font-black uppercase tracking-wider">Consulte o status da senha</span>
                                             </div>
                                         )}
 

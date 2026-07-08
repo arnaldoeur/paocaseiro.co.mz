@@ -341,8 +341,8 @@ export const hostingerService = {
         return this.fetch('get_queue_count', { created_at: createdAt });
     },
 
-    async getActiveTicket(identifier: string) {
-        return this.fetch('get_active_ticket', { identifier });
+    async getActiveTicket(identifier: string, id?: string) {
+        return this.fetch('get_active_ticket', { identifier, id });
     },
 
     async getTicketsToday() {

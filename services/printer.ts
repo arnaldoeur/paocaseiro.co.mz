@@ -424,18 +424,21 @@ export class PrinterService {
         addText('', align, 0x00);
 
         // 5. Date & Time
-        const dateStr = new Date(ticket.created_at || Date.now()).toLocaleString('pt-PT');
+        const ticketDate = new Date(ticket.created_at || Date.now());
+        const dateStr = ticketDate.toLocaleDateString('pt-PT');
+        const timeStr = ticketDate.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' });
         addText(`Data: ${dateStr}`, align, 0x00);
+        addText(`Hora de Retirada: ${timeStr}`, align, 0x00);
         addText(separator, align, 0x00);
 
         // 6. QR Code (Ticket ID)
         if (customization.qr_visible && ticket.id) {
-            addText('Registe a sua senha:', align, 0x00);
+            addText('Consulte o status da senha:', align, 0x00);
             
             // Align center before QR Code
             concat(new Uint8Array([0x1B, 0x61, 0x01]));
             
-            const qrText = ticket.id;
+            const qrText = `https://paocaseiro.co.mz/get-ticket?id=${ticket.id}`;
             const dataBytes = encoder.encode(qrText);
             const dataLength = dataBytes.length + 3;
             const lenLow = dataLength & 0xFF;
