@@ -1,8 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { hostingerService } from '../../services/hostingerService';
 import { previewDocumentPDF, generateAndUploadReceipt } from '../../services/billingService';
-import { FileText, Search, ExternalLink, Plus, RefreshCw, X, User, CheckCircle } from 'lucide-react';
+import { FileText, Search, ExternalLink, Plus, RefreshCw, X, User, CheckCircle, Printer } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { printerService } from '../../services/printer';
+
+const printPDFDirectly = (blobUrl: string) => {
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    iframe.src = blobUrl;
+    document.body.appendChild(iframe);
+    iframe.onload = () => {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+        setTimeout(() => {
+            document.body.removeChild(iframe);
+        }, 2000);
+    };
+};
 
 // --- Loading SVG ---
 const Loader = ({ className = '', size = 24 }: { className?: string; size?: number }) => (
@@ -15,6 +30,50 @@ const Loader = ({ className = '', size = 24 }: { className?: string; size?: numb
 const BillingDetailsModal = ({ doc, onClose, onRefresh }: { doc: any, onClose: () => void, onRefresh: () => void }) => {
     const [generatingPreview, setGeneratingPreview] = useState(false);
     const [markingPaid, setMarkingPaid] = useState(false);
+    const [printingA4, setPrintingA4] = useState(false);
+    const [printingThermal, setPrintingThermal] = useState(false);
+
+    const handlePrintA4 = async () => {
+        setPrintingA4(true);
+        try {
+            const blobUrl = await previewDocumentPDF(doc);
+            if (blobUrl) {
+                printPDFDirectly(blobUrl);
+            } else {
+                alert("Não foi possível gerar a pré-visualização para impressão.");
+            }
+        } catch (e) {
+            console.error(e);
+            alert("Ocorreu um erro ao imprimir o documento.");
+        } finally {
+            setPrintingA4(false);
+        }
+    };
+
+    const handlePrintThermal = async () => {
+        setPrintingThermal(true);
+        try {
+            const savedConfig = localStorage.getItem('pos_printer_config');
+            const paperSize = savedConfig ? JSON.parse(savedConfig).paperSize : '80mm';
+            
+            const orderPayload = {
+                id: doc.order_id || doc.id,
+                short_id: doc.receipt_no?.split('-').pop() || '000',
+                created_at: doc.created_at,
+                payment_method: doc.payment_method || 'cash',
+                total_amount: doc.total_amount || doc.amount || 0,
+                amount_received: doc.amount_received || doc.total_amount || doc.amount || 0,
+                change_given: doc.change_given || 0
+            };
+            
+            await printerService.printReceipt(orderPayload, doc.items || [], paperSize);
+            alert('Documento enviado para a impressora térmica!');
+        } catch (e: any) {
+            alert('Erro ao imprimir na térmica: ' + e.message);
+        } finally {
+            setPrintingThermal(false);
+        }
+    };
 
     const handleOpenPDF = async () => {
         setGeneratingPreview(true);
@@ -179,23 +238,41 @@ const BillingDetailsModal = ({ doc, onClose, onRefresh }: { doc: any, onClose: (
                 </div>
                 
                 <div className="p-6 border-t border-gray-100 bg-white flex flex-wrap justify-between items-center gap-4">
-                    <div>
+                    <div className="flex flex-wrap gap-2">
                         {doc.document_type === 'Invoice' && doc.status === 'pending' && (
                             <button 
                                 onClick={handleMarkAsPaid}
                                 disabled={markingPaid}
                                 className="px-6 py-3 bg-green-600 text-white rounded-xl font-bold hover:shadow-lg transition-all flex items-center gap-2 disabled:opacity-50"
                             >
-                                {markingPaid ? <Loader className="animate-spin" size={20} /> : <CheckCircle size={20} />} Marcar como Paga (Gerar Recibo)
+                                {markingPaid ? <Loader className="animate-spin" size={20} /> : <CheckCircle size={20} />} Liquidar
                             </button>
                         )}
+                        
+                        <button 
+                            onClick={handlePrintA4}
+                            disabled={printingA4}
+                            className="px-4 py-3 bg-blue-600 text-white rounded-xl font-bold hover:shadow-lg transition-all flex items-center gap-2 disabled:opacity-50"
+                            title="Imprimir com layout e branding Pão Caseiro (A4)"
+                        >
+                            {printingA4 ? <Loader className="animate-spin" size={18} /> : <Printer size={18} />} Imprimir (A4)
+                        </button>
+
+                        <button 
+                            onClick={handlePrintThermal}
+                            disabled={printingThermal}
+                            className="px-4 py-3 bg-amber-600 text-white rounded-xl font-bold hover:shadow-lg transition-all flex items-center gap-2 disabled:opacity-50"
+                            title="Imprimir em impressora térmica local"
+                        >
+                            {printingThermal ? <Loader className="animate-spin" size={18} /> : <Printer size={18} />} Imprimir (Térmica)
+                        </button>
                     </div>
                     <button 
                         onClick={handleOpenPDF}
                         disabled={generatingPreview}
                         className="px-6 py-3 bg-[#3b2f2f] text-[#d9a65a] rounded-xl font-bold hover:shadow-lg transition-all flex items-center gap-2 disabled:opacity-50"
                     >
-                        {generatingPreview ? <Loader className="animate-spin" size={20} /> : <ExternalLink size={20} />} Abrir PDF Original
+                        {generatingPreview ? <Loader className="animate-spin" size={20} /> : <ExternalLink size={20} />} PDF Original
                     </button>
                 </div>
             </motion.div>
@@ -772,6 +849,29 @@ export const AdminBillingView: React.FC = () => {
                                                         {convertingDocId === r.id ? <Loader className="animate-spin" size={18} /> : <CheckCircle size={18} />}
                                                     </button>
                                                 )}
+                                                <button 
+                                                    onClick={async (e) => { 
+                                                        e.stopPropagation(); 
+                                                        setGeneratingRowPdf(r.id);
+                                                        try {
+                                                            const blobUrl = await previewDocumentPDF(r);
+                                                            if (blobUrl) {
+                                                                printPDFDirectly(blobUrl);
+                                                            } else {
+                                                                alert("Erro ao carregar pré-visualização de impressão.");
+                                                            }
+                                                        } catch (err) {
+                                                            alert('Erro ao imprimir.');
+                                                        } finally {
+                                                            setGeneratingRowPdf(null);
+                                                        }
+                                                    }}
+                                                    disabled={generatingRowPdf === r.id}
+                                                    className="p-2 bg-gray-100 text-blue-600 hover:bg-blue-600 hover:text-white rounded-lg transition-colors flex items-center justify-center disabled:opacity-50"
+                                                    title="Imprimir Documento (A4 / PDF)"
+                                                >
+                                                    {generatingRowPdf === r.id ? <Loader className="animate-spin" size={18} /> : <Printer size={18} />}
+                                                </button>
                                                 <button 
                                                     onClick={(e) => { e.stopPropagation(); handleOpenPDF(r); }}
                                                     disabled={generatingRowPdf === r.id}

@@ -7480,6 +7480,20 @@ export const Admin: React.FC = () => {
                                                 </div>
                                                 <div className="space-y-4">
                                                     <button
+                                                        onClick={async () => {
+                                                            try {
+                                                                await printerService.connect(printerConfig);
+                                                                setIsPrinterConnected(printerService.isConnected());
+                                                                alert('Impressora ligada com sucesso!');
+                                                            } catch (e: any) {
+                                                                alert('Erro ao ligar impressora: ' + e.message);
+                                                            }
+                                                        }}
+                                                        className={`w-full py-4 font-bold rounded-2xl shadow-xl hover:brightness-110 active:scale-95 transition-all text-xs uppercase tracking-widest ${isPrinterConnected ? 'bg-green-600 text-white shadow-green-600/10' : 'bg-blue-600 text-white shadow-blue-600/10'}`}
+                                                    >
+                                                        {isPrinterConnected ? 'Impressora Conectada' : 'Conectar Impressora'}
+                                                    </button>
+                                                    <button
                                                         onClick={() => {
                                                             localStorage.setItem('pos_printer_config', JSON.stringify(printerConfig));
                                                             alert('Configuração de impressora guardada!');

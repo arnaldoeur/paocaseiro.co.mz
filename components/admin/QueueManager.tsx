@@ -21,12 +21,15 @@ import {
     AlertTriangle,
     TrendingUp,
     Clock,
-    Wifi
+    Wifi,
+    Printer
 } from 'lucide-react';
 import { useRealtimeTickets } from '../../hooks/useRealtimeTickets';
 import { queueService, QueueTicket } from '../../services/queue';
 import { NotificationService } from '../../services/NotificationService';
 import { motion, AnimatePresence } from 'framer-motion';
+import { printerService } from '../../services/printer';
+import { hostingerService } from '../../services/hostingerService';
 
 
 export const QueueManager: React.FC = () => {
@@ -40,6 +43,111 @@ export const QueueManager: React.FC = () => {
     const [actionLoading, setActionLoading] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<'panel' | 'history' | 'config'>('panel');
     const [stats, setStats] = useState<any>(null);
+
+    const [ticketCustom, setTicketCustom] = useState<any>({
+        logo_url: '/assets/ui/logo.png',
+        company_name: 'PÃO CASEIRO',
+        header: 'Queue Management System',
+        footer: 'Lichinga, Niassa • Tel: +258 87 9146 662',
+        thanks_msg: 'O Sabor que Aquece o Coração',
+        font_size_title: 'large',
+        font_size_number: 'extralarge',
+        text_align: 'center',
+        paper_width: '80mm',
+        margins: '0',
+        qr_visible: true,
+        barcode_visible: true
+    });
+    const [printerConnected, setPrinterConnected] = useState(false);
+    const [printerStatusText, setPrinterStatusText] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
+    const [isSavingCustom, setIsSavingCustom] = useState(false);
+    const [viewTicketModal, setViewTicketModal] = useState<any | null>(null);
+
+    useEffect(() => {
+        const loadCustomSettings = async () => {
+            const data = await printerService.fetchCustomizationSettings();
+            setTicketCustom(data);
+        };
+        loadCustomSettings();
+
+        const handlePrinterStatus = (status: 'disconnected' | 'connecting' | 'connected') => {
+            setPrinterStatusText(status);
+            setPrinterConnected(status === 'connected');
+        };
+        printerService.registerStatusListener(handlePrinterStatus);
+        return () => {
+            printerService.unregisterStatusListener(handlePrinterStatus);
+        };
+    }, []);
+
+    const handleSaveCustom = async () => {
+        setIsSavingCustom(true);
+        try {
+            await hostingerService.saveSetting('ticket_customization', ticketCustom);
+            localStorage.setItem('ticket_customization', JSON.stringify(ticketCustom));
+            alert('Configuração de senha guardada com sucesso!');
+        } catch (e: any) {
+            alert('Erro ao guardar configurações: ' + e.message);
+        } finally {
+            setIsSavingCustom(false);
+        }
+    };
+
+    const handleConnectUSB = async () => {
+        try {
+            await printerService.connect({
+                type: 'usb',
+                paperSize: ticketCustom.paper_width === '58mm' ? '58mm' : '80mm',
+                autoPrint: true
+            });
+            alert('Impressora ligada com sucesso!');
+        } catch (e: any) {
+            alert('Erro ao ligar impressora: ' + e.message);
+        }
+    };
+
+    const printOrPreviewTicket = async (ticket: any) => {
+        try {
+            await printerService.printTicket(ticket);
+        } catch (e: any) {
+            if (e.message?.includes('não está conectada') || e.message?.includes('conecte a impressora')) {
+                setViewTicketModal(ticket);
+            } else {
+                alert('Erro ao imprimir: ' + e.message);
+            }
+        }
+    };
+
+    const handleTestPrint = async () => {
+        const testTicket = {
+            id: 't_teste123',
+            ticket_number: 'A003',
+            category: 'Padaria',
+            is_priority: true,
+            created_at: new Date().toISOString()
+        };
+        try {
+            await printerService.printTicket(testTicket);
+            alert('Senha de teste impressa!');
+        } catch (e: any) {
+            if (e.message?.includes('não está conectada') || e.message?.includes('conecte a impressora')) {
+                setViewTicketModal(testTicket);
+            } else {
+                alert('Erro ao imprimir senha de teste: ' + e.message);
+            }
+        }
+    };
+
+    const handleGenerateManualTicket = async (isPriority: boolean, category: string = 'Geral') => {
+        try {
+            const ticket = await queueService.generateTicket(isPriority, undefined, category);
+            if (ticket) {
+                await printOrPreviewTicket(ticket);
+            }
+        } catch (e: any) {
+            alert('Erro ao gerar senha: ' + e.message);
+        }
+    };
 
     // Local Stats Calculation (Meticulous & Instant)
     const derivedStats = useMemo(() => {
@@ -370,6 +478,13 @@ export const QueueManager: React.FC = () => {
                                         Atendido
                                     </button>
                                     <button 
+                                        onClick={() => printOrPreviewTicket(currentlyCalling)}
+                                        className="px-10 py-5 bg-[#3b2f2f] text-[#d9a65a] font-black rounded-[2rem] uppercase tracking-widest text-xs flex items-center gap-3 border border-[#d9a65a]/20 hover:bg-[#d9a65a] hover:text-[#3b2f2f] transition-all"
+                                    >
+                                        <Printer className="w-5 h-5" />
+                                        Re-imprimir
+                                    </button>
+                                    <button 
                                         disabled={!!actionLoading}
                                         onClick={() => handleAction(() => queueService.skipTicket(currentlyCalling.id), currentlyCalling.id)}
                                         className="px-10 py-5 bg-gray-100 text-gray-500 font-black rounded-[2rem] uppercase tracking-widest text-xs flex items-center gap-3 border border-gray-200 hover:bg-gray-200 transition-all font-bold"
@@ -422,13 +537,22 @@ export const QueueManager: React.FC = () => {
                         <div className="grid grid-cols-3 gap-6">
                             {nextThree.length > 0 ? nextThree.map((t, i) => (
                                 <div key={t.id} className="bg-gray-50 border border-gray-100 rounded-2xl p-6 text-center group hover:bg-white hover:shadow-md transition-all relative">
-                                    <button 
-                                        onClick={() => setShareTicket(t)}
-                                        className="absolute top-4 right-4 text-gray-300 hover:text-[#d9a65a] transition-colors"
-                                        title="Partilhar QR Code"
-                                    >
-                                        <Smartphone size={16} />
-                                    </button>
+                                    <div className="absolute top-4 right-4 flex gap-2">
+                                        <button 
+                                            onClick={() => printOrPreviewTicket(t)}
+                                            className="text-gray-300 hover:text-[#d9a65a] transition-colors"
+                                            title="Imprimir Senha"
+                                        >
+                                            <Printer size={16} />
+                                        </button>
+                                        <button 
+                                            onClick={() => setShareTicket(t)}
+                                            className="text-gray-300 hover:text-[#d9a65a] transition-colors"
+                                            title="Partilhar QR Code"
+                                        >
+                                            <Smartphone size={16} />
+                                        </button>
+                                    </div>
                                     <div className="flex flex-col items-center gap-1 mb-2">
                                         <span className={`px-2 py-0.5 rounded-full text-[6px] font-black uppercase tracking-widest ${
                                             t.is_priority ? 'bg-amber-100 text-amber-600' : 'bg-gray-100 text-gray-400'
@@ -518,7 +642,7 @@ export const QueueManager: React.FC = () => {
                                 {['Padaria', 'Confeitaria', 'Café', 'Lanches'].map(cat => (
                                     <button 
                                         key={cat}
-                                        onClick={() => queueService.generateTicket(false, undefined, cat)}
+                                        onClick={() => handleGenerateManualTicket(false, cat)}
                                         className="p-4 bg-white/5 border border-white/10 rounded-xl flex flex-col items-center group hover:bg-white text-white/40 hover:text-[#3b2f2f] transition-all"
                                     >
                                         <span className="text-[7px] font-black uppercase tracking-widest">{cat}</span>
@@ -527,7 +651,7 @@ export const QueueManager: React.FC = () => {
                             </div>
                             
                             <button 
-                                onClick={() => queueService.generateTicket(true)}
+                                onClick={() => handleGenerateManualTicket(true, 'Geral')}
                                 className="w-full p-4 bg-[#d9a65a]/10 border border-[#d9a65a]/20 rounded-xl flex items-center justify-center gap-3 group hover:bg-[#d9a65a] text-[#d9a65a] hover:text-[#3b2f2f] transition-all"
                             >
                                 <UserCheck className="w-5 h-5 opacity-60 group-hover:opacity-100" />
@@ -625,12 +749,22 @@ export const QueueManager: React.FC = () => {
                                                     </span>
                                                 </td>
                                                 <td className="px-8 py-6">
-                                                    <button 
-                                                        onClick={() => setShareTicket(t)}
-                                                        className="p-2 text-gray-300 hover:text-[#d9a65a] transition-colors"
-                                                    >
-                                                        <Smartphone size={16} />
-                                                    </button>
+                                                    <div className="flex gap-2">
+                                                        <button 
+                                                            onClick={() => printOrPreviewTicket(t)}
+                                                            className="p-2 text-gray-300 hover:text-[#d9a65a] transition-colors"
+                                                            title="Imprimir Senha"
+                                                        >
+                                                            <Printer size={16} />
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => setShareTicket(t)}
+                                                            className="p-2 text-gray-300 hover:text-[#d9a65a] transition-colors"
+                                                            title="Partilhar QR Code"
+                                                        >
+                                                            <Smartphone size={16} />
+                                                        </button>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         ))}
@@ -647,59 +781,380 @@ export const QueueManager: React.FC = () => {
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -10 }}
-                        className="max-w-2xl"
+                        className="grid grid-cols-12 gap-8 w-full"
                     >
-                        <div className="bg-white rounded-[2.5rem] border border-white shadow-2xl p-10 space-y-10">
-                            <div>
-                                <h3 className="text-xl font-black text-[#3b2f2f] uppercase tracking-tighter mb-4">Configuração do Sistema</h3>
-                                <p className="text-sm text-gray-500 leading-relaxed">Gerencie o estado global das filas e restaure o atendimento caso necessário.</p>
+                        {/* Coluna Esquerda: Configurações e Customizador */}
+                        <div className="col-span-12 lg:col-span-8 space-y-8">
+                            
+                            {/* Impressora e Ações de Controlo */}
+                            <div className="bg-white rounded-[2rem] border border-white shadow-xl p-8 space-y-6">
+                                <h3 className="text-lg font-black text-[#3b2f2f] uppercase tracking-tighter">Ligação à Impressora</h3>
+                                
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {/* WebUSB Card */}
+                                    <div className="p-6 bg-gray-50 rounded-2xl border border-gray-100 flex flex-col justify-between">
+                                        <div>
+                                            <div className="flex justify-between items-center mb-3">
+                                                <span className="text-[10px] font-black uppercase tracking-widest text-[#3b2f2f]">Conexão USB</span>
+                                                <span className={`px-2.5 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest ${
+                                                    printerStatusText === 'connected' ? 'bg-green-100 text-green-700' :
+                                                    printerStatusText === 'connecting' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
+                                                }`}>
+                                                    {printerStatusText === 'connected' ? 'Conectada' : printerStatusText === 'connecting' ? 'A ligar...' : 'Desconectada'}
+                                                </span>
+                                            </div>
+                                            <p className="text-[10px] text-gray-400 font-bold mb-4">Emparelhe e conecte diretamente com a Xprinter via WebUSB.</p>
+                                        </div>
+                                        <button
+                                            onClick={handleConnectUSB}
+                                            className="w-full py-3 bg-[#3b2f2f] text-[#d9a65a] hover:brightness-110 active:scale-95 text-[9px] font-black uppercase tracking-widest rounded-xl transition-all shadow-md"
+                                        >
+                                            Conectar Impressora USB
+                                        </button>
+                                    </div>
+
+                                    {/* Ações de Teste */}
+                                    <div className="p-6 bg-gray-50 rounded-2xl border border-gray-100 flex flex-col justify-between">
+                                        <div>
+                                            <span className="text-[10px] font-black uppercase tracking-widest text-[#3b2f2f] mb-3 block">Testes Hardware</span>
+                                            <p className="text-[10px] text-gray-400 font-bold mb-4">Emita uma senha de teste para verificar se o papel, corte e alinhamento estão corretos.</p>
+                                        </div>
+                                        <button
+                                            onClick={handleTestPrint}
+                                            className="w-full py-3 bg-[#d9a65a] text-[#3b2f2f] hover:brightness-110 active:scale-95 text-[9px] font-black uppercase tracking-widest rounded-xl transition-all shadow-md"
+                                        >
+                                            Imprimir Senha Teste
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
 
-                            <div className="space-y-6">
-                                <div className="p-8 bg-red-50 rounded-3xl border border-red-100 flex items-center justify-between gap-8">
-                                    <div className="flex items-center gap-6">
-                                        <div className="bg-red-500/10 p-4 rounded-2xl">
-                                            <AlertTriangle className="text-red-500" size={24} />
-                                        </div>
-                                        <div>
-                                            <h4 className="text-[11px] font-black uppercase tracking-widest text-[#3b2f2f] mb-1">Reiniciar Fila Diária</h4>
-                                            <p className="text-[10px] text-gray-400 font-bold leading-normal">Cancela todas as senhas pendentes de hoje. Use com cautela.</p>
-                                        </div>
+                            {/* Formulário de Personalização do Layout da Senha */}
+                            <div className="bg-white rounded-[2rem] border border-white shadow-xl p-8 space-y-6">
+                                <h3 className="text-lg font-black text-[#3b2f2f] uppercase tracking-tighter">Personalização de Senha</h3>
+                                
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    {/* Nome da Empresa */}
+                                    <div className="space-y-1.5">
+                                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Nome da Empresa</label>
+                                        <input
+                                            type="text"
+                                            value={ticketCustom.company_name}
+                                            onChange={e => setTicketCustom({ ...ticketCustom, company_name: e.target.value })}
+                                            className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-xs outline-none focus:border-[#d9a65a] font-bold"
+                                            placeholder="Ex: PÃO CASEIRO"
+                                        />
                                     </div>
-                                    <button 
-                                        onClick={handleResetQueue}
-                                        disabled={!!actionLoading}
-                                        className="px-6 py-4 bg-red-600 text-white text-[10px] font-black uppercase tracking-widest rounded-2xl hover:bg-red-700 active:scale-95 transition-all shadow-xl shadow-red-600/20 disabled:opacity-50"
-                                    >
-                                        Reiniciar Agora
-                                    </button>
+
+                                    {/* URL do Logótipo */}
+                                    <div className="space-y-1.5">
+                                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">URL do Logótipo</label>
+                                        <input
+                                            type="text"
+                                            value={ticketCustom.logo_url}
+                                            onChange={e => setTicketCustom({ ...ticketCustom, logo_url: e.target.value })}
+                                            className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-xs outline-none focus:border-[#d9a65a]"
+                                            placeholder="Ex: /assets/ui/logo.png"
+                                        />
+                                    </div>
+
+                                    {/* Cabeçalho */}
+                                    <div className="space-y-1.5">
+                                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Mensagem Cabeçalho</label>
+                                        <input
+                                            type="text"
+                                            value={ticketCustom.header}
+                                            onChange={e => setTicketCustom({ ...ticketCustom, header: e.target.value })}
+                                            className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-xs outline-none focus:border-[#d9a65a]"
+                                            placeholder="Ex: Sistema de Gestão de Filas"
+                                        />
+                                    </div>
+
+                                    {/* Agradecimento */}
+                                    <div className="space-y-1.5">
+                                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Mensagem Agradecimento</label>
+                                        <input
+                                            type="text"
+                                            value={ticketCustom.thanks_msg}
+                                            onChange={e => setTicketCustom({ ...ticketCustom, thanks_msg: e.target.value })}
+                                            className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-xs outline-none focus:border-[#d9a65a]"
+                                            placeholder="Ex: O sabor que aquece"
+                                        />
+                                    </div>
+
+                                    {/* Rodapé */}
+                                    <div className="space-y-1.5">
+                                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Contacto / Rodapé</label>
+                                        <input
+                                            type="text"
+                                            value={ticketCustom.footer}
+                                            onChange={e => setTicketCustom({ ...ticketCustom, footer: e.target.value })}
+                                            className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-xs outline-none focus:border-[#d9a65a]"
+                                            placeholder="Ex: Tel: +258 87 914 6662"
+                                        />
+                                    </div>
+
+                                    {/* Tamanho Fonte Titulo */}
+                                    <div className="space-y-1.5">
+                                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Tamanho Fonte Titulo</label>
+                                        <select
+                                            value={ticketCustom.font_size_title}
+                                            onChange={e => setTicketCustom({ ...ticketCustom, font_size_title: e.target.value })}
+                                            className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-xs outline-none cursor-pointer focus:border-[#d9a65a]"
+                                        >
+                                            <option value="standard">Standard</option>
+                                            <option value="double">Duplo</option>
+                                            <option value="large">Grande</option>
+                                            <option value="extralarge">Muito Grande</option>
+                                        </select>
+                                    </div>
+
+                                    {/* Tamanho Fonte Número */}
+                                    <div className="space-y-1.5">
+                                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Tamanho Fonte Número</label>
+                                        <select
+                                            value={ticketCustom.font_size_number}
+                                            onChange={e => setTicketCustom({ ...ticketCustom, font_size_number: e.target.value })}
+                                            className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-xs outline-none cursor-pointer focus:border-[#d9a65a]"
+                                        >
+                                            <option value="standard">Standard</option>
+                                            <option value="double">Duplo</option>
+                                            <option value="large">Grande</option>
+                                            <option value="extralarge">Muito Grande</option>
+                                        </select>
+                                    </div>
+
+                                    {/* Alinhamento Texto */}
+                                    <div className="space-y-1.5">
+                                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Alinhamento Texto</label>
+                                        <select
+                                            value={ticketCustom.text_align}
+                                            onChange={e => setTicketCustom({ ...ticketCustom, text_align: e.target.value })}
+                                            className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-xs outline-none cursor-pointer focus:border-[#d9a65a]"
+                                        >
+                                            <option value="left">Esquerda</option>
+                                            <option value="center">Centro</option>
+                                            <option value="right">Direita</option>
+                                        </select>
+                                    </div>
+
+                                    {/* Largura Papel */}
+                                    <div className="space-y-1.5">
+                                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Largura Papel</label>
+                                        <select
+                                            value={ticketCustom.paper_width}
+                                            onChange={e => setTicketCustom({ ...ticketCustom, paper_width: e.target.value })}
+                                            className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-xs outline-none cursor-pointer focus:border-[#d9a65a]"
+                                        >
+                                            <option value="58mm">58mm</option>
+                                            <option value="80mm">80mm</option>
+                                        </select>
+                                    </div>
+
+                                    {/* Margens */}
+                                    <div className="space-y-1.5">
+                                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Margem Lateral (0-40)</label>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            max="40"
+                                            value={ticketCustom.margins}
+                                            onChange={e => setTicketCustom({ ...ticketCustom, margins: e.target.value })}
+                                            className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-xs outline-none focus:border-[#d9a65a]"
+                                        />
+                                    </div>
+
+                                    <div className="flex flex-col gap-3 justify-center md:pt-4">
+                                        {/* Logo Toggle */}
+                                        <label className="flex items-center gap-3 cursor-pointer text-xs font-bold text-gray-600">
+                                            <input
+                                                type="checkbox"
+                                                checked={ticketCustom.logo_visible !== false}
+                                                onChange={e => setTicketCustom({ ...ticketCustom, logo_visible: e.target.checked })}
+                                                className="w-4 h-4 rounded text-[#d9a65a] focus:ring-[#d9a65a] border-gray-300"
+                                            />
+                                            Mostrar Logótipo da Empresa
+                                        </label>
+
+                                        {/* QR Code Toggle */}
+                                        <label className="flex items-center gap-3 cursor-pointer text-xs font-bold text-gray-600">
+                                            <input
+                                                type="checkbox"
+                                                checked={ticketCustom.qr_visible}
+                                                onChange={e => setTicketCustom({ ...ticketCustom, qr_visible: e.target.checked })}
+                                                className="w-4 h-4 rounded text-[#d9a65a] focus:ring-[#d9a65a] border-gray-300"
+                                            />
+                                            Mostrar QR Code (ID de Senha)
+                                        </label>
+
+                                        {/* Barcode Toggle */}
+                                        <label className="flex items-center gap-3 cursor-pointer text-xs font-bold text-gray-600">
+                                            <input
+                                                type="checkbox"
+                                                checked={ticketCustom.barcode_visible}
+                                                onChange={e => setTicketCustom({ ...ticketCustom, barcode_visible: e.target.checked })}
+                                                className="w-4 h-4 rounded text-[#d9a65a] focus:ring-[#d9a65a] border-gray-300"
+                                            />
+                                            Mostrar Código de Barras (BarCode)
+                                        </label>
+                                    </div>
                                 </div>
 
-                                <div className="p-8 bg-gray-50 rounded-3xl border border-gray-100 flex items-center justify-between gap-8">
-                                    <div className="flex items-center gap-6">
-                                        <div className="bg-gray-200 p-4 rounded-2xl">
-                                            <Volume2 className="text-gray-500" size={24} />
-                                        </div>
-                                        <div>
-                                            <h4 className="text-[11px] font-black uppercase tracking-widest text-[#3b2f2f] mb-1">Áudio do Painel</h4>
-                                            <p className="text-[10px] text-gray-400 font-bold leading-normal">Ative ou desative as notificações de voz para este computador.</p>
-                                        </div>
-                                    </div>
-                                    <button 
-                                        onClick={toggleAudio}
-                                        className={`px-6 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                                            audioEnabled ? 'bg-amber-100 text-amber-600 border border-amber-200' : 'bg-gray-200 text-gray-400'
-                                        }`}
-                                    >
-                                        {audioEnabled ? 'Áudio Ativo' : 'Áudio Mudo'}
-                                    </button>
-                                </div>
-
-
+                                <button
+                                    onClick={handleSaveCustom}
+                                    disabled={isSavingCustom}
+                                    className="w-full py-4 bg-[#3b2f2f] text-white hover:brightness-110 text-xs font-black uppercase tracking-widest rounded-2xl transition-all shadow-xl disabled:opacity-50"
+                                >
+                                    {isSavingCustom ? 'A Guardar...' : 'Guardar Alterações Layout'}
+                                </button>
                             </div>
 
-                            <div className="pt-6 border-t border-gray-50">
-                                <p className="text-[8px] font-black text-gray-300 uppercase tracking-[0.4em] text-center">Zyph Intelligence • v2.0</p>
+                            {/* Restantes Configurações Globais */}
+                            <div className="bg-white rounded-[2rem] border border-white shadow-xl p-8 space-y-6">
+                                <h3 className="text-lg font-black text-[#3b2f2f] uppercase tracking-tighter">Administração de Filas</h3>
+                                
+                                <div className="space-y-4">
+                                    <div className="p-6 bg-red-50 rounded-2xl border border-red-100 flex items-center justify-between gap-6">
+                                        <div className="flex items-center gap-4">
+                                            <div className="bg-red-500/10 p-3 rounded-xl text-red-500">
+                                                <AlertTriangle size={20} />
+                                            </div>
+                                            <div>
+                                                <h4 className="text-[10px] font-black uppercase tracking-widest text-[#3b2f2f]">Reiniciar Fila de Hoje</h4>
+                                                <p className="text-[9px] text-gray-400 font-bold leading-normal">Apaga ou cancela as senhas de hoje. Causa reset à TV.</p>
+                                            </div>
+                                        </div>
+                                        <button 
+                                            onClick={handleResetQueue}
+                                            disabled={!!actionLoading}
+                                            className="px-5 py-3 bg-red-600 text-white text-[9px] font-black uppercase tracking-widest rounded-xl hover:bg-red-700 active:scale-95 transition-all shadow-md disabled:opacity-50"
+                                        >
+                                            Reiniciar
+                                        </button>
+                                    </div>
+
+                                    <div className="p-6 bg-gray-50 rounded-2xl border border-gray-100 flex items-center justify-between gap-6">
+                                        <div className="flex items-center gap-4">
+                                            <div className="bg-gray-200 p-3 rounded-xl text-gray-500">
+                                                <Volume2 size={20} />
+                                            </div>
+                                            <div>
+                                                <h4 className="text-[10px] font-black uppercase tracking-widest text-[#3b2f2f]">Notificação por Voz</h4>
+                                                <p className="text-[9px] text-gray-400 font-bold leading-normal">Habilite avisos falados ao chamar senhas neste painel.</p>
+                                            </div>
+                                        </div>
+                                        <button 
+                                            onClick={toggleAudio}
+                                            className={`px-5 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${
+                                                audioEnabled ? 'bg-amber-100 text-amber-600 border border-amber-200' : 'bg-gray-200 text-gray-400'
+                                            }`}
+                                        >
+                                            {audioEnabled ? 'Ativo' : 'Mudo'}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Coluna Direita: Live Thermal Receipt Preview */}
+                        <div className="col-span-12 lg:col-span-4">
+                            <div className="bg-white rounded-[2rem] border border-white shadow-xl p-8 sticky top-6 space-y-6">
+                                <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest text-center">Pré-Visualização em Tempo Real</h3>
+                                
+                                <div className="bg-[#f7f1eb] p-6 rounded-3xl border border-gray-200 shadow-inner flex justify-center">
+                                    {/* Receipt Visual */}
+                                    <div className="bg-white border border-gray-300 rounded-lg p-5 shadow-md font-mono text-[10px] text-gray-800 w-full max-w-[260px] min-h-[360px] flex flex-col justify-between relative overflow-hidden">
+                                        <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-b from-gray-100 to-transparent"></div>
+                                        
+                                        <div className="space-y-4">
+                                            {/* Company Title */}
+                                            <div style={{ textAlign: ticketCustom.text_align }} className="px-1">
+                                                {ticketCustom.logo_visible !== false && ticketCustom.logo_url && (
+                                                    <div className="flex justify-center mb-2">
+                                                        <img 
+                                                            src={ticketCustom.logo_url} 
+                                                            alt="Logo Pão Caseiro" 
+                                                            className="h-10 w-auto object-contain"
+                                                            onError={(e) => {
+                                                                e.currentTarget.style.display = 'none';
+                                                            }}
+                                                        />
+                                                    </div>
+                                                )}
+                                                <h4 className={`font-black uppercase tracking-tight ${
+                                                    ticketCustom.font_size_title === 'extralarge' ? 'text-lg' :
+                                                    ticketCustom.font_size_title === 'large' ? 'text-base' :
+                                                    ticketCustom.font_size_title === 'double' ? 'text-xs' : 'text-[9px]'
+                                                }`}>
+                                                    {ticketCustom.company_name || 'PAO CASEIRO'}
+                                                </h4>
+                                                {ticketCustom.header && <p className="text-[8px] text-gray-400 leading-normal mt-0.5">{ticketCustom.header}</p>}
+                                            </div>
+
+                                            <div className="border-t border-dashed border-gray-300"></div>
+
+                                            {/* Category info */}
+                                            <div style={{ textAlign: ticketCustom.text_align }}>
+                                                <span className="text-[9px] font-black uppercase text-amber-600">FILA: PADARIA</span>
+                                                <p className="text-[7px] text-red-500 font-bold tracking-widest leading-none mt-0.5">** ATENDIMENTO PRIORITÁRIO **</p>
+                                            </div>
+
+                                            {/* Big Ticket Number */}
+                                            <div style={{ textAlign: ticketCustom.text_align }}>
+                                                <h2 className={`font-black leading-none tracking-tighter my-2 ${
+                                                    ticketCustom.font_size_number === 'extralarge' ? 'text-5xl' :
+                                                    ticketCustom.font_size_number === 'large' ? 'text-4xl' :
+                                                    ticketCustom.font_size_number === 'double' ? 'text-2xl' : 'text-base'
+                                                }`}>
+                                                    A003
+                                                </h2>
+                                            </div>
+
+                                            {/* Timestamp */}
+                                            <div style={{ textAlign: ticketCustom.text_align }} className="text-[8px] text-gray-400">
+                                                Data: {new Date().toLocaleString('pt-PT')}
+                                            </div>
+
+                                            <div className="border-t border-dashed border-gray-300"></div>
+
+                                            {/* QR Code Placeholder */}
+                                            {ticketCustom.qr_visible && (
+                                                <div className="flex flex-col items-center gap-1 my-1">
+                                                    <div className="w-16 h-16 bg-gray-50 border border-gray-200 flex items-center justify-center text-[7px] text-gray-400 font-bold">
+                                                        [QR CODE]
+                                                    </div>
+                                                    <span className="text-[6px] text-gray-400 font-black uppercase tracking-wider">Registe a sua senha</span>
+                                                </div>
+                                            )}
+
+                                            {/* Barcode Placeholder */}
+                                            {ticketCustom.barcode_visible && (
+                                                <div className="flex flex-col items-center gap-1 my-1">
+                                                    <div className="w-28 h-6 bg-gray-50 border border-gray-200 flex flex-col justify-end items-center py-0.5">
+                                                        <div className="w-24 h-3 bg-repeat-x" style={{ backgroundImage: 'linear-gradient(90deg, #000 1px, transparent 1px, transparent 2px, #000 2px, #000 3px, transparent 3px)', backgroundSize: '4px 100%' }}></div>
+                                                        <span className="text-[6px] font-mono tracking-widest text-gray-400 leading-none mt-0.5">T-TESTE123</span>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Thanks message */}
+                                            {ticketCustom.thanks_msg && (
+                                                <p style={{ textAlign: ticketCustom.text_align }} className="text-[8px] italic text-gray-500 font-medium">
+                                                    {ticketCustom.thanks_msg}
+                                                </p>
+                                            )}
+
+                                            {/* Footer contact info */}
+                                            {ticketCustom.footer && (
+                                                <p style={{ textAlign: ticketCustom.text_align }} className="text-[7px] text-gray-400 font-bold leading-normal">
+                                                    {ticketCustom.footer}
+                                                </p>
+                                            )}
+                                        </div>
+                                        
+                                        <div className="absolute -bottom-1 inset-x-0 h-1.5 bg-repeat-x" style={{ backgroundImage: 'linear-gradient(45deg, transparent 33.333%, #f7f1eb 33.333%, #f7f1eb 66.667%, transparent 66.667%), linear-gradient(-45deg, transparent 33.333%, #f7f1eb 33.333%, #f7f1eb 66.667%, transparent 66.667%)', backgroundSize: '4px 8px', backgroundPosition: '0 -4px' }}></div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </motion.div>
@@ -731,6 +1186,7 @@ export const QueueManager: React.FC = () => {
                                     src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(`Senha: ${shareTicket.ticket_number}`)}`}
                                     alt="QR Code"
                                     className="w-40 h-40"
+                                
                                 />
                             </div>
 
@@ -744,6 +1200,148 @@ export const QueueManager: React.FC = () => {
                                 {isDownloading ? 'A baixar...' : 'Descarregar QR Code'}
                             </button>
                             <p className="text-[8px] font-black text-gray-300 uppercase mt-6 tracking-widest">Digitalize para partilhar com o cliente</p>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* Digital Ticket Visual Preview Modal */}
+            <AnimatePresence>
+                {viewTicketModal && (
+                    <div className="fixed inset-0 bg-[#3b2f2f]/60 backdrop-blur-sm z-[200] flex items-center justify-center p-6 overflow-y-auto">
+                        <motion.div 
+                            initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                            animate={{ scale: 1, opacity: 1, y: 0 }}
+                            exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                            className="bg-white rounded-[3rem] p-8 w-full max-w-sm text-center shadow-4xl relative flex flex-col items-center"
+                        >
+                            <button 
+                                onClick={() => setViewTicketModal(null)}
+                                className="absolute top-6 right-6 text-gray-300 hover:text-red-500 transition-colors"
+                            >
+                                <XCircle size={24} />
+                            </button>
+
+                            <div className="mb-4">
+                                <span className="px-3 py-1 bg-amber-50 text-amber-600 rounded-full text-[9px] font-black uppercase tracking-widest border border-amber-100">
+                                    Visualização de Senha
+                                </span>
+                                <p className="text-[10px] text-gray-400 font-bold mt-2 leading-normal">
+                                    Tire uma foto ou partilhe a imagem com o cliente.
+                                </p>
+                            </div>
+
+                            {/* Center Visual Ticket mimicking thermal ticket */}
+                            <div className="bg-[#f7f1eb] p-6 rounded-3xl border border-gray-200 shadow-inner flex justify-center w-full mb-6">
+                                <div className="bg-white border border-gray-300 rounded-lg p-5 shadow-md font-mono text-[10px] text-gray-800 w-full max-w-[240px] min-h-[320px] flex flex-col justify-between relative overflow-hidden text-left">
+                                    <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-b from-gray-100 to-transparent"></div>
+                                    
+                                    <div className="space-y-4">
+                                        {/* Company Title */}
+                                        <div style={{ textAlign: ticketCustom.text_align }} className="px-1">
+                                            {ticketCustom.logo_visible !== false && ticketCustom.logo_url && (
+                                                <div className="flex justify-center mb-2">
+                                                    <img 
+                                                        src={ticketCustom.logo_url} 
+                                                        alt="Logo Pão Caseiro" 
+                                                        className="h-10 w-auto object-contain"
+                                                        onError={(e) => {
+                                                            e.currentTarget.style.display = 'none';
+                                                        }}
+                                                    />
+                                                </div>
+                                            )}
+                                            <h4 className={`font-black uppercase tracking-tight ${
+                                                ticketCustom.font_size_title === 'extralarge' ? 'text-lg' :
+                                                ticketCustom.font_size_title === 'large' ? 'text-base' :
+                                                ticketCustom.font_size_title === 'double' ? 'text-xs' : 'text-[9px]'
+                                            }`}>
+                                                {ticketCustom.company_name || 'PAO CASEIRO'}
+                                            </h4>
+                                            {ticketCustom.header && <p className="text-[8px] text-gray-400 leading-normal mt-0.5">{ticketCustom.header}</p>}
+                                        </div>
+
+                                        <div className="border-t border-dashed border-gray-300"></div>
+
+                                        {/* Category info */}
+                                        <div style={{ textAlign: ticketCustom.text_align }}>
+                                            <span className="text-[9px] font-black uppercase text-amber-600">
+                                                FILA: {viewTicketModal.category?.toUpperCase() || 'GERAL'}
+                                            </span>
+                                            {(viewTicketModal.is_priority || viewTicketModal.priority) && (
+                                                <p className="text-[7px] text-red-500 font-bold tracking-widest leading-none mt-0.5">** ATENDIMENTO PRIORITÁRIO **</p>
+                                            )}
+                                        </div>
+
+                                        {/* Big Ticket Number */}
+                                        <div style={{ textAlign: ticketCustom.text_align }}>
+                                            <h2 className={`font-black leading-none tracking-tighter my-2 ${
+                                                ticketCustom.font_size_number === 'extralarge' ? 'text-5xl' :
+                                                ticketCustom.font_size_number === 'large' ? 'text-4xl' :
+                                                ticketCustom.font_size_number === 'double' ? 'text-2xl' : 'text-base'
+                                            }`}>
+                                                {viewTicketModal.ticket_number || '000'}
+                                            </h2>
+                                        </div>
+
+                                        {/* Timestamp */}
+                                        <div style={{ textAlign: ticketCustom.text_align }} className="text-[8px] text-gray-400">
+                                            Data: {new Date(viewTicketModal.created_at || Date.now()).toLocaleString('pt-PT')}
+                                        </div>
+
+                                        <div className="border-t border-dashed border-gray-300"></div>
+
+                                        {/* QR Code */}
+                                        {ticketCustom.qr_visible && viewTicketModal.id && (
+                                            <div className="flex flex-col items-center gap-1 my-1">
+                                                <div className="p-1 bg-white border border-gray-200 rounded">
+                                                    <img 
+                                                        src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(viewTicketModal.id)}`}
+                                                        alt="QR Code"
+                                                        className="w-16 h-16"
+                                                    />
+                                                </div>
+                                                <span className="text-[5px] text-gray-400 font-black uppercase tracking-wider">Registe a sua senha</span>
+                                            </div>
+                                        )}
+
+                                        {/* Barcode */}
+                                        {ticketCustom.barcode_visible && viewTicketModal.id && (
+                                            <div className="flex flex-col items-center gap-1 my-1">
+                                                <div className="w-28 h-6 bg-gray-50 border border-gray-200 flex flex-col justify-end items-center py-0.5">
+                                                    <div className="w-24 h-3 bg-repeat-x" style={{ backgroundImage: 'linear-gradient(90deg, #000 1px, transparent 1px, transparent 2px, #000 2px, #000 3px, transparent 3px)', backgroundSize: '4px 100%' }}></div>
+                                                    <span className="text-[6px] font-mono tracking-widest text-gray-400 leading-none mt-0.5">
+                                                        {viewTicketModal.id.replace(/[^a-zA-Z0-9]/g, '').substring(0, 15).toUpperCase()}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Thanks message */}
+                                        {ticketCustom.thanks_msg && (
+                                            <p style={{ textAlign: ticketCustom.text_align }} className="text-[8px] italic text-gray-500 font-medium">
+                                                {ticketCustom.thanks_msg}
+                                            </p>
+                                        )}
+
+                                        {/* Footer contact info */}
+                                        {ticketCustom.footer && (
+                                            <p style={{ textAlign: ticketCustom.text_align }} className="text-[7px] text-gray-400 font-bold leading-normal">
+                                                {ticketCustom.footer}
+                                            </p>
+                                        )}
+                                    </div>
+                                    
+                                    <div className="absolute -bottom-1 inset-x-0 h-1.5 bg-repeat-x" style={{ backgroundImage: 'linear-gradient(45deg, transparent 33.333%, #f7f1eb 33.333%, #f7f1eb 66.667%, transparent 66.667%), linear-gradient(-45deg, transparent 33.333%, #f7f1eb 33.333%, #f7f1eb 66.667%, transparent 66.667%)', backgroundSize: '4px 8px', backgroundPosition: '0 -4px' }}></div>
+                                </div>
+                            </div>
+
+                            <button 
+                                onClick={() => setViewTicketModal(null)}
+                                className="w-full py-4 bg-[#3b2f2f] text-[#d9a65a] font-black rounded-2xl uppercase tracking-widest text-xs flex items-center justify-center gap-3 shadow-xl active:scale-95 transition-all"
+                            >
+                                Fechar Visualização
+                            </button>
                         </motion.div>
                     </div>
                 )}

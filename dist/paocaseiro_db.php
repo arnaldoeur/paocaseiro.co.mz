@@ -108,6 +108,36 @@ function get_pdo_connection() {
                     )");
                 }
 
+                // Ensure system_settings table exists
+                $settingsCheck = $conn->query("SHOW TABLES LIKE 'system_settings'")->rowCount();
+                if ($settingsCheck === 0) {
+                    $conn->exec("CREATE TABLE system_settings (
+                        `key` VARCHAR(100) PRIMARY KEY,
+                        `value` LONGTEXT NOT NULL
+                    )");
+                }
+
+                // Seed ticket_customization setting if not exists
+                $customCheck = $conn->query("SELECT COUNT(*) FROM system_settings WHERE `key` = 'ticket_customization'")->fetchColumn();
+                if ($customCheck == 0) {
+                    $defaultCustom = json_encode([
+                        "logo_url" => "/assets/ui/logo.png",
+                        "company_name" => "PÃO CASEIRO",
+                        "header" => "Queue Management System",
+                        "footer" => "Lichinga, Niassa • Tel: +258 87 9146 662",
+                        "thanks_msg" => "O Sabor que Aquece o Coração",
+                        "font_size_title" => "large",
+                        "font_size_number" => "double",
+                        "text_align" => "center",
+                        "paper_width" => "80mm",
+                        "margins" => "0",
+                        "qr_visible" => true,
+                        "barcode_visible" => true
+                    ]);
+                    $stmt = $conn->prepare("INSERT INTO system_settings (`key`, `value`) VALUES ('ticket_customization', ?)");
+                    $stmt->execute([$defaultCustom]);
+                }
+
                 // Ensure orders table has cash_session_id column
                 $ordersCheck = $conn->query("SHOW TABLES LIKE 'orders'")->rowCount();
                 if ($ordersCheck > 0) {
@@ -501,6 +531,31 @@ function send_resend_email($to, $subject, $html) {
         return $result['body'] ?: ['message' => 'Erro HTTP ' . $result['code']];
     }
     return $result['body'] ?: true;
+}
+
+function broadcast_queue_event($event, $data) {
+    $url = 'http://localhost:8080/api/queue-event';
+    $payload = json_encode(['event' => $event, 'data' => $data]);
+    
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => $payload,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_TIMEOUT        => 2, // fast timeout
+        CURLOPT_HTTPHEADER     => ["Content-Type: application/json"]
+    ]);
+    
+    $res = curl_exec($ch);
+    $err = curl_error($ch);
+    curl_close($ch);
+    
+    if ($err) {
+        error_log("[Queue Broadcast Error] Failed to broadcast queue event: $err");
+        return false;
+    }
+    return true;
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1431,8 +1486,9 @@ try {
 
         $stmt = $pdo->prepare("SELECT * FROM queue_tickets WHERE id = ?");
         $stmt->execute([$id]);
-        $newTicket = $stmt->fetch();
-        echo json_encode(['success' => true, 'data' => [map_ticket($newTicket)]]);
+        $newTicket = map_ticket($stmt->fetch());
+        broadcast_queue_event('queue-ticket-created', $newTicket);
+        echo json_encode(['success' => true, 'data' => [$newTicket]]);
         break;
 
     case 'get_queue_count':
@@ -1480,7 +1536,12 @@ try {
         
         $stmt = $pdo->prepare("SELECT * FROM queue_tickets WHERE id = ?");
         $stmt->execute([$id]);
-        echo json_encode(map_ticket($stmt->fetch()));
+        $updatedTicket = map_ticket($stmt->fetch());
+        
+        $eventName = ($status === 'calling') ? 'queue-ticket-calling' : 'queue-ticket-updated';
+        broadcast_queue_event($eventName, $updatedTicket);
+        
+        echo json_encode($updatedTicket);
         break;
 
     case 'update_ticket':
@@ -1507,12 +1568,15 @@ try {
         
         $stmt = $pdo->prepare("SELECT * FROM queue_tickets WHERE id = ?");
         $stmt->execute([$id]);
-        echo json_encode(map_ticket($stmt->fetch()));
+        $updatedTicket = map_ticket($stmt->fetch());
+        broadcast_queue_event('queue-ticket-updated', $updatedTicket);
+        echo json_encode($updatedTicket);
         break;
 
     case 'reset_today_queue':
         $stmt = $pdo->prepare("UPDATE queue_tickets SET status = 'cancelled' WHERE status IN ('waiting', 'calling') AND DATE(created_at) = CURDATE()");
         $stmt->execute();
+        broadcast_queue_event('queue-reset', ["status" => "reset"]);
         echo json_encode(["success" => true]);
         break;
 
@@ -1536,10 +1600,13 @@ try {
             
             $stmt = $pdo->prepare("SELECT * FROM queue_tickets WHERE id = ?");
             $stmt->execute([$ticket['id']]);
-            $ticket = $stmt->fetch();
+            $ticket = map_ticket($stmt->fetch());
+            broadcast_queue_event('queue-ticket-calling', $ticket);
+        } else {
+            $ticket = null;
         }
         
-        echo json_encode(map_ticket($ticket));
+        echo json_encode($ticket);
         break;
 
     // --- WORK SESSIONS ---
