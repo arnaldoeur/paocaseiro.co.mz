@@ -1,4 +1,13 @@
 import { hostingerService } from './hostingerService';
+import { Capacitor, registerPlugin } from '@capacitor/core';
+
+export interface MZPrinterPluginType {
+    isBuiltInPrinterAvailable(): Promise<{ available: boolean; type: 'sunmi' | 'usb' | 'none'; deviceName?: string }>;
+    printRaw(options: { base64Data: string }): Promise<{ success: boolean }>;
+}
+
+const MZPrinterPlugin = registerPlugin<MZPrinterPluginType>('MZPrinterPlugin');
+
 
 export interface PrinterConfig {
     type: 'usb' | 'bluetooth';
@@ -127,6 +136,9 @@ export class PrinterService {
     private statusListeners: Array<(status: 'disconnected' | 'connecting' | 'connected') => void> = [];
     private activeConfig: PrinterConfig | null = null;
 
+    private isBuiltInAvailable: boolean = false;
+    private builtInType: 'sunmi' | 'usb' | 'none' = 'none';
+
     constructor() {
         if (typeof window !== 'undefined' && 'usb' in navigator) {
             navigator.usb.addEventListener('disconnect', (event) => {
@@ -138,7 +150,27 @@ export class PrinterService {
             // Try auto-connecting on init
             this.autoConnectUSB();
         }
+        this.detectBuiltInPrinter();
     }
+
+    private async detectBuiltInPrinter() {
+        if (typeof window !== 'undefined' && Capacitor && Capacitor.isNativePlatform()) {
+            try {
+                const res = await MZPrinterPlugin.isBuiltInPrinterAvailable();
+                if (res && res.available) {
+                    this.isBuiltInAvailable = true;
+                    this.builtInType = res.type;
+                    console.log(`[Printer] Built-in printer detected: ${res.type}`);
+                    if (!this.activeConfig) {
+                        this.updateStatus('connected');
+                    }
+                }
+            } catch (e) {
+                console.warn('[Printer] Error detecting built-in printer:', e);
+            }
+        }
+    }
+
 
     registerStatusListener(listener: (status: 'disconnected' | 'connecting' | 'connected') => void) {
         this.statusListeners.push(listener);
@@ -165,6 +197,9 @@ export class PrinterService {
     }
 
     isConnected() {
+        if (this.isBuiltInAvailable && !this.activeConfig) {
+            return true;
+        }
         return this.connectionStatus === 'connected';
     }
 
@@ -244,30 +279,49 @@ export class PrinterService {
             await this.usbDevice.selectConfiguration(1);
         }
 
-        let interfaceNumber = 0;
-        let endpointOut = 1;
+        let interfaceNumber = -1;
+        let endpointOut = -1;
 
-        // Traverse interfaces to find printer class or endpoint out
+        // Traverse interfaces to find printer class or any bulk out endpoint
         const interfaces = this.usbDevice.configuration.interfaces;
+        
+        // Phase 1: Try to find interface with classCode 7 (Printer) and an OUT endpoint
         for (const iface of interfaces) {
-            const alternate = iface.alternates[0];
-            if (alternate.interfaceClass === 7) {
-                interfaceNumber = iface.interfaceNumber;
-                const outEndpoint = alternate.endpoints.find(e => e.direction === 'out');
-                if (outEndpoint) {
-                    endpointOut = outEndpoint.endpointNumber;
+            for (const alt of iface.alternates) {
+                if (alt.interfaceClass === 7) {
+                    const outEndpoint = alt.endpoints.find(e => e.direction === 'out');
+                    if (outEndpoint) {
+                        interfaceNumber = iface.interfaceNumber;
+                        endpointOut = outEndpoint.endpointNumber;
+                        console.log(`[Printer] Found printer class interface: ${interfaceNumber}, endpoint: ${endpointOut}`);
+                        break;
+                    }
                 }
-                break;
+            }
+            if (interfaceNumber !== -1) break;
+        }
+
+        // Phase 2: If no class 7 printer interface is found, search for ANY interface that has an OUT endpoint
+        if (interfaceNumber === -1) {
+            for (const iface of interfaces) {
+                for (const alt of iface.alternates) {
+                    const outEndpoint = alt.endpoints.find(e => e.direction === 'out');
+                    if (outEndpoint) {
+                        interfaceNumber = iface.interfaceNumber;
+                        endpointOut = outEndpoint.endpointNumber;
+                        console.log(`[Printer] Fallback to any OUT endpoint interface: ${interfaceNumber}, endpoint: ${endpointOut}`);
+                        break;
+                    }
+                }
+                if (interfaceNumber !== -1) break;
             }
         }
 
-        // Default interfaces fallback if classCode 7 not explicit
-        if (interfaceNumber === 0 && interfaces.length > 0) {
-            interfaceNumber = interfaces[0].interfaceNumber;
-            const outEndpoint = interfaces[0].alternates[0].endpoints.find(e => e.direction === 'out');
-            if (outEndpoint) {
-                endpointOut = outEndpoint.endpointNumber;
-            }
+        // Phase 3: Absolute fallback
+        if (interfaceNumber === -1) {
+            interfaceNumber = 0;
+            endpointOut = 1;
+            console.warn(`[Printer] No OUT endpoint found in device configuration, using defaults (interface: 0, endpoint: 1)`);
         }
 
         await this.usbDevice.claimInterface(interfaceNumber);
@@ -276,6 +330,22 @@ export class PrinterService {
     }
 
     async writeRaw(data: Uint8Array) {
+        if (this.isBuiltInAvailable && !this.activeConfig) {
+            try {
+                let binary = '';
+                const len = data.byteLength;
+                for (let i = 0; i < len; i++) {
+                    binary += String.fromCharCode(data[i]);
+                }
+                const base64Data = window.btoa(binary);
+                await MZPrinterPlugin.printRaw({ base64Data });
+                return;
+            } catch (err) {
+                console.error('[Printer] Built-in print failed:', err);
+                throw err;
+            }
+        }
+
         if (!this.isConnected()) {
             throw new Error('A impressora não está conectada. Por favor, conecte a impressora primeiro.');
         }
