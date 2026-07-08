@@ -1022,7 +1022,8 @@ export const Admin: React.FC = () => {
                 try {
                     await printerService.printReceipt(orderPayload, printItems, printerConfig.paperSize);
                 } catch (pe) {
-                    console.error("Printing failed", pe);
+                    console.warn("Direct printing failed, falling back to browser printing:", pe);
+                    printerService.printReceiptBrowser(orderPayload, printItems, printerConfig.paperSize);
                 }
             }
 
@@ -3324,25 +3325,27 @@ export const Admin: React.FC = () => {
                                             <td className="p-4"><span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${order.customer?.type === 'delivery' ? 'bg-blue-50 text-blue-600' : 'bg-yellow-50 text-yellow-700'}`}>{order.customer?.type === 'delivery' ? 'Entrega' : (order.customer?.type === 'pickup' ? 'Takeaway' : (order.customer?.type === 'dine_in' ? 'Local' : 'N/A'))}</span></td>
                                             <td className="p-4 text-right flex items-center justify-end gap-2">
                                                 <button
-                                                    disabled={!isPrinterConnected}
                                                     onClick={async () => {
+                                                        const receiptPayload = {
+                                                            short_id: order.orderId,
+                                                            created_at: order.date,
+                                                            total_amount: order.total,
+                                                            payment_method: 'cash'
+                                                        };
+                                                        const receiptItems = order.items.map(i => ({
+                                                            quantity: i.quantity,
+                                                            product_name: i.name,
+                                                            price: i.price
+                                                        }));
                                                         try {
-                                                            await printerService.printReceipt({
-                                                                short_id: order.orderId,
-                                                                created_at: order.date,
-                                                                total_amount: order.total,
-                                                                payment_method: 'cash' // Assuming cash for quick re-print/drawer open if needed
-                                                            }, order.items.map(i => ({
-                                                                quantity: i.quantity,
-                                                                product_name: i.name,
-                                                                price: i.price
-                                                            })), printerConfig.paperSize);
+                                                            await printerService.printReceipt(receiptPayload, receiptItems, printerConfig.paperSize);
                                                         } catch (e) {
-                                                            alert('Erro ao imprimir: ' + (e as any).message);
+                                                            console.warn('Direct print failed, falling back to browser:', e);
+                                                            printerService.printReceiptBrowser(receiptPayload, receiptItems, printerConfig.paperSize);
                                                         }
                                                     }}
-                                                    className={`p-2 rounded-lg border transition-all ${isPrinterConnected ? 'text-[#d9a65a] border-[#d9a65a]/20 hover:bg-[#d9a65a] hover:text-white' : 'text-gray-300 border-gray-100 cursor-not-allowed'}`}
-                                                    title={isPrinterConnected ? 'Imprimir Recibo' : 'Impressora Desconectada'}
+                                                    className="p-2 rounded-lg border border-[#d9a65a]/20 text-[#d9a65a] hover:bg-[#d9a65a] hover:text-white transition-all"
+                                                    title="Imprimir Recibo"
                                                 >
                                                     <Printer size={14} />
                                                 </button>
@@ -5772,12 +5775,12 @@ export const Admin: React.FC = () => {
                                                                             </div>
                                                                             <button
                                                                                 onClick={async () => {
+                                                                                    const items = o.items || [];
                                                                                     try {
-                                                                                        const items = o.items || [];
                                                                                         await printerService.printReceipt(o, items, printerConfig.paperSize);
-                                                                                        alert("Recibo impresso com sucesso!");
                                                                                     } catch (e: any) {
-                                                                                        alert("Erro ao imprimir: " + e.message);
+                                                                                        console.warn("Direct printing failed, falling back to browser:", e);
+                                                                                        printerService.printReceiptBrowser(o, items, printerConfig.paperSize);
                                                                                     }
                                                                                 }}
                                                                                 className="px-4 py-2 bg-[#3b2f2f] text-[#d9a65a] rounded-xl text-[10px] font-black uppercase tracking-wider hover:brightness-110 active:scale-95 transition-all shadow-sm flex items-center gap-1.5"
@@ -6525,27 +6528,28 @@ export const Admin: React.FC = () => {
                                                     <td className="p-6">
                                                         <div className="flex justify-center gap-2">
                                                             <button
-                                                                disabled={!isPrinterConnected}
                                                                 onClick={async () => {
+                                                                    const orderItems = order.items.map((i: any) => ({
+                                                                        product_name: i.name,
+                                                                        price: i.price,
+                                                                        quantity: i.quantity
+                                                                    }));
+                                                                    const receiptPayload = {
+                                                                        short_id: order.orderId,
+                                                                        customer_name: order.customer.name,
+                                                                        created_at: order.date,
+                                                                        total_amount: order.total,
+                                                                        payment_method: 'cash'
+                                                                    };
                                                                     try {
-                                                                        const orderItems = order.items.map((i: any) => ({
-                                                                            product_name: i.name,
-                                                                            price: i.price,
-                                                                            quantity: i.quantity
-                                                                        }));
-                                                                        await printerService.printReceipt({
-                                                                            short_id: order.orderId,
-                                                                            customer_name: order.customer.name,
-                                                                            created_at: order.date,
-                                                                            total_amount: order.total,
-                                                                            payment_method: 'cash' // Defaulting
-                                                                        }, orderItems, printerConfig.paperSize);
+                                                                        await printerService.printReceipt(receiptPayload, orderItems, printerConfig.paperSize);
                                                                     } catch (e) {
-                                                                        alert('Erro ao imprimir: ' + (e as Error).message);
+                                                                        console.warn('Direct print failed, falling back to browser:', e);
+                                                                        printerService.printReceiptBrowser(receiptPayload, orderItems, printerConfig.paperSize);
                                                                     }
                                                                 }}
-                                                                className={`p-2 rounded-xl border transition-all ${isPrinterConnected ? 'bg-[#3b2f2f]/5 text-[#3b2f2f] border-[#3b2f2f]/10 hover:bg-[#3b2f2f] hover:text-[#d9a65a]' : 'text-gray-300 border-gray-100 cursor-not-allowed grayscale bg-gray-50'}`}
-                                                                title={isPrinterConnected ? 'Imprimir Recibo' : 'Impressora Desconectada'}
+                                                                className="p-2 rounded-xl border border-[#3b2f2f]/10 bg-[#3b2f2f]/5 text-[#3b2f2f] hover:bg-[#3b2f2f] hover:text-[#d9a65a] transition-all"
+                                                                title="Imprimir Recibo"
                                                             >
                                                                 <Printer size={18} />
                                                             </button>
@@ -8307,9 +8311,9 @@ export const Admin: React.FC = () => {
                                             onClick={async () => {
                                                 try {
                                                     await printerService.printReceipt(lastOrderData, lastOrderItems, printerConfig.paperSize);
-                                                    alert('Re-imprimindo talão...');
                                                 } catch (e: any) {
-                                                    alert('Erro na impressão: ' + e.message);
+                                                    console.warn("Direct printing failed, falling back to browser:", e);
+                                                    printerService.printReceiptBrowser(lastOrderData, lastOrderItems, printerConfig.paperSize);
                                                 }
                                             }}
                                             className="flex flex-col items-center gap-3 p-6 bg-white border-2 border-gray-100 rounded-3xl hover:border-[#d9a65a] hover:bg-[#d9a65a]/5 transition-all group"

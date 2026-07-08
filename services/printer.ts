@@ -669,8 +669,88 @@ export class PrinterService {
             { name: 'Pão de Ló', price: 100, quantity: 1 },
             { name: 'Café Simples', price: 50, quantity: 1 }
         ];
-        return this.printReceipt(order, items, this.activeConfig?.paperSize || '80mm');
+        try {
+            await this.printReceipt(order, items, this.activeConfig?.paperSize || '80mm');
+        } catch (e) {
+            console.warn('Direct test print failed, falling back to browser printing:', e);
+            this.printReceiptBrowser(order, items, this.activeConfig?.paperSize || '80mm');
+        }
     }
+
+    printReceiptBrowser(order: any, items: any[], type: '58mm' | '80mm' = '58mm') {
+        if (typeof window === 'undefined') return;
+        const printWindow = window.open('', '_blank', 'width=600,height=800');
+        if (!printWindow) {
+            alert('Por favor, permita popups para habilitar a impressão manual.');
+            return;
+        }
+
+        const paperWidth = type === '58mm' ? '58mm' : '80mm';
+        const dateStr = new Date(order.created_at || Date.now()).toLocaleString();
+        const shortId = order.short_id || order.id?.substring(0, 8);
+
+        let itemsHtml = '';
+        items.forEach(item => {
+            const productName = item.product_name || item.name || 'Produto';
+            const total = `${(item.price * item.quantity).toLocaleString()} MT`;
+            itemsHtml += `
+                <div style="display: flex; justify-content: space-between; font-size: 12px; margin: 3px 0;">
+                    <span>${item.quantity}x ${productName}</span>
+                    <span>${total}</span>
+                </div>
+            `;
+        });
+
+        printWindow.document.write(`
+            <html>
+            <head>
+                <title>Pedido #${shortId}</title>
+                <style>
+                    body {
+                        font-family: 'Courier New', Courier, monospace;
+                        margin: 0;
+                        padding: 5px;
+                        width: ${paperWidth};
+                        color: #000;
+                        background-color: #fff;
+                    }
+                    .text-center { text-align: center; }
+                    .text-right { text-align: right; }
+                    .font-bold { font-weight: bold; }
+                    .divider { border-top: 1px dashed #000; margin: 8px 0; }
+                    @media print {
+                        body { width: ${paperWidth}; }
+                        @page { margin: 0; }
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="text-center font-bold" style="font-size: 16px;">PAO CASEIRO</div>
+                <div class="text-center" style="font-size: 12px;">"O Sabor que aquece"</div>
+                <div class="divider"></div>
+                <div style="font-size: 12px;">
+                    <div>Ped: #${shortId}</div>
+                    <div>Data: ${dateStr}</div>
+                </div>
+                <div class="divider"></div>
+                ${itemsHtml}
+                <div class="divider"></div>
+                <div class="text-right font-bold" style="font-size: 14px;">TOTAL: ${Number(order.total_amount || order.total).toLocaleString()} MT</div>
+                <div class="divider"></div>
+                <div class="text-right" style="font-size: 12px;">Recebido: ${Number(order.amount_received || order.total_amount || order.total).toLocaleString()} MT</div>
+                <div class="text-right" style="font-size: 12px;">Troco: ${Number(order.change_given || 0).toLocaleString()} MT</div>
+                <script>
+                    window.onload = function() {
+                        window.print();
+                        setTimeout(function() { window.close(); }, 500);
+                    }
+                </script>
+            </body>
+            </html>
+        `);
+        printWindow.document.close();
+    }
+
 
     async printClosingReport(session: any, orders: any[], username: string) {
         const encoder = new TextEncoder();

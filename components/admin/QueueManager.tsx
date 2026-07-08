@@ -106,15 +106,142 @@ export const QueueManager: React.FC = () => {
         }
     };
 
+    const handlePrintSystem = (ticket: any) => {
+        if (typeof window === 'undefined') return;
+        const printWindow = window.open('', '_blank', 'width=600,height=800');
+        if (!printWindow) {
+            alert('Por favor, permita popups para habilitar a impressão manual.');
+            return;
+        }
+
+        const ticketDate = new Date(ticket.created_at || Date.now());
+        const dateStr = ticketDate.toLocaleDateString('pt-PT');
+        const timeStr = ticketDate.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' });
+        const categoryLabel = (ticket.category || 'GERAL').toUpperCase();
+        const ticketNum = ticket.ticket_number || ticket.number || '000';
+        const cleanId = ticket.id ? ticket.id.replace(/[^a-zA-Z0-9]/g, '').substring(0, 15).toUpperCase() : '';
+
+        const paperWidth = ticketCustom.paper_width === '58mm' ? '58mm' : '80mm';
+
+        let logoHtml = '';
+        if (ticketCustom.logo_visible !== false && ticketCustom.logo_url) {
+            logoHtml = `<img src="${ticketCustom.logo_url}" style="max-width: ${ticketCustom.paper_width === '58mm' ? '120px' : '180px'}; margin-bottom: 10px;" />`;
+        }
+
+        let qrHtml = '';
+        if (ticketCustom.qr_visible && ticket.id) {
+            qrHtml = `
+                <div style="margin: 15px 0;">
+                    <p style="font-size: 11px; margin: 5px 0;">Consulte o status da senha:</p>
+                    <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`https://paocaseiro.co.mz/get-ticket?id=${ticket.id}`)}" style="width: 100px; height: 100px;" />
+                </div>
+            `;
+        }
+
+        let barcodeHtml = '';
+        if (ticketCustom.barcode_visible && ticket.id) {
+            barcodeHtml = `
+                <div style="margin: 10px 0;">
+                    <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x50&data=${cleanId}" style="width: 120px; height: 40px;" />
+                    <p style="font-size: 10px; margin: 3px 0; letter-spacing: 2px;">${cleanId}</p>
+                </div>
+            `;
+        }
+
+        printWindow.document.write(`
+            <html>
+            <head>
+                <title>Senha #${ticketNum}</title>
+                <style>
+                    body {
+                        font-family: 'Courier New', Courier, monospace;
+                        margin: 0;
+                        padding: ${ticketCustom.margins || '0'}mm;
+                        width: ${paperWidth};
+                        color: #000;
+                        background-color: #fff;
+                        text-align: ${ticketCustom.text_align || 'center'};
+                    }
+                    .ticket-container {
+                        padding: 10px;
+                        box-sizing: border-box;
+                    }
+                    h1 {
+                        font-size: ${ticketCustom.font_size_title === 'extralarge' ? '24px' : ticketCustom.font_size_title === 'large' ? '20px' : '16px'};
+                        margin: 10px 0;
+                        font-weight: bold;
+                    }
+                    .ticket-number {
+                        font-size: ${ticketCustom.font_size_number === 'extralarge' ? '48px' : ticketCustom.font_size_number === 'large' ? '36px' : '28px'};
+                        font-weight: bold;
+                        margin: 15px 0;
+                    }
+                    .divider {
+                        border-top: 1px dashed #000;
+                        margin: 10px 0;
+                    }
+                    .category {
+                        font-size: 16px;
+                        font-weight: bold;
+                    }
+                    .priority {
+                        font-size: 14px;
+                        font-weight: bold;
+                    }
+                    .meta {
+                        font-size: 12px;
+                        margin: 5px 0;
+                    }
+                    .footer-text {
+                        font-size: 11px;
+                        margin: 8px 0;
+                    }
+                    @media print {
+                        body {
+                            width: ${paperWidth};
+                        }
+                        @page {
+                            margin: 0;
+                        }
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="ticket-container">
+                    ${logoHtml}
+                    <h1>${ticketCustom.company_name.toUpperCase()}</h1>
+                    <div class="footer-text">${ticketCustom.header}</div>
+                    <div class="divider"></div>
+                    <div class="category">FILA: ${categoryLabel}</div>
+                    ${(ticket.is_priority || ticket.priority) ? '<div class="priority">** ATENDIMENTO PRIORITÁRIO **</div>' : ''}
+                    <div class="ticket-number">${ticketNum}</div>
+                    <div class="meta">Data: ${dateStr}</div>
+                    <div class="meta">Hora: ${timeStr}</div>
+                    <div class="divider"></div>
+                    ${qrHtml}
+                    ${barcodeHtml}
+                    <div class="footer-text">${ticketCustom.thanks_msg}</div>
+                    <div class="footer-text">${ticketCustom.footer}</div>
+                </div>
+                <script>
+                    window.onload = function() {
+                        window.print();
+                        setTimeout(function() { window.close(); }, 500);
+                    }
+                </script>
+            </body>
+            </html>
+        `);
+
+        printWindow.document.close();
+    };
+
     const printOrPreviewTicket = async (ticket: any) => {
         try {
             await printerService.printTicket(ticket);
         } catch (e: any) {
-            if (e.message?.includes('não está conectada') || e.message?.includes('conecte a impressora')) {
-                setViewTicketModal(ticket);
-            } else {
-                alert('Erro ao imprimir: ' + e.message);
-            }
+            console.warn('Direct printing failed, showing preview modal with manual print option:', e);
+            setViewTicketModal(ticket);
         }
     };
 
@@ -128,15 +255,12 @@ export const QueueManager: React.FC = () => {
         };
         try {
             await printerService.printTicket(testTicket);
-            alert('Senha de teste impressa!');
         } catch (e: any) {
-            if (e.message?.includes('não está conectada') || e.message?.includes('conecte a impressora')) {
-                setViewTicketModal(testTicket);
-            } else {
-                alert('Erro ao imprimir senha de teste: ' + e.message);
-            }
+            console.warn('Direct test print failed, showing preview modal with manual print option:', e);
+            setViewTicketModal(testTicket);
         }
     };
+
 
     const handleGenerateManualTicket = async (isPriority: boolean, category: string = 'Geral') => {
         try {
@@ -1337,12 +1461,20 @@ export const QueueManager: React.FC = () => {
                                 </div>
                             </div>
 
-                            <button 
-                                onClick={() => setViewTicketModal(null)}
-                                className="w-full py-4 bg-[#3b2f2f] text-[#d9a65a] font-black rounded-2xl uppercase tracking-widest text-xs flex items-center justify-center gap-3 shadow-xl active:scale-95 transition-all"
-                            >
-                                Fechar Visualização
-                            </button>
+                            <div className="w-full space-y-3">
+                                <button 
+                                    onClick={() => handlePrintSystem(viewTicketModal)}
+                                    className="w-full py-4 bg-emerald-600 text-white font-black rounded-2xl uppercase tracking-widest text-xs flex items-center justify-center gap-3 shadow-xl hover:bg-emerald-700 active:scale-95 transition-all"
+                                >
+                                    Imprimir via Navegador
+                                </button>
+                                <button 
+                                    onClick={() => setViewTicketModal(null)}
+                                    className="w-full py-4 bg-[#3b2f2f] text-[#d9a65a] font-black rounded-2xl uppercase tracking-widest text-xs flex items-center justify-center gap-3 shadow-xl active:scale-95 transition-all"
+                                >
+                                    Fechar Visualização
+                                </button>
+                            </div>
                         </motion.div>
                     </div>
                 )}
