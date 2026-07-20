@@ -450,8 +450,15 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
     return (
         <AnimatePresence>
             {isOpen && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+                <motion.div 
+                    key="login-modal-backdrop"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+                >
                     <motion.div
+                        key="login-modal-box"
                         initial={{ opacity: 0, scale: 0.95 }}
                         animate={{ opacity: 1, scale: 1 }}
                         exit={{ opacity: 0, scale: 0.95 }}
@@ -915,6 +922,7 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                         <AnimatePresence>
                             {activeLegalView && (
                                 <motion.div
+                                    key="legal-view-box"
                                     initial={{ opacity: 0, x: 50 }}
                                     animate={{ opacity: 1, x: 0 }}
                                     exit={{ opacity: 0, x: 50 }}
@@ -968,7 +976,7 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                             )}
                         </AnimatePresence>
                     </motion.div>
-                </div >
+                </motion.div >
             )}
         </AnimatePresence >
     );
