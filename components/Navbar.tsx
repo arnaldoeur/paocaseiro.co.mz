@@ -261,14 +261,12 @@ export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
       </nav>
 
       {/* Mobile Menu Overlay */}
-      <AnimatePresence>
-        {mobileMenuOpen && (
-          <motion.div
-            key="mobile-menu-overlay"
-            initial={{ opacity: 0, x: '100%' }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: '100%' }}
-            onClick={() => closeMobileMenu()}
+      {mobileMenuOpen && (
+        <motion.div
+          key="mobile-menu-overlay"
+          initial={{ opacity: 0, x: '100%' }}
+          animate={{ opacity: 1, x: 0 }}
+          onClick={() => closeMobileMenu()}
             className="fixed inset-0 z-[60] bg-[#3b2f2f]/95 backdrop-blur-md text-[#f7f1eb] flex flex-col items-center justify-start overflow-y-auto cursor-pointer"
           >
             {/* Close Button (Fixed to viewport) */}
@@ -367,8 +365,6 @@ export const Navbar: React.FC<NavbarProps> = ({ language, toggleLanguage }) => {
             </div>
           </motion.div>
         )}
-      </AnimatePresence>
-
       <ClientLoginModal
         isOpen={isLoginModalOpen}
         onClose={() => setIsLoginModalOpen(false)}
