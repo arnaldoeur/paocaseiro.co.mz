@@ -471,7 +471,7 @@ function send_sms_internal($number, $message) {
     $turbo_token = "WTJlMzZpeDNNb25WR3hZK0NhcG1DUT09";
     $payload = [
         "user_token" => $turbo_token,
-        "sender_id"  => "PAOCASEIRO",
+        "sender_id"  => "PAO CASEIRO",
         "number"     => $number,
         "message"    => $message
     ];
@@ -2274,7 +2274,7 @@ try {
         $turbo_token = "WTJlMzZpeDNNb25WR3hZK0NhcG1DUT09";
         $payload = [
             "user_token" => $turbo_token,
-            "sender_id" => "PAOCASEIRO",
+            "sender_id" => "PAO CASEIRO",
             "number" => $input['number'],
             "message" => $input['message']
         ];
