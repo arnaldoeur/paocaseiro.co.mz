@@ -471,9 +471,9 @@ function send_sms_internal($number, $message) {
     $turbo_token = "WTJlMzZpeDNNb25WR3hZK0NhcG1DUT09";
     $payload = [
         "user_token" => $turbo_token,
-        "sender_id"  => "99950",
-        "number"     => $number,
-        "message"    => $message
+        "origin"     => "99950",
+        "message"    => $message,
+        "numbers"    => [$number]
     ];
     $ch = curl_init('https://my.turbo.host/api/international-sms/submit');
     curl_setopt_array($ch, [
@@ -2274,9 +2274,9 @@ try {
         $turbo_token = "WTJlMzZpeDNNb25WR3hZK0NhcG1DUT09";
         $payload = [
             "user_token" => $turbo_token,
-            "sender_id" => "99950",
-            "number" => $input['number'],
-            "message" => $input['message']
+            "origin" => "99950",
+            "message" => $input['message'],
+            "numbers" => [$input['number']]
         ];
         
         $ch = curl_init('https://my.turbo.host/api/international-sms/submit');
