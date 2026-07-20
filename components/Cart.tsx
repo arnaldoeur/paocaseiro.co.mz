@@ -1013,18 +1013,7 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
             });
             
             const invoiceLink = `${window.location.origin}/order-receipt/${orderId}`;
-            let msg = '';
-
-            if (remainingBalance > 0) {
-                msg = `A sua Fatura PaoCaseiro gerada c/sucesso! Fatura online em: ${invoiceLink}. Aguarda pagamento do valor restante.`;
-            } else {
-                msg = `A sua encomenda #${orderId} foi paga c/sucesso! Consulte o Recibo da Encomenda no seu E-mail ou em: ${invoiceLink}.`;
-            }
-
-            // Enforce 160 char limit
-            msg = msg.substring(0, 160);
-            NotificationService.sendCustomNotification(details.phone, msg)
-                .catch(err => console.error("Invoice notification failed", err));
+            // Removed duplicate text notification here, it is now handled entirely by notifyOrderStatus (which sends the PDF and text in a single WhatsApp message)
             
             // 3. Move to receipt step
             setCompletedOrder(newOrder);

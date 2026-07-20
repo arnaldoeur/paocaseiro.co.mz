@@ -2817,6 +2817,9 @@ try {
                     $receiptUrl  = "https://paocaseiro.co.mz/order-receipt/" . $shortId;
 
                     // --- Notify CLIENT ---
+                    // DISABLED in webhook to avoid duplicate messages. 
+                    // The React frontend (Cart.tsx) sends a single rich message with the PDF invoice attached via WhatsApp upon payment success.
+                    /*
                     if ($clientPhone) {
                         $clientMsg = "Ola {$clientName}! O seu pagamento de {$totalAmt} MT foi confirmado. Pedido #{$shortId} em preparacao. Recibo: {$receiptUrl}";
                         // WhatsApp
@@ -2826,6 +2829,7 @@ try {
                         $smsMsg = "PaoCaseiro: Pagamento {$totalAmt} MT confirmado! Pedido #{$shortId}. Recibo: {$receiptUrl}";
                         send_sms_internal($clientPhone, $smsMsg);
                     }
+                    */
 
                     // --- Notify ADMIN TEAM via WhatsApp ---
                     $adminNumbers = ['258879146662', '258846930960', '258876666903'];

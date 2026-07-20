@@ -305,8 +305,15 @@ export const notifyCustomerNewOrderWhatsApp = async (order: any, items: any[], c
     const firstName = getFirstName(order);
 
     let paymentInstructions = '';
+    const isPaid = order.payment_status === 'paid' || (order.amount_paid && order.amount_paid >= total);
+    
+    if (isPaid) {
+        paymentInstructions = '\n\n✅ *Pagamento Confirmado!* A sua encomenda já está a ser processada.';
+    } else {
+        paymentInstructions = '\n\n⏳ *Aguardando Pagamento.* Pague o valor pendente para iniciarmos a preparação.';
+    }
 
-    const message = `*🍞 Pão Caseiro — Encomenda Confirmada!*\n\nOlá ${firstName}, muito obrigado por escolher a nossa padaria! 🍞\n\n📦 *Pedido:* #${order.short_id || order.orderId || (order.id ? order.id.slice(-6).toUpperCase() : '')}\n💰 *Total:* ${total} MT\n\n📝 *Artigos:*\n${itemsText}${paymentInstructions}\n\n🔗 *Ver Recibo Online:*\n${url}\n\n*O sabor que aquece o seu coração!*`;
+    const message = `*🍞 Pão Caseiro — Encomenda Confirmada!*\n\nOlá ${firstName}, muito obrigado por escolher a nossa padaria! 🍞\n\n📦 *Pedido:* #${order.short_id || order.orderId || (order.id ? order.id.slice(-6).toUpperCase() : '')}\n💰 *Total:* ${total} MT\n\n📝 *Resumo do Pedido:*\n${itemsText}${paymentInstructions}\n\n🔗 *Ver Fatura / Recibo Online:*\n${url}\n\n*O sabor que aquece o seu coração!*`;
 
     // Send the complete message as the PDF caption
     const pdfCaption = message;
