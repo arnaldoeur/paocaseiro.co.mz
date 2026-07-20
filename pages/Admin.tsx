@@ -3301,7 +3301,7 @@ export const Admin: React.FC = () => {
                                 <button onClick={downloadOrdersCSV} className="w-full md:w-auto bg-[#d9a65a]/10 text-[#d9a65a] px-4 py-2 rounded-lg font-bold text-xs hover:bg-[#d9a65a] hover:text-white transition-colors shrink-0">Exportar CSV</button>
                             </div>
                         </div>
-                        <div className="overflow-auto flex-1 custom-scrollbar">
+                        <div className="overflow-auto flex-1 min-h-0 custom-scrollbar">
                             <table className="w-full text-left relative">
                                 <thead className="bg-gray-50 text-xs uppercase font-bold text-gray-500 border-b sticky top-0 z-10 shadow-sm">
                                     <tr><th className="p-4 w-16">ID</th><th className="p-4">Data</th><th className="p-4">Cliente</th><th className="p-4">Total</th><th className="p-4">Pagamento</th><th className="p-4">Status</th><th className="p-4">Tipo</th><th className="p-4 text-right">Ações</th></tr>
@@ -3368,22 +3368,22 @@ export const Admin: React.FC = () => {
 
                 {/* Stock View */}
                 {activeView === 'stock' && (
-                    <div className="bg-white rounded-2xl shadow-sm border border-[#d9a65a]/10 overflow-hidden animate-fade-in">
-                        <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-[#fcfbf9]">
+                    <div className="bg-white rounded-2xl shadow-sm border border-[#d9a65a]/10 overflow-hidden animate-fade-in flex flex-col h-[calc(100vh-140px)] md:h-[calc(100vh-180px)]">
+                        <div className="p-4 sm:p-6 border-b border-gray-100 flex flex-col md:flex-row gap-4 justify-between items-center bg-[#fcfbf9] shrink-0">
                             <div className="flex items-center gap-3">
-                                <h2 className="text-2xl font-bold text-[#3b2f2f]">Stock</h2>
+                                <h2 className="text-xl sm:text-2xl font-bold text-[#3b2f2f]">Stock</h2>
                                 <span className="bg-[#3b2f2f] text-white text-xs font-bold px-2 py-1 rounded-full">{products.length}</span>
                             </div>
                             {/* Stock Search Bar */}
-                            <div className="flex gap-2">
+                            <div className="flex flex-col md:flex-row gap-2 w-full md:w-auto">
                                 <button 
                                     onClick={() => refreshAllData()} 
-                                    className={`bg-[#d9a65a] text-[#3b2f2f] px-4 py-2 rounded-lg font-bold text-sm shadow-sm hover:brightness-110 transition-all flex items-center gap-2`}
+                                    className={`bg-[#d9a65a] text-[#3b2f2f] px-4 py-2 rounded-lg font-bold text-sm shadow-sm hover:brightness-110 transition-all flex items-center justify-center gap-2 w-full md:w-auto`}
                                 >
                                     <RefreshCw size={16} /> 
                                     Recarregar Dados
                                 </button>
-                                <div className="relative">
+                                <div className="relative w-full md:w-auto">
                                     <input 
                                         type="file" 
                                         accept=".json" 
@@ -3393,33 +3393,33 @@ export const Admin: React.FC = () => {
                                     />
                                     <label 
                                         htmlFor="import-backup-input"
-                                        className={`bg-white text-[#d9a65a] border border-[#d9a65a] px-4 py-2 rounded-lg font-bold text-sm shadow-sm hover:bg-[#d9a65a]/5 transition-all flex items-center gap-2 cursor-pointer ${isSyncing ? 'opacity-50 pointer-events-none' : ''}`}
+                                        className={`bg-white text-[#d9a65a] border border-[#d9a65a] px-4 py-2 rounded-lg font-bold text-sm shadow-sm hover:bg-[#d9a65a]/5 transition-all flex items-center justify-center gap-2 cursor-pointer w-full md:w-auto ${isSyncing ? 'opacity-50 pointer-events-none' : ''}`}
                                     >
                                         <Upload size={16} /> Importar Backup
                                     </label>
                                 </div>
-                                <button onClick={() => setShowMassStockModal(true)} className="bg-white text-[#d9a65a] border border-[#d9a65a]/20 px-4 py-2 rounded-lg font-bold text-sm shadow-sm hover:bg-gray-50 transition-all flex items-center gap-2">
+                                <button onClick={() => setShowMassStockModal(true)} className="bg-white text-[#d9a65a] border border-[#d9a65a]/20 px-4 py-2 rounded-lg font-bold text-sm shadow-sm hover:bg-gray-50 transition-all flex items-center justify-center gap-2 w-full md:w-auto">
                                     <Plus size={16} /> Adição em Massa
                                 </button>
-                                <button onClick={downloadStockCSV} className="bg-white text-[#3b2f2f] border border-[#d9a65a]/20 px-4 py-2 rounded-lg font-bold text-sm shadow-sm hover:bg-gray-50 transition-all flex items-center gap-2">
+                                <button onClick={downloadStockCSV} className="bg-white text-[#3b2f2f] border border-[#d9a65a]/20 px-4 py-2 rounded-lg font-bold text-sm shadow-sm hover:bg-gray-50 transition-all flex items-center justify-center gap-2 w-full md:w-auto">
                                     <Download size={16} /> Exportar Stock
                                 </button>
-                                <button onClick={() => { setCurrentProduct(null); setProductVariations([]); setPreviewImage(''); setIsEditingProduct(true); }} className="bg-[#3b2f2f] text-[#d9a65a] px-4 py-2 rounded-lg font-bold text-sm shadow-lg hover:brightness-110 transition-all">+ Novo Produto</button>
+                                <button onClick={() => { setCurrentProduct(null); setProductVariations([]); setPreviewImage(''); setIsEditingProduct(true); }} className="bg-[#3b2f2f] text-[#d9a65a] px-4 py-2 rounded-lg font-bold text-sm shadow-lg hover:brightness-110 transition-all w-full md:w-auto">+ Novo Produto</button>
                             </div>
                         </div>
                         {/* Aba de Navegação do Stock */}
-                        <div className="flex gap-6 pt-4 mb-2 px-6 border-b border-gray-100">
+                        <div className="flex gap-4 sm:gap-6 pt-4 mb-2 px-4 sm:px-6 border-b border-gray-100 shrink-0 overflow-x-auto custom-scrollbar">
                             <button 
                                 onClick={() => setStockTab('overview')} 
-                                className={`pb-3 font-bold text-sm tracking-wide uppercase transition-colors ${stockTab === 'overview' ? 'border-b-2 border-[#d9a65a] text-[#d9a65a]' : 'text-gray-400 hover:text-[#3b2f2f]'}`}
+                                className={`pb-3 font-bold text-xs sm:text-sm tracking-wide uppercase transition-colors whitespace-nowrap ${stockTab === 'overview' ? 'border-b-2 border-[#d9a65a] text-[#d9a65a]' : 'text-gray-400 hover:text-[#3b2f2f]'}`}
                             >
                                 Visão Geral
                             </button>
                             <button 
                                 onClick={() => setStockTab('management')} 
-                                className={`pb-3 font-bold text-sm tracking-wide uppercase transition-colors flex items-center gap-2 ${stockTab === 'management' ? 'border-b-2 border-[#d9a65a] text-[#d9a65a]' : 'text-gray-400 hover:text-[#3b2f2f]'}`}
+                                className={`pb-3 font-bold text-sm tracking-wide uppercase transition-colors flex items-center gap-2 whitespace-nowrap ${stockTab === 'management' ? 'border-b-2 border-[#d9a65a] text-[#d9a65a]' : 'text-gray-400 hover:text-[#3b2f2f]'}`}
                             >
-                                Gestão em Massa
+                                Inventário Rápido <span className="bg-red-50 text-red-500 px-1.5 py-0.5 rounded text-[10px]">Beta</span>
                                 {Object.keys(editedMassStock).length > 0 && (
                                     <span className="bg-[#d9a65a] text-white text-[10px] px-2 py-0.5 rounded-full">
                                         {Object.keys(editedMassStock).length} mods
@@ -3446,7 +3446,7 @@ export const Admin: React.FC = () => {
                         </div>
 
                         {/* Stock Search Bar & Filter */}
-                        <div className="mx-auto mb-4 relative max-w-4xl w-full px-6 flex flex-col sm:flex-row gap-3 items-center">
+                        <div className="mx-auto mb-4 relative max-w-4xl w-full px-6 flex flex-col sm:flex-row gap-3 items-center shrink-0">
                             <div className="relative flex-1">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
                                 <input
@@ -3628,7 +3628,7 @@ export const Admin: React.FC = () => {
                                 </button>
                             )}
                         </div>
-                        <div className={stockTab === 'menu' ? 'overflow-y-auto max-h-[calc(100vh-310px)] custom-scrollbar p-4' : 'overflow-x-auto overflow-y-auto max-h-[calc(100vh-350px)] custom-scrollbar'}>
+                        <div className={stockTab === 'menu' ? 'overflow-auto flex-1 min-h-0 custom-scrollbar p-4' : 'overflow-auto flex-1 min-h-0 custom-scrollbar'}>
                             {stockTab === 'menu' ? (
                                 <div>
                                     <AdminMenuView 
@@ -4076,8 +4076,8 @@ export const Admin: React.FC = () => {
 
                         {/* Customers View (Consolidated and Improved) */}
                         {activeView === 'customers' && (
-                            <div className="bg-white rounded-[40px] shadow-2xl border border-[#d9a65a]/10 overflow-hidden animate-fade-in flex flex-col h-full min-h-[600px]">
-                                <div className="p-8 border-b border-gray-100 flex flex-col md:flex-row justify-between items-start md:items-center bg-[#fcfbf9] gap-4">
+                            <div className="bg-white rounded-[40px] shadow-2xl border border-[#d9a65a]/10 overflow-hidden animate-fade-in flex flex-col h-[calc(100vh-140px)] md:h-[calc(100vh-180px)]">
+                                <div className="p-8 border-b border-gray-100 flex flex-col md:flex-row justify-between items-start md:items-center bg-[#fcfbf9] gap-4 shrink-0">
                                     <div className="flex items-center gap-4">
                                         <div className="bg-[#3b2f2f] p-3 rounded-2xl text-[#d9a65a]">
                                             <Users size={32} />
@@ -4106,7 +4106,7 @@ export const Admin: React.FC = () => {
                                     </div>
                                 </div>
 
-                                <div className="p-6 bg-white border-b border-gray-50">
+                                <div className="p-6 bg-white border-b border-gray-50 shrink-0">
                                     <div className="relative max-w-2xl">
                                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" size={20} />
                                         <input 
@@ -4119,9 +4119,9 @@ export const Admin: React.FC = () => {
                                     </div>
                                 </div>
 
-                                <div className="flex-1 overflow-x-auto custom-scrollbar">
+                                <div className="flex-1 min-h-0 overflow-auto custom-scrollbar relative">
                                     <table className="w-full text-left">
-                                        <thead className="bg-gray-50/50 text-[10px] uppercase font-black tracking-[0.2em] text-gray-400 border-b border-gray-100">
+                                        <thead className="bg-gray-50/90 backdrop-blur-md text-[10px] uppercase font-black tracking-[0.2em] text-gray-400 border-b border-gray-100 sticky top-0 z-10 shadow-sm">
                                             <tr>
                                                 <th className="p-6">Perfil do Cliente</th>
                                                 <th className="p-6">Informação Fiscal / Contacto</th>
