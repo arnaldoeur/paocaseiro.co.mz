@@ -444,7 +444,7 @@ function verify_jwt($jwt, $secret) {
 // ── INTERNAL NOTIFICATION HELPERS (used by webhook without auth check) ──────
 function send_whatsapp_internal($number, $text) {
     $wa_instance = "Pao caseiro";
-    $wa_apikey   = "84E61FAAB9AB-47FD-8F42-EAFE4DAB9C49";
+    $wa_apikey   = "429683C4C977415CAAFCCE10F7D57E11";
     $wa_url      = "https://wa.zyphtech.com";
     $endpoint    = "/message/sendText/" . rawurlencode($wa_instance);
     $payload     = [
@@ -2305,7 +2305,7 @@ try {
 
     case 'send_whatsapp':
         $wa_instance = $input['instance'] ?? "Pao caseiro";
-        $wa_apikey = "84E61FAAB9AB-47FD-8F42-EAFE4DAB9C49";
+        $wa_apikey = "429683C4C977415CAAFCCE10F7D57E11";
         $wa_url = "https://wa.zyphtech.com";
         
         $number = $input['number'];
@@ -2342,6 +2342,8 @@ try {
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
         curl_setopt($ch, CURLOPT_HTTPHEADER, [
             "Content-Type: application/json",
             "apikey: $wa_apikey"
@@ -2353,13 +2355,40 @@ try {
         curl_close($ch);
         
         if ($err) {
-            echo json_encode(["error" => "WA cURL Error: $err"]);
+            error_log("[WA] cURL Error sending to $number: $err");
+            echo json_encode(["success" => false, "error" => "WA cURL Error: $err"]);
         } else {
-            // Log the attempt for debugging
+            $decoded = json_decode($response, true);
+            
+            // Log failures for debugging
             if ($http_code >= 400) {
-                error_log("WA Send Failed ($http_code): " . $response);
+                error_log("[WA] Send Failed ($http_code) to $number: " . $response);
+                echo json_encode([
+                    "success" => false, 
+                    "error" => $decoded['message'] ?? $decoded['error'] ?? "WhatsApp API Error (HTTP $http_code)",
+                    "http_code" => $http_code,
+                    "wa_response" => $decoded
+                ]);
+            } else {
+                // Check if Evolution API returned an error within a 200 response
+                $isDisconnected = isset($decoded['error']) || 
+                                  (isset($decoded['status']) && $decoded['status'] === 'ERROR') ||
+                                  (isset($decoded['message']) && stripos($decoded['message'], 'not connected') !== false);
+                
+                if ($isDisconnected) {
+                    error_log("[WA] Instance possibly disconnected. Response: " . $response);
+                    echo json_encode([
+                        "success" => false,
+                        "error" => "WhatsApp instance may be disconnected. Check wa.zyphtech.com/manager",
+                        "wa_response" => $decoded
+                    ]);
+                } else {
+                    echo json_encode([
+                        "success" => true,
+                        "data" => $decoded
+                    ]);
+                }
             }
-            echo $response;
         }
         break;
 

@@ -9,7 +9,7 @@ const API_URL = IS_PROD
     ? `${window.location.origin}/whatsapp_proxy.php`
     : (import.meta.env.VITE_WHATSAPP_API_URL || 'https://wa.zyphtech.com');
 const INSTANCE_NAME = import.meta.env.VITE_WHATSAPP_INSTANCE_NAME || 'Pao caseiro';
-const API_KEY = import.meta.env.VITE_WHATSAPP_API_KEY || '84E61FAAB9AB-47FD-8F42-EAFE4DAB9C49';
+const API_KEY = import.meta.env.VITE_WHATSAPP_GLOBAL_KEY || import.meta.env.VITE_WHATSAPP_API_KEY || '429683C4C977415CAAFCCE10F7D57E11';
 
 /**
  * Format the phone number to E.164 required by Evolution API (e.g. 25884xxxxxxx)
@@ -37,11 +37,28 @@ export const sendWhatsAppMessage = async (to: string, text: string) => {
     try {
         // Use Hostinger Bridge in production for better reliability and bypassing CORS
         if (IS_PROD) {
-            return await hostingerService.fetch('send_whatsapp', {
+            const result = await hostingerService.fetch('send_whatsapp', {
                 number: formattedNumber,
                 text: text,
                 instance: INSTANCE_NAME
             });
+            
+            // Check for disconnection or failure from the improved PHP response
+            if (result && result.success === false) {
+                const errorMsg = result.error || 'Unknown WhatsApp error';
+                console.error(`[WhatsApp] Send failed to ${formattedNumber}: ${errorMsg}`);
+                if (result.wa_response) {
+                    console.error('[WhatsApp] API Response:', JSON.stringify(result.wa_response));
+                }
+                // Don't throw - return the error so callers can decide what to do
+                return { success: false, error: errorMsg, wa_response: result.wa_response };
+            }
+            
+            // Log success
+            hostingerService.logNotification('whatsapp', formattedNumber, text.substring(0, 200), 'sent')
+                .catch(e => console.error('[WhatsApp Log Error]', e));
+            
+            return { success: true, data: result?.data || result };
         }
 
         // Dev/Local fallback
@@ -84,6 +101,12 @@ export const sendWhatsAppMessage = async (to: string, text: string) => {
                 number: formattedNumber,
                 text: text
             });
+            
+            if (data && data.success === false) {
+                console.error(`[WhatsApp Fallback] Also failed: ${data.error}`);
+                return { success: false, error: data.error };
+            }
+            
             return { success: true, data };
         } catch (fallbackError) {
             hostingerService.logNotification('whatsapp', formattedNumber, error.message, 'error')
@@ -104,7 +127,7 @@ export const sendWhatsAppMedia = async (to: string, mediatype: string, fileName:
     try {
         // Use Hostinger Bridge in production
         if (IS_PROD) {
-            return await hostingerService.fetch('send_whatsapp', {
+            const result = await hostingerService.fetch('send_whatsapp', {
                 number: formattedNumber,
                 media: media,
                 mediatype: mediatype,
@@ -112,6 +135,17 @@ export const sendWhatsAppMedia = async (to: string, mediatype: string, fileName:
                 caption: caption,
                 instance: INSTANCE_NAME
             });
+            
+            if (result && result.success === false) {
+                const errorMsg = result.error || 'Unknown WhatsApp media error';
+                console.error(`[WhatsApp Media] Send failed to ${formattedNumber}: ${errorMsg}`);
+                return { success: false, error: errorMsg, wa_response: result.wa_response };
+            }
+            
+            hostingerService.logNotification('whatsapp', formattedNumber, `Media: ${fileName}`, 'sent')
+                .catch(e => console.error('[WhatsApp Media Log Error]', e));
+            
+            return { success: true, data: result?.data || result };
         }
 
         // Dev/Local fallback
@@ -154,6 +188,12 @@ export const sendWhatsAppMedia = async (to: string, mediatype: string, fileName:
                 fileName: fileName,
                 caption: caption
             });
+            
+            if (data && data.success === false) {
+                console.error(`[WhatsApp Media Fallback] Also failed: ${data.error}`);
+                return { success: false, error: data.error };
+            }
+            
             return { success: true, data };
         } catch (fallbackError) {
             hostingerService.logNotification('whatsapp', formattedNumber, error.message, 'error')

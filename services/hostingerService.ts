@@ -1,9 +1,7 @@
 // services/hostingerService.ts
 
 const IS_PROD = typeof window !== 'undefined' && !window.location.hostname.includes('localhost');
-const HOSTINGER_BRIDGE_URL = (typeof window !== 'undefined' && (window.location.protocol === 'http:' || window.location.protocol === 'https:'))
-    ? '/paocaseiro_db.php'
-    : 'https://paocaseiro.co.mz/paocaseiro_db.php';
+const HOSTINGER_BRIDGE_URL = 'https://paocaseiro.co.mz/paocaseiro_db.php';
 
 console.log(`[Hostinger Service] Bridge URL: ${HOSTINGER_BRIDGE_URL}`);
 const HOSTINGER_API_KEY = 'PaoCaseiro_Direct_MySQL_2026';
@@ -54,6 +52,11 @@ export const hostingerService = {
                 }
 
                 if (data && data.error) {
+                    // If the response explicitly contains success: false, return it as-is
+                    // so callers can handle the structured error (e.g. WhatsApp disconnection)
+                    if (data.success === false) {
+                        return data;
+                    }
                     throw new Error(data.error);
                 }
                 
