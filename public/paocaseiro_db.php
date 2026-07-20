@@ -471,7 +471,7 @@ function send_sms_internal($number, $message) {
     $turbo_token = "WTJlMzZpeDNNb25WR3hZK0NhcG1DUT09";
     $payload = [
         "user_token" => $turbo_token,
-        "sender_id"  => "PAO CASEIRO",
+        "sender_id"  => "99950",
         "number"     => $number,
         "message"    => $message
     ];
@@ -2274,7 +2274,7 @@ try {
         $turbo_token = "WTJlMzZpeDNNb25WR3hZK0NhcG1DUT09";
         $payload = [
             "user_token" => $turbo_token,
-            "sender_id" => "PAO CASEIRO",
+            "sender_id" => "99950",
             "number" => $input['number'],
             "message" => $input['message']
         ];
@@ -2816,20 +2816,13 @@ try {
                     $totalAmt    = number_format((float)($paidOrder['total_amount'] ?? 0), 2, '.', ',');
                     $receiptUrl  = "https://paocaseiro.co.mz/order-receipt/" . $shortId;
 
-                    // --- Notify CLIENT ---
-                    // DISABLED in webhook to avoid duplicate messages. 
-                    // The React frontend (Cart.tsx) sends a single rich message with the PDF invoice attached via WhatsApp upon payment success.
-                    /*
                     if ($clientPhone) {
-                        $clientMsg = "Ola {$clientName}! O seu pagamento de {$totalAmt} MT foi confirmado. Pedido #{$shortId} em preparacao. Recibo: {$receiptUrl}";
-                        // WhatsApp
-                        $waResult = send_whatsapp_internal($clientPhone, $clientMsg);
-                        debug_log("Client WA notification result: " . json_encode($waResult));
-                        // SMS fallback
-                        $smsMsg = "PaoCaseiro: Pagamento {$totalAmt} MT confirmado! Pedido #{$shortId}. Recibo: {$receiptUrl}";
+                        // --- Notify CLIENT (ONLY SMS) ---
+                        // Send SMS confirmation per user request (no WhatsApp duplicate)
+                        $smsMsg = "PaoCaseiro: Pagamento de {$totalAmt} MT confirmado! Pedido #{$shortId}. Ref: {$ref}";
                         send_sms_internal($clientPhone, $smsMsg);
+                        debug_log("Client SMS notification sent.");
                     }
-                    */
 
                     // --- Notify ADMIN TEAM via WhatsApp ---
                     $adminNumbers = ['258879146662', '258846930960', '258876666903'];

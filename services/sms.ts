@@ -64,7 +64,9 @@ export const sendWhatsApp = async (to: string, message: string, isTemplate = fal
 };
 
 export const notifyTeam = async (order: any, type: 'new_order' | 'delivery_update') => {
-    const recipients = (Object.values(TEAM_NUMBERS) as string[]).filter(n => n !== '');
+    // Get unique recipients to avoid sending multiple messages to the same person
+    const rawRecipients = (Object.values(TEAM_NUMBERS) as string[]).filter(n => n !== '');
+    const recipients = [...new Set(rawRecipients)];
     if (recipients.length === 0) return;
 
     const domain = 'https://paocaseiro.co.mz';
@@ -170,10 +172,23 @@ export const notifyCustomerDelay = async (order: any, delayMinutes: string, reas
     return await sendSMS(phone, message);
 };
 
-export const notifyPaymentConfirmed = async (orderId: string, phone: string, shortId?: string) => {
+export const notifyPaymentConfirmed = async (order: any, customPhone?: string) => {
+    const phone = customPhone || order.customer_phone || order.customer?.phone || order.customer?.contact_no;
+    if (!phone) return;
+
+    const shortId = order.short_id || order.orderId || order.id?.slice(-6).toUpperCase() || '';
+    const total = order.total_amount || order.total || order.amount_paid || 0;
+    const ref = order.payment_ref || order.paymentRef || order.transaction_id || 'N/A';
+    
+    // Create a short summary of items to fit in SMS
+    const items = order.items || [];
+    let itemsSummary = items.map((i: any) => `${i.quantity}x ${i.name || i.product_name}`).join(', ');
+    if (itemsSummary.length > 50) itemsSummary = itemsSummary.substring(0, 47) + '...';
+
     const domain = 'paocaseiro.co.mz';
-    const receiptLink = `${domain}/order-receipt/${shortId || orderId}`;
-    const message = `🍞 *Pão Caseiro — Pagamento Confirmado!*\n\nPedido: *#${shortId || orderId}*\n\nObrigado por escolher a nossa qualidade. O seu pedido será processado de imediato.\n\nRecibo: ${receiptLink}\n\n_O sabor que aquece o seu coração!_ 🤎`;
+    const receiptLink = `${domain}/order-receipt/${shortId}`;
+    
+    const message = `PaoCaseiro: Pagamento Confirmado!\nPedido #${shortId}\nTotal Pago: ${total} MT\nRef: ${ref}\nItens: ${itemsSummary}\nRecibo: ${receiptLink}`;
     
     if (DISABLE_SMS) {
         return await whatsapp.sendWhatsAppMessage(phone, message);

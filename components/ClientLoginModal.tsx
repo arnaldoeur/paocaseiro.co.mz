@@ -153,32 +153,18 @@ export const ClientLoginModal: React.FC<ClientLoginModalProps> = ({ isOpen, onCl
                 setGeneratedOtp(code);
                 
                 if (isEmail) {
-                    
                     await sendOTPEmail(formattedIdentifier, code);
                     setSuccessMsg(language === 'en' ? 'Code sent via Email! Check your inbox.' : 'Código enviado por Email! Verifique a sua caixa de entrada.');
                 } else {
-                    
-                    let waSent = false;
+                    const smsMsg = `Pao Caseiro: O seu codigo de acesso e ${code}. Nao partilhe.`;
                     try {
-                        const waMsg = `Pão Caseiro: O seu código de acesso é *${code}*. Não partilhe com ninguém.`;
-                        const res = await sendWhatsAppMessage(formattedIdentifier, waMsg);
-                        waSent = !!res?.success;
-                        if (!waSent) console.warn('[AUTH] WhatsApp failed, trying SMS...');
-                    } catch (e) {
-                        console.error('[AUTH] WA exception:', e);
-                    }
-
-                    if (waSent) {
-                        setSuccessMsg(language === 'en' ? 'Code sent via WhatsApp! Check your phone.' : 'Código enviado por WhatsApp! Verifique o telemóvel.');
-                    } else {
-                        const smsMsg = `Pao Caseiro: O seu codigo de acesso e ${code}.`;
-                        
                         const smsRes = await sendSMS(formattedIdentifier.replace('+', ''), smsMsg);
-                        
                         setSuccessMsg(language === 'en' ? 'Code sent via SMS! Check your phone.' : 'Código enviado por SMS! Verifique o telemóvel.');
+                    } catch (e) {
+                        console.error('[AUTH] SMS exception:', e);
+                        setError('Erro ao enviar SMS. Tente novamente.');
                     }
                 }
-                
                 setExistingCustomer(customerData);
                 setIdentifier(formattedIdentifier);
                 setStep('otp');

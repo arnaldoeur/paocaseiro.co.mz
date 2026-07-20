@@ -999,7 +999,7 @@ export const Admin: React.FC = () => {
             // Handle SMS notification if customer exists
             if (posCustomer?.contact_no && posCustomer.contact_no !== 'N/A') {
                 const { notifyPaymentConfirmed } = await import('../services/sms');
-                await notifyPaymentConfirmed(orderId, posCustomer.contact_no, shortId);
+                await notifyPaymentConfirmed(orderPayload, posCustomer.contact_no);
 
                 try {
                     const { notifyCustomerNewOrderWhatsApp } = await import('../services/whatsapp');
@@ -1007,7 +1007,7 @@ export const Admin: React.FC = () => {
                         ...orderPayload,
                         id: orderId
                     };
-                    notifyCustomerNewOrderWhatsApp(fullOrderForWA, orderPayload.items).catch(e => console.error("WA error", e));
+                    // notifyCustomerNewOrderWhatsApp(fullOrderForWA, orderPayload.items).catch(e => console.error("WA error", e));
                 } catch (e) {}
             }
 
@@ -7772,10 +7772,7 @@ export const Admin: React.FC = () => {
                                                     delivery_type: deliveryType
                                                 };
                                                 
-                                                // Alert the customer (if they have a phone)
-                                                if (customerPhone && customerPhone.length > 5) {
-                                                    notifyCustomerNewOrderWhatsApp(compatOrder, selectedOrder.items).catch(e => console.error("WA err cust", e));
-                                                }
+                                                // WhatsApp Notification to customer removed per request (they get SMS payment confirmation instead)
                                                 
                                                 // Alert Admin & Kitchen about the confirmed receipt
                                                 notifyAdminNewOrderWhatsApp(compatOrder, selectedOrder.items).catch(e => console.error("WA err admin", e));

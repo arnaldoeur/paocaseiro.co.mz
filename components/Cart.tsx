@@ -848,14 +848,17 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
         let interval: any;
         if ((step === 'processing' || paymentUrl) && currentTxId) {
             let attempts = 0;
+            let isVerifying = false;
             interval = setInterval(async () => {
-                attempts++;
                 // If the user is on receipt step, stop polling
                 if (step === 'receipt') {
                     clearInterval(interval);
                     return;
                 }
 
+                if (isVerifying) return; // Prevent overlapping requests
+
+                attempts++;
                 if (attempts > 24) { // 2m timeout (24 * 5s)
                     clearInterval(interval);
                     setStep('payment');
@@ -868,6 +871,7 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                     return;
                 }
 
+                isVerifying = true;
                 try {
                     const status = await verifyPayment(currentTxId);
                     if (status.success) {
@@ -881,7 +885,9 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
                         setStep('payment');
                     }
                 } catch (e) {
-                    console.error("Polling error", e);
+                    console.error("Polling error:", e);
+                } finally {
+                    isVerifying = false;
                 }
             }, 5000); // Check every 5s
         }
@@ -893,9 +899,14 @@ export const Cart: React.FC<CartProps> = ({ language }) => {
         const orderId = manualOrderId || currentOrderId || `PC-${Date.now().toString().slice(-4)}`;
         const refId = manualRef || currentPaymentRef || `ORD${Date.now()}`;
         const txId = manualTxId || currentTxId;
+        const amountToPay = (paymentMethod === 'mpesa' || paymentMethod === 'paysuite') ? finalTotal : 0;
+        const remainingBalance = finalTotal - amountToPay;
 
         const newOrder = {
             orderId: orderId, // Short ID
+            id: `ord_${refId}`,
+            paymentMethod,
+            paymentStatus: amountToPay >= finalTotal ? 'paid' : 'pending',
             paymentRef: refId, // Long ID
             transactionId: txId,
             date: new Date().toLocaleString(),
