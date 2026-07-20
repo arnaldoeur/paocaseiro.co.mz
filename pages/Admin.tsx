@@ -3265,10 +3265,10 @@ export const Admin: React.FC = () => {
 
                 {/* Orders View */}
                 {activeView === 'orders' && (
-                    <div className="bg-white rounded-2xl shadow-sm border border-[#d9a65a]/10 overflow-hidden animate-fade-in">
-                        <div className="p-6 border-b border-gray-100 flex flex-col md:flex-row gap-4 justify-between items-center bg-[#fcfbf9]">
+                    <div className="bg-white rounded-2xl shadow-sm border border-[#d9a65a]/10 overflow-hidden animate-fade-in flex flex-col h-[calc(100vh-140px)] md:h-[calc(100vh-180px)]">
+                        <div className="p-4 sm:p-6 border-b border-gray-100 flex flex-col md:flex-row gap-4 justify-between items-center bg-[#fcfbf9] shrink-0">
                             <div className="flex items-center gap-3">
-                                <h2 className="text-2xl font-bold text-[#3b2f2f]">Pedidos</h2>
+                                <h2 className="text-xl sm:text-2xl font-bold text-[#3b2f2f]">Pedidos</h2>
                                 <span className="bg-[#3b2f2f] text-white text-xs font-bold px-2 py-1 rounded-full">{orders.length}</span>
                             </div>
                             <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto items-center">
@@ -3293,17 +3293,17 @@ export const Admin: React.FC = () => {
                                         </button>
                                     )}
                                 </div>
-                                <div className="flex bg-gray-100 p-1 rounded-lg">
+                                <div className="flex bg-gray-100 p-1 rounded-lg w-full md:w-auto overflow-x-auto custom-scrollbar">
                                     {(['active', 'all', 'pending', 'completed', 'cancelled'] as const).map(s => (
-                                        <button key={s} onClick={() => setStatusFilter(s)} className={`px-4 py-1.5 rounded-md text-xs font-bold uppercase transition-all ${statusFilter === s ? 'bg-white text-[#d9a65a] shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>{s === 'all' ? 'Todos' : s === 'active' ? 'Ativos' : s}</button>
+                                        <button key={s} onClick={() => setStatusFilter(s)} className={`whitespace-nowrap px-3 sm:px-4 py-1.5 rounded-md text-xs font-bold uppercase transition-all flex-1 md:flex-none text-center ${statusFilter === s ? 'bg-white text-[#d9a65a] shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>{s === 'all' ? 'Todos' : s === 'active' ? 'Ativos' : s}</button>
                                     ))}
                                 </div>
-                                <button onClick={downloadOrdersCSV} className="bg-[#d9a65a]/10 text-[#d9a65a] px-4 py-2 rounded-lg font-bold text-xs hover:bg-[#d9a65a] hover:text-white transition-colors">Exportar CSV</button>
+                                <button onClick={downloadOrdersCSV} className="w-full md:w-auto bg-[#d9a65a]/10 text-[#d9a65a] px-4 py-2 rounded-lg font-bold text-xs hover:bg-[#d9a65a] hover:text-white transition-colors shrink-0">Exportar CSV</button>
                             </div>
                         </div>
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left">
-                                <thead className="bg-gray-50 text-xs uppercase font-bold text-gray-500 border-b">
+                        <div className="overflow-auto flex-1 custom-scrollbar">
+                            <table className="w-full text-left relative">
+                                <thead className="bg-gray-50 text-xs uppercase font-bold text-gray-500 border-b sticky top-0 z-10 shadow-sm">
                                     <tr><th className="p-4 w-16">ID</th><th className="p-4">Data</th><th className="p-4">Cliente</th><th className="p-4">Total</th><th className="p-4">Pagamento</th><th className="p-4">Status</th><th className="p-4">Tipo</th><th className="p-4 text-right">Ações</th></tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-50">
