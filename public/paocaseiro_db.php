@@ -491,7 +491,7 @@ function send_sms_internal($number, $message) {
 }
 
 function send_resend_email($to, $subject, $html) {
-    $resend_key = "re_P7j69cGh_572YUfnaJMSJJXFNQ7HWPthF";
+    $resend_key = "re_iCS7WJc1_EKeoyMCZjzX92jDTJTUrUYQV";
     $payload = [
         "from" => "Pão Caseiro <sistema@paocaseiro.co.mz>",
         "to" => is_array($to) ? $to : [$to],
@@ -2224,7 +2224,7 @@ try {
         break;
 
     case 'send_email':
-        $resend_key = "re_P7j69cGh_572YUfnaJMSJJXFNQ7HWPthF";
+        $resend_key = "re_iCS7WJc1_EKeoyMCZjzX92jDTJTUrUYQV";
         $to = is_array($input['to']) ? $input['to'] : [$input['to']];
         $from = $input['from'] ?? "Pão Caseiro <sistema@paocaseiro.co.mz>";
         $payload = [
